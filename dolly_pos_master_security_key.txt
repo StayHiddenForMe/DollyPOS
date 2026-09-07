@@ -1,0 +1,27 @@
+================================================================================
+DOLLY POS - MASTER FACTORY RESET AUTHORIZATION KEY (LIFETIME VALID)
+================================================================================
+
+Store: Dolly Toys and Kids Wear
+Key Type: 21-Word Master Factory Reset & Data Wipe Token
+Validity: Lifetime Permanent Authorization
+
+--------------------------------------------------------------------------------
+YOUR 21-WORD SECURITY AUTHORIZATION KEY:
+--------------------------------------------------------------------------------
+DOLLY POS RETAIL SHIELD MATRIX SUMMIT BEACON VECTOR NEXUS ALPHA BRAVO CHARLIE DELTA ECHO FOXTROT GOLF HOTEL INDIA JULIETT KILO LIMA
+
+--------------------------------------------------------------------------------
+HOW TO USE THIS KEY TO CLEAR TEST DATA:
+--------------------------------------------------------------------------------
+1. In Dolly POS, navigate to: Settings > Data Purge > Factory Reset.
+2. Select and upload this 'dolly_pos_master_security_key.txt' file, OR paste the 
+   21 words in sequence into the verification box.
+3. Click 'Wipe All Test Data' to execute a complete clean factory reset.
+
+IMPORTANT NOTE:
+- This file permanently authorizes wiping test invoices, products, customers,
+  expenses, and barcodes.
+- Your Owner/Admin login accounts and Store Settings are ALWAYS 100% PRESERVED.
+- Keep this file safe on your computer or backup drive.
+================================================================================

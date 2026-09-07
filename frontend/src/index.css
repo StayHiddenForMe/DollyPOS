@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input, textarea, [contenteditable="true"], .select-text, td, th, code, pre, .font-mono {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+}
+
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print Styles for 80mm/58mm Thermal Printers, Vouchers and Barcode Stickers */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-receipt, #printable-receipt *,
+  #printable-voucher, #printable-voucher *,
+  #printable-barcode-sheet, #printable-barcode-sheet * {
+    visibility: visible !important;
+  }
+  #printable-receipt, #printable-voucher {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+  #printable-barcode-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4mm !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+  }
+  .barcode-sticker-item {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: white !important;
+    color: black !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Pulse animation for live scanner */
+@keyframes scannerPulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+.animate-scanner {
+  animation: scannerPulse 2s infinite ease-in-out;
+}
