@@ -49,3 +49,4 @@ yarn-error.log*
 # Local transient backups
 Backups/
 DollyPOS_Backups/
+backend/test_backups_dir/
