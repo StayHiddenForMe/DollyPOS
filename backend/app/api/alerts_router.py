@@ -11,6 +11,8 @@ from app.models.product import Product
 from app.models.vendor import Vendor
 from app.services.analytics_service import analytics_service
 
+from app.models.settings import StoreSettings
+
 router = APIRouter(prefix="/alerts", tags=["Live System Alerts"])
 
 @router.get("/summary")
@@ -50,17 +52,45 @@ def get_alerts_summary(current_user: User = Depends(get_current_user), db: Sessi
     dead_stock_capital = round(float(dead_stock_totals.trapped_capital or 0.0), 2) if dead_stock_totals else 0.0
     dead_stock_count = int(dead_stock_totals.total_count or 0) if dead_stock_totals else 0
 
-    # 4. Check Shop Foundation Anniversary (17th February 2002)
-    is_anniversary = (ist_now.month == 2 and ist_now.day == 17)
-    years_passed = max(0, ist_now.year - 2002)
+    # 4. Check Shop Foundation Anniversary based on StoreSettings.opening_date
+    st = db.query(StoreSettings).first()
+    shop_name = st.shop_name if st and st.shop_name else "Dolly Toys & Kids Wear"
+    opening_date_str = st.opening_date if st and st.opening_date else "2002-01-01"
+    
+    opening_year = 2002
+    opening_month = 1
+    opening_day = 1
+    
+    try:
+        if "-" in opening_date_str:
+            parts = [int(p) for p in opening_date_str.split("-") if p.isdigit()]
+            if len(parts) == 3:
+                if parts[0] > 1000: # YYYY-MM-DD
+                    opening_year, opening_month, opening_day = parts[0], parts[1], parts[2]
+                else: # DD-MM-YYYY
+                    opening_day, opening_month, opening_year = parts[0], parts[1], parts[2]
+        elif "/" in opening_date_str:
+            parts = [int(p) for p in opening_date_str.split("/") if p.isdigit()]
+            if len(parts) == 3:
+                if parts[0] > 1000:
+                    opening_year, opening_month, opening_day = parts[0], parts[1], parts[2]
+                else:
+                    opening_day, opening_month, opening_year = parts[0], parts[1], parts[2]
+    except Exception:
+        pass
+
+    is_anniversary = (ist_now.month == opening_month and ist_now.day == opening_day)
+    years_passed = max(0, ist_now.year - opening_year)
 
     anniversary_info = {
         "is_anniversary_today": is_anniversary,
-        "foundation_date": "2002-02-17",
+        "foundation_date": opening_date_str,
+        "opening_year": opening_year,
         "years_passed": years_passed,
         "current_year": ist_now.year,
-        "title": f"🎉 Happy {years_passed}th Shop Anniversary! (Est. 17 Feb 2002)",
-        "message": f"Dolly Toys & Kids Wear celebrates {years_passed} glorious years of success, trust, and customer smiles today! Thank you for 2002–{ist_now.year}."
+        "shop_name": shop_name,
+        "title": f"🎉 Happy {years_passed}th Shop Anniversary! (Est. {opening_year})",
+        "message": f"{shop_name} celebrates {years_passed} glorious years of success, trust, and customer smiles today! Established {opening_date_str} • Thank you for {opening_year}–{ist_now.year}."
     }
 
     total_alert_count = (

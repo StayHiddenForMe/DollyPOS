@@ -650,13 +650,14 @@ export const SettingsPage: React.FC = () => {
     setRestoreMsg(null);
     try {
       const res = await api.post('/backup/import-full-json', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000 // 3 minutes timeout for restoring 20,000+ items
       });
       setRestoreMsg(res.data.message);
       alert(res.data.message);
       fetchLongevityAudit();
     } catch (err: any) {
-      setRestoreMsg(err.response?.data?.detail || 'Failed to restore database from backup file.');
+      setRestoreMsg(err.response?.data?.detail || err.message || 'Failed to restore database from backup file.');
     } finally {
       setIsRestoring(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -2209,9 +2210,9 @@ export const SettingsPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className="overflow-hidden border rounded-2xl">
+              <div className="max-h-[300px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl custom-scrollbar shadow-inner">
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 uppercase">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-400 uppercase sticky top-0 z-10 shadow-xs">
                     <tr>
                       <th className="py-2.5 px-4">Backup Filename</th>
                       <th className="py-2.5 px-3">Type</th>

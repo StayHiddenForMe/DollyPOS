@@ -29,11 +29,12 @@ export const Navbar: React.FC = () => {
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const [isAnniversaryDismissed, setIsAnniversaryDismissed] = useState(false);
 
-  // Shop Anniversary Check (Founded 17 Feb 2002)
-  const today = new Date();
-  const isFeb17 = (today.getMonth() === 1 && today.getDate() === 17);
-  const yearsPassed = Math.max(0, today.getFullYear() - 2002);
-  const isAnniversaryToday = Boolean(alerts?.anniversary?.is_anniversary_today || isFeb17);
+  // Dynamic Shop Anniversary Check from StoreSettings
+  const anniversaryData = alerts?.anniversary;
+  const isAnniversaryToday = Boolean(anniversaryData?.is_anniversary_today);
+  const yearsPassed = anniversaryData?.years_passed || 24;
+  const shopName = anniversaryData?.shop_name || settings?.shop_name || 'Dolly Toys & Kids Wear';
+  const foundationDate = anniversaryData?.foundation_date || settings?.opening_date || '2002-01-01';
 
   useEffect(() => {
     fetchAlerts();
@@ -78,13 +79,13 @@ export const Navbar: React.FC = () => {
 
   return (
     <>
-      {/* 17 Feb Shop Anniversary Celebratory Notification Banner */}
+      {/* Dynamic Store Anniversary Celebratory Notification Banner */}
       {isAnniversaryToday && !isAnniversaryDismissed && (
         <div className="bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 text-white px-4 py-1.5 flex items-center justify-between text-xs font-bold shadow-md select-none animate-in slide-in-from-top duration-300 shrink-0 z-40 relative">
           <div className="flex items-center space-x-2 mx-auto">
             <span className="text-base animate-bounce">🎂</span>
             <span>
-              🎉 Happy {yearsPassed}th Shop Anniversary to Dolly Toys & Kids Wear! Founded on 17th February 2002 • Celebrating {yearsPassed} glorious years of trust, love & smiles! ✨
+              🎉 Happy {yearsPassed}th Shop Anniversary to {shopName}! Established {foundationDate} • Celebrating {yearsPassed} glorious years of trust, love & smiles! ✨
             </span>
           </div>
           <button 
@@ -174,14 +175,14 @@ export const Navbar: React.FC = () => {
                   <div className="p-3 bg-gradient-to-tr from-pink-500/15 via-amber-500/15 to-purple-500/15 dark:from-pink-950/40 dark:to-amber-950/40 rounded-xl border border-pink-300 dark:border-pink-800/60 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-pink-700 dark:text-pink-300 flex items-center gap-1.5">
-                        🎂 17 Feb Shop Anniversary
+                        🎂 {anniversaryData?.title || `${yearsPassed}th Shop Anniversary`}
                       </span>
                       <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/60 text-pink-700 dark:text-pink-300">
-                        {yearsPassed} Years (2002–{today.getFullYear()})
+                        {yearsPassed} Years ({anniversaryData?.opening_year || 2002}–{new Date().getFullYear()})
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
-                      Celebrating {yearsPassed} glorious years since foundation on 17th February 2002! Thank you for 2002–{today.getFullYear()}.
+                      {anniversaryData?.message || `Celebrating ${yearsPassed} glorious years since foundation on ${foundationDate}!`}
                     </p>
                   </div>
                 )}

@@ -54,6 +54,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [loadingQr, setLoadingQr] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Split Payment Multi-Tender State
+  const [splitCash, setSplitCash] = useState<number>(0);
+  const [splitUpi, setSplitUpi] = useState<number>(0);
+  const [splitCard, setSplitCard] = useState<number>(0);
+  const [splitDue, setSplitDue] = useState<number>(0);
+  const [splitUpiQrData, setSplitUpiQrData] = useState<any>(null);
+  const [loadingSplitQr, setLoadingSplitQr] = useState(false);
+
   // Customer Autocomplete Dropdown State
   const [customerSuggestions, setCustomerSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -67,11 +75,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       setCreditCustomerName(currentTab?.customerName || '');
       setCreditCustomerPhone(currentTab?.customerPhone || '');
       setShowSuggestions(false);
+      
+      // Default split preset: 50% Cash + 50% UPI or full cash
+      setSplitCash(total);
+      setSplitUpi(0);
+      setSplitCard(0);
+      setSplitDue(0);
+
       if (paymentMode === 'UPI') {
-        loadUpiQr();
+        loadUpiQr(total);
       }
     }
-  }, [isOpen, total, paymentMode, currentTab]);
+  }, [isOpen, total, currentTab]);
 
   // Close modal on Escape
   useEffect(() => {
@@ -110,11 +125,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setShowSuggestions(false);
   };
 
-  const loadUpiQr = async () => {
+  const loadUpiQr = async (amountToCharge: number) => {
+    if (amountToCharge <= 0) {
+      setUpiQrData(null);
+      return;
+    }
     setLoadingQr(true);
     try {
       const billPlaceholder = `DLY-${Date.now().toString().slice(-6)}`;
-      const res = await api.get(`/billing/dynamic-upi-qr?amount=${total}&bill_number=${billPlaceholder}`);
+      const res = await api.get(`/billing/dynamic-upi-qr?amount=${amountToCharge}&bill_number=${billPlaceholder}`);
       setUpiQrData(res.data);
     } catch (e) {
       console.error('Failed to generate UPI QR', e);
@@ -123,16 +142,50 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
+  const loadSplitUpiQr = async (amountToCharge: number) => {
+    if (amountToCharge <= 0) {
+      setSplitUpiQrData(null);
+      return;
+    }
+    setLoadingSplitQr(true);
+    try {
+      const billPlaceholder = `SPLIT-${Date.now().toString().slice(-6)}`;
+      const res = await api.get(`/billing/dynamic-upi-qr?amount=${amountToCharge}&bill_number=${billPlaceholder}`);
+      setSplitUpiQrData(res.data);
+    } catch (e) {
+      console.error('Failed to generate Split UPI QR', e);
+    } finally {
+      setLoadingSplitQr(false);
+    }
+  };
+
+  useEffect(() => {
+    if (paymentMode === 'SPLIT' && splitUpi > 0) {
+      loadSplitUpiQr(splitUpi);
+    }
+  }, [paymentMode, splitUpi]);
+
   const handleModeChange = (mode: PaymentMode) => {
     setPaymentMode(mode);
     if (mode === 'UPI') {
-      loadUpiQr();
+      loadUpiQr(total);
+    } else if (mode === 'SPLIT') {
+      if (splitCash === 0 && splitUpi === 0) {
+        setSplitCash(tenderAmount < total ? tenderAmount : Math.round(total / 2));
+        setSplitUpi(tenderAmount < total ? total - tenderAmount : total - Math.round(total / 2));
+      }
     }
   };
 
   const changeAmount = Math.max(0, tenderAmount - total);
   const dueAmount = Math.max(0, total - tenderAmount);
   const creditDueRemaining = Math.max(0, total - (Number(creditPaidNow) || 0));
+
+  // Split Calculations
+  const totalSplitPaid = (Number(splitCash) || 0) + (Number(splitUpi) || 0) + (Number(splitCard) || 0);
+  const totalSplitAllocated = totalSplitPaid + (Number(splitDue) || 0);
+  const splitUnallocated = Math.max(0, total - totalSplitAllocated);
+  const splitChangeAmount = Math.max(0, totalSplitAllocated - total);
 
   const cashSuggestions = [
     total,
@@ -163,19 +216,36 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         is_unlisted: item.is_unlisted
       }));
 
-      const finalPaidAmount = paymentMode === 'CREDIT_KHATA' 
-        ? Math.min(total, Number(creditPaidNow) || 0)
-        : Math.min(total, tenderAmount);
+      let finalPaidAmount = 0;
+      let finalDueAmount = 0;
+      let finalChangeAmount = 0;
+      let paymentsList: any[] | undefined = undefined;
 
-      const finalDueAmount = paymentMode === 'CREDIT_KHATA'
-        ? creditDueRemaining
-        : dueAmount;
+      if (paymentMode === 'SPLIT') {
+        const splitPayments = [];
+        if (splitCash > 0) splitPayments.push({ payment_mode: 'CASH', amount: Number(splitCash) });
+        if (splitUpi > 0) splitPayments.push({ payment_mode: 'UPI', amount: Number(splitUpi) });
+        if (splitCard > 0) splitPayments.push({ payment_mode: 'CARD', amount: Number(splitCard) });
 
-      const finalCustomerName = paymentMode === 'CREDIT_KHATA'
+        finalPaidAmount = Math.min(total, totalSplitPaid);
+        finalDueAmount = splitDue;
+        finalChangeAmount = splitChangeAmount;
+        paymentsList = splitPayments;
+      } else if (paymentMode === 'CREDIT_KHATA') {
+        finalPaidAmount = Math.min(total, Number(creditPaidNow) || 0);
+        finalDueAmount = creditDueRemaining;
+        finalChangeAmount = 0;
+      } else {
+        finalPaidAmount = Math.min(total, tenderAmount);
+        finalDueAmount = dueAmount;
+        finalChangeAmount = changeAmount;
+      }
+
+      const finalCustomerName = (paymentMode === 'CREDIT_KHATA' || (paymentMode === 'SPLIT' && splitDue > 0))
         ? (creditCustomerName.trim() || currentTab?.customerName || undefined)
         : (currentTab?.customerName || undefined);
 
-      const finalCustomerPhone = paymentMode === 'CREDIT_KHATA'
+      const finalCustomerPhone = (paymentMode === 'CREDIT_KHATA' || (paymentMode === 'SPLIT' && splitDue > 0))
         ? (creditCustomerPhone.trim() || currentTab?.customerPhone || undefined)
         : (currentTab?.customerPhone || undefined);
 
@@ -189,13 +259,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         round_off: 0,
         grand_total: total,
         paid_amount: finalPaidAmount,
-        change_amount: changeAmount,
+        change_amount: finalChangeAmount,
         due_amount: finalDueAmount,
         payment_mode: paymentMode,
         payment_status: finalDueAmount === 0 ? 'PAID' : (finalPaidAmount > 0 ? 'PARTIAL' : 'CREDIT'),
         is_gift_receipt: currentTab?.isGiftReceipt || false,
         notes: currentTab?.notes || undefined,
-        items: itemsPayload
+        items: itemsPayload,
+        payments: paymentsList
       };
 
       const res = await api.post('/billing/checkout', payload);
@@ -210,7 +281,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  // Keyboard Navigation: Enter to Pay & Print, Escape to Cancel, F8/F9 modes
+  // Keyboard Navigation: Enter to Pay & Print, Escape to Cancel, F8/F9/F10 modes
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -226,19 +297,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       } else if (e.key === 'F9') {
         e.preventDefault();
         handleModeChange('UPI');
+      } else if (e.key === 'F10') {
+        e.preventDefault();
+        handleModeChange('SPLIT');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, total, tenderAmount, paymentMode, isProcessing]);
+  }, [isOpen, total, tenderAmount, paymentMode, isProcessing, splitCash, splitUpi, splitCard, splitDue]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-150 max-h-[95vh] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-5 text-white flex items-center justify-between shrink-0">
           <div>
             <span className="text-xs uppercase tracking-wider font-bold text-pink-400">
               Settle Payment & Print
@@ -256,11 +330,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </button>
         </div>
 
-        {/* Quick Discount in Pay & Print (Item 7) */}
+        {/* Quick Discount in Pay & Print */}
         {(() => {
           const currentDisc = discountVal();
           return (
-            <div className="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+            <div className="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs shrink-0">
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-slate-700 dark:text-slate-300">Bill Discount:</span>
                 <div className="flex items-center space-x-1">
@@ -311,31 +385,32 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           );
         })()}
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Payment Method Selector */}
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 block">
               Select Payment Tender
             </label>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-2.5">
               {[
                 { id: 'CASH', label: 'Cash (F8)', icon: Banknote, color: 'text-emerald-500' },
-                { id: 'UPI', label: 'Dynamic UPI QR (F9)', icon: QrCode, color: 'text-pink-500' },
-                { id: 'CARD', label: 'POS Card Machine', icon: CreditCard, color: 'text-blue-500' },
-                { id: 'CREDIT_KHATA', label: 'Credit Khata Book', icon: Users, color: 'text-amber-500' },
+                { id: 'UPI', label: 'UPI QR (F9)', icon: QrCode, color: 'text-pink-500' },
+                { id: 'SPLIT', label: 'Split (F10)', icon: Share2, color: 'text-purple-500' },
+                { id: 'CARD', label: 'Card POS', icon: CreditCard, color: 'text-blue-500' },
+                { id: 'CREDIT_KHATA', label: 'Khata Due', icon: Users, color: 'text-amber-500' },
               ].map((m) => (
                 <button
                   key={m.id}
                   type="button"
                   onClick={() => handleModeChange(m.id as PaymentMode)}
-                  className={`p-3 rounded-2xl border-2 flex flex-col items-center justify-center space-y-1.5 transition-all text-xs font-bold ${
+                  className={`p-2.5 rounded-2xl border-2 flex flex-col items-center justify-center space-y-1 transition-all text-xs font-bold ${
                     paymentMode === m.id
                       ? 'border-pink-600 bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 shadow-md scale-102'
                       : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <m.icon className={`w-5 h-5 ${m.color}`} />
-                  <span>{m.label}</span>
+                  <m.icon className={`w-4 h-4 ${m.color}`} />
+                  <span className="text-[11px]">{m.label}</span>
                 </button>
               ))}
             </div>
@@ -373,6 +448,34 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </div>
               </div>
 
+              {/* Partial Cash Detection & Quick Switch to Split */}
+              {tenderAmount > 0 && tenderAmount < total && (
+                <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 p-3 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                      <span>💡</span> Partial Cash: {formatINR(tenderAmount)} | Remaining Due: {formatINR(dueAmount)}
+                    </span>
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                      Customer paid ₹{tenderAmount} cash. Pay remaining ₹{dueAmount} via Dynamic UPI QR or Card?
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSplitCash(tenderAmount);
+                      setSplitUpi(dueAmount);
+                      setSplitCard(0);
+                      setSplitDue(0);
+                      setPaymentMode('SPLIT');
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 transition-transform active:scale-95 shrink-0"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Split: Pay ₹{dueAmount} via UPI QR</span>
+                  </button>
+                </div>
+              )}
+
               {/* Quick Cash Chips */}
               <div className="flex items-center space-x-2 pt-1">
                 <span className="text-xs text-slate-400 font-semibold">Quick Notes:</span>
@@ -394,8 +497,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {paymentMode === 'UPI' && (
             <div className="flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
               {loadingQr ? (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  Generating dynamic NPCI UPI QR Code...
+                <div className="py-8 text-center text-xs text-slate-400 animate-pulse">
+                  Generating dynamic NPCI UPI QR Code for {formatINR(total)}...
                 </div>
               ) : upiQrData?.qr_image_base64 ? (
                 <div className="flex items-center space-x-6">
@@ -406,22 +509,187 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       className="w-40 h-40 object-contain"
                     />
                   </div>
-                  <div className="space-y-1 text-xs">
+                  <div className="space-y-1.5 text-xs">
                     <span className="font-bold text-slate-800 dark:text-white text-sm block">
-                      Scan via PhonePe, GPay, Paytm
+                      Scan via PhonePe, GPay, Paytm, BHIM
                     </span>
                     <p className="text-slate-500 font-mono">
                       Pay to: {settings?.upi_id || '7972558842@upi'}
                     </p>
-                    <p className="text-lg font-black text-pink-600 font-mono">
+                    <p className="text-xl font-black text-pink-600 font-mono">
                       Amount: {formatINR(total)}
                     </p>
                     <span className="text-[10px] text-emerald-600 font-bold block bg-emerald-50 px-2 py-0.5 rounded w-fit">
-                      ✓ Exact amount automatically pre-filled
+                      ✓ Exact bill amount automatically pre-filled in customer app
                     </span>
                   </div>
                 </div>
               ) : null}
+            </div>
+          )}
+
+          {/* SPLIT MULTI-TENDER MODE */}
+          {paymentMode === 'SPLIT' && (
+            <div className="space-y-4 bg-purple-50/50 dark:bg-purple-950/20 p-5 rounded-2xl border border-purple-200 dark:border-purple-800/60">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                  <Share2 className="w-4 h-4 text-purple-600" />
+                  Split Payment Breakdown (Multi-Tender)
+                </span>
+                <span className="text-[11px] font-mono font-bold text-purple-700 dark:text-purple-300">
+                  Bill Total: {formatINR(total)}
+                </span>
+              </div>
+
+              {/* Split Inputs Grid */}
+              <div className="grid grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-emerald-700 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                    <Banknote className="w-3 h-3" /> Cash (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={splitCash || ''}
+                    placeholder="0"
+                    onChange={(e) => setSplitCash(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border-2 border-emerald-400 rounded-xl font-mono font-bold text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-pink-700 dark:text-pink-300 mb-1 flex items-center gap-1">
+                    <QrCode className="w-3 h-3" /> UPI QR (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={splitUpi || ''}
+                    placeholder="0"
+                    onChange={(e) => setSplitUpi(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border-2 border-pink-400 rounded-xl font-mono font-bold text-xs focus:ring-2 focus:ring-pink-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
+                    <CreditCard className="w-3 h-3" /> Card (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={splitCard || ''}
+                    placeholder="0"
+                    onChange={(e) => setSplitCard(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border-2 border-blue-400 rounded-xl font-mono font-bold text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-700 dark:text-amber-300 mb-1 flex items-center gap-1">
+                    <Users className="w-3 h-3" /> Khata Due (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={splitDue || ''}
+                    placeholder="0"
+                    onChange={(e) => setSplitDue(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border-2 border-amber-400 rounded-xl font-mono font-bold text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Split Helpers */}
+              <div className="flex items-center space-x-2 pt-1">
+                <span className="text-[11px] font-semibold text-slate-400">Quick Split:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const half = Math.round(total / 2);
+                    setSplitCash(half);
+                    setSplitUpi(total - half);
+                    setSplitCard(0);
+                    setSplitDue(0);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border text-[11px] font-bold hover:border-pink-500 transition-colors"
+                >
+                  50% Cash + 50% UPI
+                </button>
+                {splitUnallocated > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSplitUpi(prev => prev + splitUnallocated)}
+                      className="px-2.5 py-1 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 border border-pink-300 text-[11px] font-bold hover:bg-pink-200 transition-colors"
+                    >
+                      Put Remaining ₹{splitUnallocated} into UPI QR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitCash(prev => prev + splitUnallocated)}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 text-[11px] font-bold hover:bg-emerald-200 transition-colors"
+                    >
+                      Put Remaining ₹{splitUnallocated} into Cash
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSplitCash(0);
+                    setSplitUpi(0);
+                    setSplitCard(0);
+                    setSplitDue(0);
+                  }}
+                  className="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-rose-600 ml-auto"
+                >
+                  Reset
+                </button>
+              </div>
+
+              {/* Dynamic QR Preview for UPI Split Portion */}
+              {splitUpi > 0 && (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-pink-300 dark:border-pink-900 flex items-center space-x-4 animate-in fade-in duration-200">
+                  {loadingSplitQr ? (
+                    <div className="text-xs text-slate-400 py-4 px-6 animate-pulse">Generating Split UPI QR for ₹{splitUpi}...</div>
+                  ) : splitUpiQrData?.qr_image_base64 ? (
+                    <>
+                      <img src={splitUpiQrData.qr_image_base64} alt="Split UPI QR" className="w-24 h-24 object-contain border p-1 rounded-lg shadow-xs" />
+                      <div className="space-y-1 text-xs">
+                        <span className="font-bold text-pink-600 block text-sm">
+                          Dynamic QR for UPI Split: {formatINR(splitUpi)}
+                        </span>
+                        <p className="text-[11px] text-slate-500 font-mono">Pay to: {settings?.upi_id || '7972558842@upi'}</p>
+                        <span className="text-[10px] text-emerald-600 font-semibold block">Customer scans & pays exactly ₹{splitUpi} via PhonePe/GPay</span>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Live Split Status Summary */}
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-3">
+                  <span className="text-slate-500">Allocated: <strong>{formatINR(totalSplitAllocated)}</strong> / {formatINR(total)}</span>
+                  {splitUnallocated > 0 && (
+                    <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded">
+                      ⚠ ₹{splitUnallocated} Unallocated
+                    </span>
+                  )}
+                  {totalSplitAllocated === total && (
+                    <span className="text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> 100% Balanced
+                    </span>
+                  )}
+                  {splitChangeAmount > 0 && (
+                    <span className="text-blue-600 font-bold bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded">
+                      Change to Return: {formatINR(splitChangeAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

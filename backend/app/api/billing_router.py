@@ -153,8 +153,18 @@ def create_invoice(
                 prod.stock_quantity = max(0, prod.stock_quantity - item.quantity)
                 prod.last_sold_at = datetime.utcnow()
 
-    # 3. Process Payments
-    if invoice_in.paid_amount > 0:
+    # 3. Process Payments (Single mode or multi-tender SPLIT)
+    if invoice_in.payments and len(invoice_in.payments) > 0:
+        for p in invoice_in.payments:
+            if p.amount > 0:
+                payment = Payment(
+                    invoice_id=invoice.id,
+                    payment_mode=p.payment_mode,
+                    amount=p.amount,
+                    transaction_ref=p.transaction_ref
+                )
+                db.add(payment)
+    elif invoice_in.paid_amount > 0:
         payment = Payment(
             invoice_id=invoice.id,
             payment_mode=invoice_in.payment_mode,
