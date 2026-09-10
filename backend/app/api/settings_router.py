@@ -180,28 +180,27 @@ def purge_all_test_data(
             detail="Security authorization failed! The uploaded key file or entered words do not match the 21-word master authorization key."
         )
 
-    # Execute complete factory test data wipe
+    # Execute complete factory test data wipe in strict child -> parent dependency order
+    deleted_returns_items = db.query(ReturnItem).delete()
+    deleted_returns = db.query(ReturnOrder).delete()
+
     deleted_inv_items = db.query(InvoiceItem).delete()
     deleted_payments = db.query(Payment).delete()
     deleted_invoices = db.query(Invoice).delete()
-    
-    deleted_returns_items = db.query(ReturnItem).delete()
-    deleted_returns = db.query(ReturnOrder).delete()
-    
-    deleted_price_hist = db.query(ProductPriceHistory).delete()
-    deleted_products = db.query(Product).delete()
-    
-    deleted_expenses = db.query(Expense).delete()
-    
+
     deleted_purch_items = db.query(PurchaseItem).delete()
     deleted_purchases = db.query(Purchase).delete()
-    
+
     deleted_cust_ledgers = db.query(CustomerLedger).delete()
     deleted_customers = db.query(Customer).delete()
-    
+
     deleted_vend_ledgers = db.query(VendorLedger).delete()
     deleted_vendors = db.query(Vendor).delete()
-    
+
+    deleted_price_hist = db.query(ProductPriceHistory).delete()
+    deleted_products = db.query(Product).delete()
+
+    deleted_expenses = db.query(Expense).delete()
     deleted_wa_logs = db.query(WhatsAppLog).delete()
     deleted_lost_demands = db.query(LostDemand).delete()
     

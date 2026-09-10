@@ -62,6 +62,8 @@ def seed_initial_data():
             "CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku);",
             "CREATE INDEX IF NOT EXISTS idx_products_active ON products (is_active);",
             "CREATE INDEX IF NOT EXISTS idx_products_last_sold ON products (last_sold_at);",
+            "ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_product_id_fkey, ADD CONSTRAINT purchase_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;",
+            "ALTER TABLE purchases DROP CONSTRAINT IF EXISTS purchases_vendor_id_fkey, ADD CONSTRAINT purchases_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE;",
         ]
         for stmt in migration_statements:
             try:

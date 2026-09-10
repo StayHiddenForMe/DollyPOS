@@ -19,7 +19,7 @@ class Purchase(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     purchase_number = Column(String(50), unique=True, index=True, nullable=False)
-    vendor_id = Column(Integer, ForeignKey("vendors.id", ondelete="RESTRICT"), nullable=False)
+    vendor_id = Column(Integer, ForeignKey("vendors.id", ondelete="CASCADE"), nullable=False)
     supplier_invoice_no = Column(String(100), nullable=True)
     invoice_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     
@@ -47,7 +47,7 @@ class PurchaseItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     
     # Snapshot at purchase
     product_name = Column(String(200), nullable=False)
