@@ -13,6 +13,7 @@ class StoreSettingsBase(BaseModel):
     gstin: Optional[str] = None
     show_gst_on_bill: bool = False
     upi_id: str = "7972558842@upi"
+    opening_date: Optional[str] = "2002-01-01"
     bill_header: Optional[str] = "Tax Invoice / Retail Bill"
     bill_footer: Optional[str] = "Thank you for shopping with Dolly Toys! No exchange without original bill."
     footer_font_size: Optional[str] = "10px"
@@ -68,6 +69,7 @@ class StoreSettingsUpdate(BaseModel):
     gstin: Optional[str] = None
     show_gst_on_bill: Optional[bool] = None
     upi_id: Optional[str] = None
+    opening_date: Optional[str] = None
     bill_header: Optional[str] = None
     bill_footer: Optional[str] = None
     footer_font_size: Optional[str] = None

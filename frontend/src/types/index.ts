@@ -195,6 +195,7 @@ export interface StoreSettings {
   gstin?: string;
   show_gst_on_bill: boolean;
   upi_id: string;
+  opening_date?: string;
   bill_header?: string;
   bill_footer?: string;
   footer_font_size?: string;

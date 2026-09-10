@@ -21,6 +21,7 @@ import {
   Plus,
   Edit3,
   X,
+  Tag,
   Download,
   Upload,
   HardDrive,
@@ -31,6 +32,8 @@ import {
   Lock
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
+import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
+import { printBarcodeStickers, PrintStickerItem } from '../utils/printBarcode';
 
 export const SettingsPage: React.FC = () => {
   const { isOwner } = useAuthStore();
@@ -96,6 +99,12 @@ export const SettingsPage: React.FC = () => {
   const [newCatName, setNewCatName] = useState('');
   const [newSubcatName, setNewSubcatName] = useState('');
   const [selectedCatIdForSubcat, setSelectedCatIdForSubcat] = useState<number | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{ id: number; name: string } | null>(null);
+  const [editingSubcategory, setEditingSubcategory] = useState<{ id: number; name: string } | null>(null);
+
+  // Hardware Printer Test Suite State
+  const [testReceiptData, setTestReceiptData] = useState<any | null>(null);
+  const [isGeneratingTestBarcode, setIsGeneratingTestBarcode] = useState(false);
 
   // Longevity & Database Optimization
   const [longevityAudit, setLongevityAudit] = useState<any>(null);
@@ -396,6 +405,156 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editingCategory.name.trim()) return;
+    try {
+      await api.put(`/categories/${editingCategory.id}`, { name: editingCategory.name.trim() });
+      setEditingCategory(null);
+      fetchCategories();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to update category');
+    }
+  };
+
+  const handleDeleteCategory = async (catId: number, catName: string) => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete Category "${catName}"? All its subcategories will also be deleted.`);
+    if (!confirmDelete) return;
+    try {
+      await api.delete(`/categories/${catId}`);
+      fetchCategories();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete category');
+    }
+  };
+
+  const handleUpdateSubcategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubcategory || !editingSubcategory.name.trim()) return;
+    try {
+      await api.put(`/categories/subcategories/${editingSubcategory.id}`, { name: editingSubcategory.name.trim() });
+      setEditingSubcategory(null);
+      fetchCategories();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to update subcategory');
+    }
+  };
+
+  const handleDeleteSubcategory = async (subcatId: number, subcatName: string) => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete Subcategory "${subcatName}"?`);
+    if (!confirmDelete) return;
+    try {
+      await api.delete(`/categories/subcategories/${subcatId}`);
+      fetchCategories();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete subcategory');
+    }
+  };
+
+  // Hardware Printer Test Handlers
+  const handleTestPrintReceipt = () => {
+    const now = new Date();
+    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    
+    const mockBill = {
+      bill_number: 'TEST-0001',
+      bill_date: formattedDate,
+      customer_name: 'Test Customer (Hardware Check)',
+      customer_phone: '9876543210',
+      shop_name: settings.shop_name || 'Dolly Toys & Kids Wear',
+      tag_line: settings.tag_line || 'Exclusive Kids Wear & Quality Toys',
+      is_tagline_bold: settings.is_tagline_bold || false,
+      address: settings.address || 'Agra Road, Near Mahatma Gandhi Statue, Dhule',
+      mobile: settings.mobile || '7972558842',
+      gstin: settings.gstin || '',
+      show_gst_on_bill: settings.show_gst_on_bill || false,
+      upi_id: settings.upi_id || '7972558842@upi',
+      bill_header: settings.bill_header || 'Tax Invoice / Retail Bill',
+      bill_footer: settings.bill_footer || 'Thank you for shopping with Dolly Toys! Visit Again.',
+      footer_font_size: settings.footer_font_size || '10px',
+      is_footer_bold: settings.is_footer_bold || false,
+      power_footer_font_size: settings.power_footer_font_size || '9px',
+      is_power_footer_bold: settings.is_power_footer_bold || false,
+      terms_and_conditions: settings.terms_and_conditions || '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.',
+      show_terms_on_bill: settings.show_terms_on_bill !== false,
+      instagram_handle: settings.instagram_handle || '@dollytoys_dhule',
+      show_instagram_on_bill: settings.show_instagram_on_bill !== false,
+      items: [
+        {
+          item_name: 'Kids Cotton Party Shirt',
+          size: '26',
+          color: 'Sky Blue',
+          quantity: 2,
+          unit_price: 349.00,
+          total_price: 698.00
+        },
+        {
+          item_name: 'Plush Musical Teddy Bear',
+          size: 'Medium',
+          color: 'Brown',
+          quantity: 1,
+          unit_price: 499.00,
+          total_price: 499.00
+        }
+      ],
+      subtotal: 1197.00,
+      discount_amount: 97.00,
+      tax_amount: settings.show_gst_on_bill ? 55.00 : 0.00,
+      grand_total: 1100.00,
+      paid_amount: 1100.00,
+      due_amount: 0.00,
+      payment_mode: 'UPI',
+      payment_status: 'PAID'
+    };
+    setTestReceiptData(mockBill);
+  };
+
+  const handleTestPrintBarcode = async (mode: '1UP_50x25' | '2UP_50x25' | 'A4_SHEET') => {
+    setIsGeneratingTestBarcode(true);
+    try {
+      const res1 = await api.get('/barcode/generate/TEST-880011');
+      const res2 = await api.get('/barcode/generate/TEST-880012');
+      const img1 = res1.data.image_data_url || res1.data.barcode_base64;
+      const img2 = res2.data.image_data_url || res2.data.barcode_base64;
+
+      const sampleItems: PrintStickerItem[] = [
+        {
+          productName: 'Kids Denim Jeans (Test Label)',
+          size: '26',
+          color: 'Dark Blue',
+          barcode: 'TEST-880011',
+          mrp: 799.00,
+          barcodeImage: img1
+        },
+        {
+          productName: 'Remote Stunt Car (Test Label)',
+          size: 'Std',
+          color: 'Racing Red',
+          barcode: 'TEST-880012',
+          mrp: 599.00,
+          barcodeImage: img2
+        }
+      ];
+
+      if (mode === 'A4_SHEET') {
+        const fullSheet: PrintStickerItem[] = [];
+        for (let i = 0; i < 12; i++) {
+          fullSheet.push(sampleItems[0]);
+          fullSheet.push(sampleItems[1]);
+        }
+        printBarcodeStickers(fullSheet, 'A4_SHEET', 'left');
+      } else if (mode === '2UP_50x25') {
+        printBarcodeStickers(sampleItems, '2UP_50x25', 'left');
+      } else {
+        printBarcodeStickers([sampleItems[0]], '1UP_50x25', 'left');
+      }
+    } catch (err) {
+      alert('Failed to generate test barcode stickers. Please ensure backend is running.');
+    } finally {
+      setIsGeneratingTestBarcode(false);
+    }
+  };
+
   const handleOptimizeDatabase = async () => {
     setIsOptimizing(true);
     setOptimizeMsg(null);
@@ -657,6 +816,18 @@ export const SettingsPage: React.FC = () => {
                   value={settings.upi_id || ''}
                   onChange={(e) => setSettings({ ...settings, upi_id: e.target.value })}
                   className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-pink-600 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Shop Opening / Established Date
+                </label>
+                <input
+                  type="date"
+                  value={settings.opening_date || '2002-01-01'}
+                  onChange={(e) => setSettings({ ...settings, opening_date: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-slate-800 dark:text-white"
                 />
               </div>
             </div>
@@ -1483,7 +1654,7 @@ export const SettingsPage: React.FC = () => {
                   Category & Subcategory Hierarchy
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Organize inventory by creating parent departments and sub-departments.
+                  Organize inventory by creating parent departments, editing existing labels, or removing obsolete categories.
                 </p>
               </div>
 
@@ -1498,7 +1669,7 @@ export const SettingsPage: React.FC = () => {
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl shadow-xs"
+                  className="px-3 py-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
                 >
                   + Add Category
                 </button>
@@ -1510,27 +1681,61 @@ export const SettingsPage: React.FC = () => {
               {categories.map((c) => (
                 <div key={c.id} className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
-                      <FolderPlus className="w-4 h-4 text-pink-500" />
-                      {c.name}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
+                        <FolderPlus className="w-4 h-4 text-pink-500 shrink-0" />
+                        {c.name}
+                      </span>
+                      {/* Edit Category Button */}
+                      <button
+                        onClick={() => setEditingCategory({ id: c.id, name: c.name })}
+                        className="p-1 text-slate-400 hover:text-pink-600 hover:bg-pink-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                        title={`Edit Category "${c.name}"`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Delete Category Button */}
+                      <button
+                        onClick={() => handleDeleteCategory(c.id, c.name)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                        title={`Delete Category "${c.name}"`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
                     <button
                       onClick={() => setSelectedCatIdForSubcat(c.id)}
-                      className="px-2.5 py-1 bg-white dark:bg-slate-700 border rounded-lg text-[11px] font-bold text-pink-600 hover:bg-pink-50"
+                      className="px-2.5 py-1 bg-white dark:bg-slate-700 border rounded-lg text-[11px] font-bold text-pink-600 hover:bg-pink-50 transition-all cursor-pointer"
                     >
                       + Subcategory
                     </button>
                   </div>
 
+                  {/* Subcategories Badges */}
                   <div className="flex flex-wrap gap-1.5">
                     {c.subcategories.length > 0 ? (
                       c.subcategories.map((sc) => (
-                        <span key={sc.id} className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 border text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                          {sc.name}
-                        </span>
+                        <div key={sc.id} className="group inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-semibold text-[11px] shadow-2xs">
+                          <span>{sc.name}</span>
+                          <button
+                            onClick={() => setEditingSubcategory({ id: sc.id, name: sc.name })}
+                            className="text-slate-300 group-hover:text-pink-500 hover:text-pink-600 ml-1 transition-colors"
+                            title={`Edit Subcategory "${sc.name}"`}
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubcategory(sc.id, sc.name)}
+                            className="text-slate-300 group-hover:text-red-500 hover:text-red-600 transition-colors"
+                            title={`Delete Subcategory "${sc.name}"`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
                       ))
                     ) : (
-                      <span className="text-slate-400 italic text-[11px]">No subcategories</span>
+                      <span className="text-slate-400 italic text-[11px]">No subcategories yet</span>
                     )}
                   </div>
                 </div>
@@ -1538,7 +1743,7 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Subcategory Modal */}
+          {/* Add Subcategory Modal */}
           {selectedCatIdForSubcat && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-6 space-y-3 text-xs animate-in fade-in zoom-in duration-150">
@@ -1552,7 +1757,7 @@ export const SettingsPage: React.FC = () => {
                     value={newSubcatName}
                     onChange={(e) => setNewSubcatName(e.target.value)}
                     placeholder="e.g. Rompers, Mittens, Remote Cars..."
-                    className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold"
                     autoFocus
                     required
                   />
@@ -1561,15 +1766,93 @@ export const SettingsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedCatIdForSubcat(null)}
-                      className="px-4 py-2 border rounded-xl font-bold"
+                      className="px-4 py-2 border rounded-xl font-bold cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-pink-600 text-white rounded-xl font-bold"
+                      className="px-5 py-2 bg-pink-600 text-white rounded-xl font-bold cursor-pointer shadow-sm"
                     >
                       Save Subcategory
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Category Modal */}
+          {editingCategory && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-6 space-y-3 text-xs animate-in fade-in zoom-in duration-150">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-pink-500" />
+                  Edit Category Name
+                </h3>
+
+                <form onSubmit={handleUpdateCategory} className="space-y-3">
+                  <input
+                    type="text"
+                    value={editingCategory.name}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold"
+                    autoFocus
+                    required
+                  />
+
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategory(null)}
+                      className="px-4 py-2 border rounded-xl font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-pink-600 text-white rounded-xl font-bold cursor-pointer shadow-sm"
+                    >
+                      Update Category
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Subcategory Modal */}
+          {editingSubcategory && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-6 space-y-3 text-xs animate-in fade-in zoom-in duration-150">
+                <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-pink-500" />
+                  Edit Subcategory Name
+                </h3>
+
+                <form onSubmit={handleUpdateSubcategory} className="space-y-3">
+                  <input
+                    type="text"
+                    value={editingSubcategory.name}
+                    onChange={(e) => setEditingSubcategory({ ...editingSubcategory, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold"
+                    autoFocus
+                    required
+                  />
+
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingSubcategory(null)}
+                      className="px-4 py-2 border rounded-xl font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-pink-600 text-white rounded-xl font-bold cursor-pointer shadow-sm"
+                    >
+                      Update Subcategory
                     </button>
                   </div>
                 </form>
@@ -1579,59 +1862,182 @@ export const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: PRINTER DRIVER STUDIO */}
+      {/* TAB 4: PRINTER DRIVER STUDIO & HARDWARE TEST LAB */}
       {activeTab === 'PRINTERS' && (
-        <form onSubmit={handleSaveSettings} className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <h2 className="font-bold text-sm text-slate-800 dark:text-white border-b pb-2">
-              Hardware Printer Driver Studio (Universal ESC/POS, TSPL, ZPL, A4)
-            </h2>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border space-y-2.5">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Receipt Paper Width & Layout</span>
-                <select
-                  value={settings.thermal_width || '80mm'}
-                  onChange={(e) => setSettings({ ...settings, thermal_width: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border rounded-xl font-bold"
+        <div className="space-y-5">
+          <form onSubmit={handleSaveSettings} className="space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div>
+                  <h2 className="font-bold text-sm text-slate-800 dark:text-white">
+                    Hardware Printer Driver Studio (Universal ESC/POS, TSPL, ZPL, A4)
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Configure thermal paper width, barcode sticker rolls, and laser tax invoice sizes.
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-6 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs cursor-pointer shadow-xs"
                 >
-                  <option value="80mm">80mm (3-inch Standard POS Receipt - Epson / TVS / Star / Generic)</option>
-                  <option value="58mm">58mm (2-inch Mini Thermal Receipt)</option>
-                  <option value="112mm">112mm (4-inch Wide Thermal Format)</option>
-                  <option value="A4">A4 Full Page Detailed Tax Invoice (Laser / Inkjet)</option>
-                  <option value="A5">A5 Half Page Tax Invoice</option>
-                </select>
+                  {isSaving ? 'Saving...' : 'Save Presets'}
+                </button>
               </div>
 
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border space-y-2.5">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Barcode & Sticker Presets</span>
-                <select
-                  value={settings.barcode_label_size || '50x25mm'}
-                  onChange={(e) => setSettings({ ...settings, barcode_label_size: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border rounded-xl font-bold"
-                >
-                  <option value="50x25mm">50 x 25 mm (1-Across Standard Thermal Roll - TSC / TVS / Zebra)</option>
-                  <option value="50x25mm_2up">50 x 25 mm (2-Across Dual Roll - TSC TE244 / TVS LP46)</option>
-                  <option value="38x25mm">38 x 25 mm (1.5" x 1" Small Garment Tag)</option>
-                  <option value="50x35mm">50 x 35 mm (2" x 1.4" Detailed Sticker)</option>
-                  <option value="100x50mm">100 x 50 mm (4" x 2" Master Box / Carton Label)</option>
-                  <option value="a4_24up">A4 Sheet (24 Stickers / Page: 3x8 Grid - Laser/Inkjet)</option>
-                  <option value="a4_40up">A4 Sheet (40 Stickers / Page: 4x10 Grid - Laser/Inkjet)</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border space-y-2.5">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Receipt Paper Width & Layout</span>
+                  <select
+                    value={settings.thermal_width || '80mm'}
+                    onChange={(e) => setSettings({ ...settings, thermal_width: e.target.value })}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border rounded-xl font-bold"
+                  >
+                    <option value="80mm">80mm (3-inch Standard POS Receipt - Epson / TVS / Star / Generic)</option>
+                    <option value="58mm">58mm (2-inch Mini Thermal Receipt)</option>
+                    <option value="112mm">112mm (4-inch Wide Thermal Format)</option>
+                    <option value="A4">A4 Full Page Detailed Tax Invoice (Laser / Inkjet)</option>
+                    <option value="A5">A5 Half Page Tax Invoice</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border space-y-2.5">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Barcode & Sticker Presets</span>
+                  <select
+                    value={settings.barcode_label_size || '50x25mm'}
+                    onChange={(e) => setSettings({ ...settings, barcode_label_size: e.target.value })}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border rounded-xl font-bold"
+                  >
+                    <option value="50x25mm">50 x 25 mm (1-Across Standard Thermal Roll - TSC / TVS / Zebra)</option>
+                    <option value="50x25mm_2up">50 x 25 mm (2-Across Dual Roll - TSC TE244 / TVS LP46)</option>
+                    <option value="38x25mm">38 x 25 mm (1.5" x 1" Small Garment Tag)</option>
+                    <option value="50x35mm">50 x 35 mm (2" x 1.4" Detailed Sticker)</option>
+                    <option value="100x50mm">100 x 50 mm (4" x 2" Master Box / Carton Label)</option>
+                    <option value="a4_24up">A4 Sheet (24 Stickers / Page: 3x8 Grid - Laser/Inkjet)</option>
+                    <option value="a4_40up">A4 Sheet (40 Stickers / Page: 4x10 Grid - Laser/Inkjet)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </form>
+
+          {/* HARDWARE PRINTER TEST LAB */}
+          <div className="bg-gradient-to-r from-pink-500/5 via-purple-500/5 to-blue-500/5 p-5 rounded-3xl border border-pink-100 dark:border-pink-900/30 space-y-5">
+            <div className="flex items-center justify-between border-b border-pink-200/50 dark:border-pink-900/40 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-pink-600 text-white flex items-center justify-center shadow-md">
+                  <Printer className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                    Interactive Hardware Printer Test Lab
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] font-black uppercase">
+                      Safe Test Mode • 0% Data Touch
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Connect your receipt or barcode printer to USB, then test live printing instantly using your active store headers, footers, and templates.
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-8 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs"
-              >
-                Save Printer Presets
-              </button>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Card 1: Thermal Bill Receipt Test */}
+              <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 shadow-xs">
+                <div className="flex items-center space-x-2">
+                  <div className="w-7 h-7 rounded-lg bg-pink-50 dark:bg-pink-900/30 text-pink-600 flex items-center justify-center">
+                    <Printer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-800 dark:text-white">
+                      Thermal POS Receipt Bill Test
+                    </h4>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Layout: {settings.thermal_width || '80mm'} • Dynamic UPI QR • Dual Footers
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Generates a sample 2-item retail bill with subtotal, discounts, GST breakdown, terms, and custom footers matching your store settings.
+                </p>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestPrintReceipt}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-pink-400" />
+                    <span>Test Print POS Receipt (Mock Bill)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 2: Barcode Label Printer Test */}
+              <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 shadow-xs">
+                <div className="flex items-center space-x-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+                    <Tag className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-800 dark:text-white">
+                      Barcode Label & Sticker Roll Test
+                    </h4>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      TSC TE244 / TVS LP46 / Zebra / Laser Sheet
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Generates sample Code128 barcode stickers (Item, Size, MRP, Scannable Bars) across single rolls, 2-across rolls, or A4 sheets.
+                </p>
+
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={isGeneratingTestBarcode}
+                    onClick={() => handleTestPrintBarcode('1UP_50x25')}
+                    className="py-2 px-2 bg-pink-50 hover:bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 font-bold text-[11px] rounded-xl border border-pink-200 dark:border-pink-800 flex items-center justify-center space-x-1 cursor-pointer"
+                    title="1-Across Single Thermal Roll"
+                  >
+                    <span>1-Up Roll</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isGeneratingTestBarcode}
+                    onClick={() => handleTestPrintBarcode('2UP_50x25')}
+                    className="py-2 px-2 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 font-bold text-[11px] rounded-xl border border-purple-200 dark:border-purple-800 flex items-center justify-center space-x-1 cursor-pointer"
+                    title="2-Across Dual Thermal Roll (TE244)"
+                  >
+                    <span>2-Up Dual</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isGeneratingTestBarcode}
+                    onClick={() => handleTestPrintBarcode('A4_SHEET')}
+                    className="py-2 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 font-bold text-[11px] rounded-xl border border-blue-200 dark:border-blue-800 flex items-center justify-center space-x-1 cursor-pointer"
+                    title="A4 24-Up Sticker Sheet"
+                  >
+                    <span>A4 Grid (24)</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </form>
+        </div>
+      )}
+
+      {/* Render Test Receipt Modal */}
+      {testReceiptData && (
+        <ThermalReceiptView
+          receiptData={testReceiptData}
+          onClose={() => setTestReceiptData(null)}
+        />
       )}
 
       {/* TAB 5: BACKUP & DISASTER RECOVERY */}

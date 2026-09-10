@@ -17,6 +17,7 @@ class StoreSettings(Base):
     gstin = Column(String(20), nullable=True)
     show_gst_on_bill = Column(Boolean, default=False, nullable=False)
     upi_id = Column(String(100), default="7972558842@upi", nullable=False)
+    opening_date = Column(String(50), default="2002-01-01", nullable=True)
     
     # Receipts Customization
     bill_header = Column(Text, default="Tax Invoice / Retail Bill", nullable=True)

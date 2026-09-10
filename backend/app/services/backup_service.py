@@ -71,15 +71,41 @@ class BackupService:
                 "gstin": st.gstin if st else None,
                 "show_gst_on_bill": st.show_gst_on_bill if st else False,
                 "upi_id": st.upi_id if st else "7972558842@upi",
+                "opening_date": st.opening_date if st else "2002-01-01",
                 "bill_header": st.bill_header if st else "Tax Invoice / Retail Bill",
                 "bill_footer": st.bill_footer if st else None,
+                "footer_font_size": st.footer_font_size if st else "10px",
+                "is_footer_bold": st.is_footer_bold if st else False,
+                "power_footer_font_size": st.power_footer_font_size if st else "9px",
+                "is_power_footer_bold": st.is_power_footer_bold if st else False,
                 "terms_and_conditions": st.terms_and_conditions if st else None,
                 "show_terms_on_bill": st.show_terms_on_bill if st else True,
                 "instagram_handle": st.instagram_handle if st else "@dollytoys_dhule",
                 "show_instagram_on_bill": st.show_instagram_on_bill if st else True,
                 "facebook_handle": st.facebook_handle if st else None,
                 "show_facebook_on_bill": st.show_facebook_on_bill if st else False,
+                "threads_handle": st.threads_handle if st else None,
+                "show_threads_on_bill": st.show_threads_on_bill if st else False,
+                "website_url": st.website_url if st else None,
+                "show_website_on_bill": st.show_website_on_bill if st else False,
+                "custom_social_label": st.custom_social_label if st else None,
+                "custom_social_handle": st.custom_social_handle if st else None,
+                "show_custom_social_on_bill": st.show_custom_social_on_bill if st else False,
+                "custom_social_label2": st.custom_social_label2 if st else None,
+                "custom_social_handle2": st.custom_social_handle2 if st else None,
+                "show_custom_social_on_bill2": st.show_custom_social_on_bill2 if st else False,
+                "custom_social_label3": st.custom_social_label3 if st else None,
+                "custom_social_handle3": st.custom_social_handle3 if st else None,
+                "show_custom_social_on_bill3": st.show_custom_social_on_bill3 if st else False,
+                "custom_social_label4": st.custom_social_label4 if st else None,
+                "custom_social_handle4": st.custom_social_handle4 if st else None,
+                "show_custom_social_on_bill4": st.show_custom_social_on_bill4 if st else False,
+                "custom_social_label5": st.custom_social_label5 if st else None,
+                "custom_social_handle5": st.custom_social_handle5 if st else None,
+                "show_custom_social_on_bill5": st.show_custom_social_on_bill5 if st else False,
+                "thermal_printer_name": st.thermal_printer_name if st else None,
                 "thermal_width": st.thermal_width if st else "80mm",
+                "barcode_printer_name": st.barcode_printer_name if st else None,
                 "barcode_label_size": st.barcode_label_size if st else "50x25mm"
             } if st else None,
             "users": [
@@ -96,7 +122,12 @@ class BackupService:
                 {
                     "id": c.id,
                     "name": c.name,
-                    "subcategories": [{"id": sc.id, "name": sc.name} for sc in c.subcategories]
+                    "description": c.description,
+                    "icon": c.icon,
+                    "subcategories": [
+                        {"id": sc.id, "name": sc.name, "description": sc.description}
+                        for sc in c.subcategories
+                    ]
                 }
                 for c in db.query(Category).all()
             ],
@@ -105,12 +136,16 @@ class BackupService:
                     "barcode": p.barcode,
                     "sku": p.sku,
                     "name": p.name,
+                    "category_name": p.category.name if p.category else None,
+                    "subcategory_name": p.subcategory.name if p.subcategory else None,
                     "category_id": p.category_id,
                     "subcategory_id": p.subcategory_id,
                     "vendor_code": p.vendor_code,
                     "brand": p.brand,
                     "size": p.size,
                     "color": p.color,
+                    "fabric": p.fabric,
+                    "season": p.season,
                     "purchase_price": p.purchase_price,
                     "selling_price": p.selling_price,
                     "mrp": p.mrp,
@@ -129,6 +164,9 @@ class BackupService:
                     "id": c.id,
                     "name": c.name,
                     "phone": c.phone,
+                    "alt_phone": c.alt_phone,
+                    "email": c.email,
+                    "address": c.address,
                     "city": c.city,
                     "credit_balance": c.credit_balance,
                     "total_spend": c.total_spend,
@@ -136,13 +174,16 @@ class BackupService:
                     "ledgers": [
                         {
                             "entry_type": l.entry_type.value if hasattr(l.entry_type, 'value') else str(l.entry_type),
-                            "amount": l.amount,
-                            "running_balance": l.running_balance,
-                            "description": l.description,
+                            "debit_amount": l.debit_amount,
+                            "credit_amount": l.credit_amount,
+                            "balance_after": l.balance_after,
+                            "reference_no": l.reference_no,
+                            "payment_mode": l.payment_mode,
+                            "notes": l.notes,
                             "created_at": l.created_at.isoformat() if l.created_at else None
                         }
-                        for l in c.ledgers
-                    ] if hasattr(c, 'ledgers') and c.ledgers else []
+                        for l in c.ledger_entries
+                    ] if hasattr(c, 'ledger_entries') and c.ledger_entries else []
                 }
                 for c in db.query(Customer).all()
             ],
@@ -152,65 +193,38 @@ class BackupService:
                     "name": v.name,
                     "company_name": v.company_name,
                     "phone": v.phone,
+                    "alt_phone": v.alt_phone,
+                    "email": v.email,
+                    "gstin": v.gstin,
+                    "address": v.address,
                     "city": v.city,
+                    "state": v.state,
                     "outstanding_due": v.outstanding_due,
                     "notes": v.notes,
                     "bank_name": v.bank_name,
                     "bank_account_no": v.bank_account_no,
-                    "bank_ifsc": v.bank_ifsc
+                    "bank_ifsc": v.bank_ifsc,
+                    "ledgers": [
+                        {
+                            "entry_type": vl.entry_type.value if hasattr(vl.entry_type, 'value') else str(vl.entry_type),
+                            "debit_amount": vl.debit_amount,
+                            "credit_amount": vl.credit_amount,
+                            "balance_after": vl.balance_after,
+                            "reference_no": vl.reference_no,
+                            "payment_mode": vl.payment_mode,
+                            "notes": vl.notes,
+                            "created_at": vl.created_at.isoformat() if vl.created_at else None
+                        }
+                        for vl in v.ledger_entries
+                    ] if hasattr(v, 'ledger_entries') and v.ledger_entries else []
                 }
                 for v in db.query(Vendor).all()
-            ],
-            "invoices": [
-                {
-                    "bill_number": inv.bill_number,
-                    "customer_name": inv.customer_name,
-                    "customer_phone": inv.customer_phone,
-                    "subtotal": inv.subtotal,
-                    "discount_amount": inv.discount_amount,
-                    "tax_amount": inv.tax_amount,
-                    "grand_total": inv.grand_total,
-                    "paid_amount": inv.paid_amount,
-                    "change_amount": inv.change_amount,
-                    "due_amount": inv.due_amount,
-                    "payment_mode": inv.payment_mode.value if hasattr(inv.payment_mode, 'value') else str(inv.payment_mode),
-                    "payment_status": inv.payment_status.value if hasattr(inv.payment_status, 'value') else str(inv.payment_status),
-                    "is_cancelled": inv.is_cancelled,
-                    "created_at": inv.created_at.isoformat() if inv.created_at else None,
-                    "items": [
-                        {
-                            "item_name": item.item_name,
-                            "barcode": item.barcode,
-                            "size": item.size,
-                            "color": item.color,
-                            "quantity": item.quantity,
-                            "unit_price": item.unit_price,
-                            "cost_price": item.cost_price,
-                            "discount_amount": item.discount_amount,
-                            "tax_amount": item.tax_amount,
-                            "total_price": item.total_price
-                        }
-                        for item in inv.items
-                    ] if inv.items else []
-                }
-                for inv in db.query(Invoice).all()
-            ],
-            "expenses": [
-                {
-                    "category": exp.category.value if hasattr(exp.category, 'value') else str(exp.category),
-                    "title": exp.title,
-                    "amount": exp.amount,
-                    "payment_mode": exp.payment_mode,
-                    "paid_to": exp.paid_to,
-                    "notes": exp.notes,
-                    "expense_date": exp.expense_date.isoformat() if exp.expense_date else None
-                }
-                for exp in db.query(Expense).all()
             ],
             "purchases": [
                 {
                     "purchase_number": purch.purchase_number,
-                    "vendor_id": purch.vendor_id,
+                    "vendor_code": purch.vendor.vendor_code if purch.vendor else None,
+                    "vendor_phone": purch.vendor.phone if purch.vendor else None,
                     "supplier_invoice_no": purch.supplier_invoice_no,
                     "subtotal": purch.subtotal,
                     "tax_amount": purch.tax_amount,
@@ -236,6 +250,93 @@ class BackupService:
                     ] if purch.items else []
                 }
                 for purch in db.query(Purchase).all()
+            ],
+            "invoices": [
+                {
+                    "bill_number": inv.bill_number,
+                    "customer_name": inv.customer_name,
+                    "customer_phone": inv.customer_phone,
+                    "subtotal": inv.subtotal,
+                    "discount_amount": inv.discount_amount,
+                    "discount_type": inv.discount_type,
+                    "tax_amount": inv.tax_amount,
+                    "round_off": inv.round_off,
+                    "grand_total": inv.grand_total,
+                    "paid_amount": inv.paid_amount,
+                    "change_amount": inv.change_amount,
+                    "due_amount": inv.due_amount,
+                    "payment_mode": inv.payment_mode.value if hasattr(inv.payment_mode, 'value') else str(inv.payment_mode),
+                    "payment_status": inv.payment_status.value if hasattr(inv.payment_status, 'value') else str(inv.payment_status),
+                    "is_cancelled": inv.is_cancelled,
+                    "is_held": inv.is_held,
+                    "is_gift_receipt": inv.is_gift_receipt,
+                    "notes": inv.notes,
+                    "created_at": inv.created_at.isoformat() if inv.created_at else None,
+                    "items": [
+                        {
+                            "item_name": item.item_name,
+                            "barcode": item.barcode,
+                            "sku": item.sku,
+                            "size": item.size,
+                            "color": item.color,
+                            "quantity": item.quantity,
+                            "unit_price": item.unit_price,
+                            "cost_price": item.cost_price,
+                            "discount_amount": item.discount_amount,
+                            "tax_amount": item.tax_amount,
+                            "total_price": item.total_price,
+                            "is_unlisted": item.is_unlisted
+                        }
+                        for item in inv.items
+                    ] if inv.items else [],
+                    "payments": [
+                        {
+                            "payment_mode": p.payment_mode.value if hasattr(p.payment_mode, 'value') else str(p.payment_mode),
+                            "amount": p.amount,
+                            "transaction_ref": p.transaction_ref,
+                            "created_at": p.created_at.isoformat() if p.created_at else None
+                        }
+                        for p in inv.payments
+                    ] if inv.payments else []
+                }
+                for inv in db.query(Invoice).all()
+            ],
+            "returns": [
+                {
+                    "return_number": ret.return_number,
+                    "bill_number": ret.invoice.bill_number if ret.invoice else None,
+                    "customer_name": ret.customer.name if ret.customer else None,
+                    "customer_phone": ret.customer.phone if ret.customer else None,
+                    "return_type": ret.return_type.value if hasattr(ret.return_type, 'value') else str(ret.return_type),
+                    "total_refund_amount": ret.total_refund_amount,
+                    "reason": ret.reason,
+                    "notes": ret.notes,
+                    "created_at": ret.created_at.isoformat() if ret.created_at else None,
+                    "items": [
+                        {
+                            "item_name": ritem.item_name,
+                            "barcode": ritem.barcode,
+                            "quantity": ritem.quantity,
+                            "refund_price": ritem.refund_price,
+                            "is_defective": ritem.is_defective,
+                            "restocked": ritem.restocked
+                        }
+                        for ritem in ret.items
+                    ] if ret.items else []
+                }
+                for ret in db.query(ReturnOrder).all()
+            ],
+            "expenses": [
+                {
+                    "category": exp.category.value if hasattr(exp.category, 'value') else str(exp.category),
+                    "title": exp.title,
+                    "amount": exp.amount,
+                    "payment_mode": exp.payment_mode,
+                    "paid_to": exp.paid_to,
+                    "notes": exp.notes,
+                    "expense_date": exp.expense_date.isoformat() if exp.expense_date else None
+                }
+                for exp in db.query(Expense).all()
             ]
         }
 
