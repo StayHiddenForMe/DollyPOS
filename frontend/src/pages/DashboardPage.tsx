@@ -298,7 +298,7 @@ export const DashboardPage: React.FC = () => {
               </span>
             </div>
             <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-              <span>Gross: <strong className="text-emerald-600 font-mono">{formatINR(metrics.today_gross_profit)}</strong> • Exp: <strong className="text-rose-500 font-mono">{formatINR(metrics.today_expenses)}</strong></span>
+              <span>Expenses: <strong className="text-rose-500 font-mono">{formatINR(metrics.today_expenses)}</strong></span>
               <span>Drawer Cash: <strong className="font-mono text-slate-800 dark:text-slate-200">{formatINR(metrics.today_cash)}</strong></span>
             </div>
           </div>
