@@ -50,3 +50,12 @@ yarn-error.log*
 Backups/
 DollyPOS_Backups/
 backend/test_backups_dir/
+
+# PyInstaller & Installer builds
+backend/build/
+backend/build_installer/
+backend/app_payload.zip
+backend/setup_wizard_script.py
+backend/*.spec
+*.db
+

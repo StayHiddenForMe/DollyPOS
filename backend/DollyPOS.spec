@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['c:/Users/SomeshBang/Desktop/Antigravity DollyPos/backend/desktop_app.py'],
+    ['C:/Users/SomeshBang/Desktop/Antigravity DollyPos/backend/desktop_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('c:/Users/SomeshBang/Desktop/Antigravity DollyPos/frontend/dist', 'frontend/dist'), ('c:/Users/SomeshBang/Desktop/Antigravity DollyPos/docs', 'docs')],
+    datas=[('C:/Users/SomeshBang/Desktop/Antigravity DollyPos/frontend/dist', 'frontend/dist'), ('C:/Users/SomeshBang/Desktop/Antigravity DollyPos/docs', 'docs')],
     hiddenimports=['webview', 'webview.platforms', 'webview.platforms.winforms', 'webview.platforms.edgechromium', 'clr_loader', 'pythonnet', 'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'fastapi', 'starlette', 'pydantic', 'pydantic_settings', 'reportlab', 'reportlab.platypus', 'reportlab.lib', 'reportlab.pdfgen', 'pandas', 'openpyxl', 'psycopg2', 'passlib', 'passlib.handlers', 'passlib.handlers.bcrypt', 'bcrypt', 'qrcode', 'barcode', 'sqlalchemy', 'sqlalchemy.dialects.postgresql', 'sqlalchemy.dialects.sqlite'],
     hookspath=[],
     hooksconfig={},

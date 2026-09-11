@@ -172,12 +172,18 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/health")
 def health_check():
+    db_type = "PostgreSQL Live" if "postgresql" in str(engine.url) else "Local SQLite Engine Live"
     return {
         "status": "online",
         "service": "Dolly POS Core API",
         "shop": "Dolly Toys and Kids Wear",
-        "location": "Dhule"
+        "location": "Dhule",
+        "database": db_type
     }
+
+@app.get(f"{settings.API_V1_STR}/health")
+def api_v1_health():
+    return health_check()
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
