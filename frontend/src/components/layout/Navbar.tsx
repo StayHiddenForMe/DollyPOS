@@ -14,9 +14,7 @@ import {
   Check,
   Database,
   Sun,
-  Moon,
-  Maximize,
-  Minimize
+  Moon
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { formatINR } from '../../utils/formatters';
@@ -26,29 +24,10 @@ export const Navbar: React.FC = () => {
   const { settings } = useSettingStore();
   const { theme, toggleTheme } = useThemeStore();
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [alerts, setAlerts] = useState<any>(null);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const [isAnniversaryDismissed, setIsAnniversaryDismissed] = useState(false);
-
-  useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-  };
 
   // Dynamic Shop Anniversary Check from StoreSettings
   const anniversaryData = alerts?.anniversary;
@@ -139,20 +118,7 @@ export const Navbar: React.FC = () => {
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center space-x-2">
-        {/* Fullscreen Mode Toggle Button */}
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title={isFullscreen ? "Exit Fullscreen (F11 / Esc)" : "Enter Fullscreen Mode (F11)"}
-        >
-          {isFullscreen ? (
-            <Minimize className="w-4 h-4 text-indigo-500" />
-          ) : (
-            <Maximize className="w-4 h-4" />
-          )}
-        </button>
-
+      <div className="flex items-center space-x-3">
         {/* Light / Dark Mode Toggle Button */}
         <button
           onClick={toggleTheme}

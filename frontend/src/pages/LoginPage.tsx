@@ -1,45 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import api from '../utils/api';
-import { Store, Lock, User, KeyRound, AlertCircle, ArrowRight, Maximize, Minimize } from 'lucide-react';
+import { Store, Lock, User, KeyRound, AlertCircle, ArrowRight } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const { login } = useAuthStore();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-
-    // Ensure Fullscreen mode is engaged
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
 
     try {
       const res = await api.post('/auth/login', { username, password });
@@ -53,26 +29,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 select-none relative">
-      {/* Top Fullscreen Toggle Button */}
-      <button
-        onClick={toggleFullscreen}
-        className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all backdrop-blur-md flex items-center gap-1.5 text-xs font-semibold"
-        title={isFullscreen ? "Exit Fullscreen (F11 / Esc)" : "Enter Fullscreen Mode (F11)"}
-      >
-        {isFullscreen ? (
-          <>
-            <Minimize className="w-4 h-4 text-pink-400" />
-            <span className="hidden sm:inline">Exit Fullscreen</span>
-          </>
-        ) : (
-          <>
-            <Maximize className="w-4 h-4" />
-            <span className="hidden sm:inline">Fullscreen (F11)</span>
-          </>
-        )}
-      </button>
-
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 select-none">
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden p-8 space-y-6">
         {/* Header & Logo */}
         <div className="text-center space-y-2">
