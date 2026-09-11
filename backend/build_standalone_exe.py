@@ -12,7 +12,7 @@ DIST_EXE_DIR = os.path.join(BASE_DIR, "dist_app")
 os.makedirs(DIST_EXE_DIR, exist_ok=True)
 
 print("=" * 60)
-print("  Dolly POS - Building Standalone Windows Executable (.exe)")
+print("  Dolly POS - Building Standalone Windows Native Desktop App (.exe)")
 print("=" * 60)
 
 # 1. Verify frontend dist exists
@@ -25,13 +25,19 @@ cmd = [
     sys.executable, "-m", "PyInstaller",
     "--noconfirm",
     "--onedir",
-    "--windowed", # No black console window
+    "--windowed", # Native Windows GUI Desktop Application (No console window)
     "--name", "DollyPOS",
     "--distpath", DIST_EXE_DIR,
     "--workpath", os.path.join(BACKEND_DIR, "build"),
     "--specpath", BACKEND_DIR,
     f"--add-data={FRONTEND_DIST};frontend/dist",
     f"--add-data={DOCS_DIR};docs",
+    "--hidden-import=webview",
+    "--hidden-import=webview.platforms",
+    "--hidden-import=webview.platforms.winforms",
+    "--hidden-import=webview.platforms.edgechromium",
+    "--hidden-import=clr_loader",
+    "--hidden-import=pythonnet",
     "--hidden-import=uvicorn",
     "--hidden-import=uvicorn.logging",
     "--hidden-import=uvicorn.loops",
@@ -41,8 +47,6 @@ cmd = [
     "--hidden-import=uvicorn.protocols.http.auto",
     "--hidden-import=uvicorn.protocols.websockets",
     "--hidden-import=uvicorn.protocols.websockets.auto",
-    "--hidden-import=uvicorn.lifespans",
-    "--hidden-import=uvicorn.lifespans.on",
     "--hidden-import=fastapi",
     "--hidden-import=starlette",
     "--hidden-import=pydantic",
@@ -69,7 +73,7 @@ cmd = [
 print("Executing PyInstaller compilation...")
 res = subprocess.run(cmd, cwd=BACKEND_DIR)
 if res.returncode == 0:
-    print("\n[SUCCESS] Standalone DollyPOS package built successfully in dist_app/DollyPOS/")
+    print("\n[SUCCESS] Native Standalone DollyPOS.exe package built successfully in dist_app/DollyPOS/")
     exe_path = os.path.join(DIST_EXE_DIR, "DollyPOS", "DollyPOS.exe")
     print(f"Target Executable: {exe_path}")
 else:
