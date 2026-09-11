@@ -189,79 +189,241 @@ class AnalyticsService:
             start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
             end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        # 1. SQL Daily Invoice Aggregations
-        daily_inv_query = db.query(
-            func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
-            func.sum(Invoice.grand_total).label("revenue"),
-            func.count(Invoice.id).label("bills_count"),
-            func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
-            func.sum(case((Invoice.payment_mode == PaymentMode.UPI, Invoice.paid_amount), else_=0.0)).label("upi"),
-            func.sum(Invoice.due_amount).label("credit")
-        ).filter(
-            Invoice.created_at >= start_date,
-            Invoice.created_at <= end_date,
-            Invoice.is_cancelled == False,
-            Invoice.is_held == False
-        ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
-
-        daily_inv_map = {row.day_str: row for row in daily_inv_query}
-
-        # 2. SQL Daily COGS Aggregation
-        daily_cogs_query = db.query(
-            func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
-            func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
-        ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
-         .filter(
-            Invoice.created_at >= start_date,
-            Invoice.created_at <= end_date,
-            Invoice.is_cancelled == False,
-            Invoice.is_held == False
-        ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
-
-        daily_cogs_map = {row.day_str: float(row.cogs or 0.0) for row in daily_cogs_query}
-
-        # 3. SQL Daily Expenses Aggregation
-        daily_exp_query = db.query(
-            func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("day_str"),
-            func.sum(Expense.amount).label("expenses")
-        ).filter(
-            Expense.expense_date >= start_date,
-            Expense.expense_date <= end_date
-        ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
-
-        daily_exp_map = {row.day_str: float(row.expenses or 0.0) for row in daily_exp_query}
-
-        # Assemble daily timeline
+        # 1. Determine Smart Aggregation Granularity (Daily for <=45d, Weekly for 46-400d, Monthly for >400d/5Y)
         daily_timeline = []
-        for i in range(days_count):
-            d = (start_date + timedelta(days=i)).date()
-            d_str = d.strftime("%Y-%m-%d")
-            inv_row = daily_inv_map.get(d_str)
 
-            rev = float(inv_row.revenue or 0.0) if inv_row else 0.0
-            bills = int(inv_row.bills_count or 0) if inv_row else 0
-            cash = float(inv_row.cash or 0.0) if inv_row else 0.0
-            upi = float(inv_row.upi or 0.0) if inv_row else 0.0
-            credit = float(inv_row.credit or 0.0) if inv_row else 0.0
-            cogs = daily_cogs_map.get(d_str, 0.0)
-            exp = daily_exp_map.get(d_str, 0.0)
-            gp = rev - cogs
-            np = gp - exp
+        if days_count <= 45:
+            # Daily granularity
+            daily_inv_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("p_str"),
+                func.sum(Invoice.grand_total).label("revenue"),
+                func.count(Invoice.id).label("bills_count"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.UPI, Invoice.paid_amount), else_=0.0)).label("upi"),
+                func.sum(Invoice.due_amount).label("credit")
+            ).filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
 
-            daily_timeline.append({
-                "date": d_str,
-                "label": d.strftime("%d %b"),
-                "full_date": d.strftime("%d %B %Y (%A)"),
-                "revenue": round(rev, 2),
-                "cogs": round(cogs, 2),
-                "gross_profit": round(gp, 2),
-                "bills_count": bills,
-                "cash": round(cash, 2),
-                "upi": round(upi, 2),
-                "credit": round(credit, 2),
-                "expenses": round(exp, 2),
-                "net_profit": round(np, 2)
-            })
+            daily_cogs_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("p_str"),
+                func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
+            ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
+             .filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+
+            daily_exp_query = db.query(
+                func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("p_str"),
+                func.sum(Expense.amount).label("expenses")
+            ).filter(
+                Expense.expense_date >= start_date,
+                Expense.expense_date <= end_date
+            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
+
+            inv_map = {r.p_str: r for r in daily_inv_query}
+            cogs_map = {r.p_str: float(r.cogs or 0.0) for r in daily_cogs_query}
+            exp_map = {r.p_str: float(r.expenses or 0.0) for r in daily_exp_query}
+
+            for i in range(days_count):
+                d = (start_date + timedelta(days=i)).date()
+                d_str = d.strftime("%Y-%m-%d")
+                row = inv_map.get(d_str)
+
+                rev = float(row.revenue or 0.0) if row else 0.0
+                bills = int(row.bills_count or 0) if row else 0
+                cash = float(row.cash or 0.0) if row else 0.0
+                upi = float(row.upi or 0.0) if row else 0.0
+                credit = float(row.credit or 0.0) if row else 0.0
+                cogs = cogs_map.get(d_str, 0.0)
+                exp = exp_map.get(d_str, 0.0)
+                gp = rev - cogs
+                np = gp - exp
+
+                daily_timeline.append({
+                    "date": d_str,
+                    "label": d.strftime("%d %b"),
+                    "full_date": d.strftime("%d %B %Y (%A)"),
+                    "revenue": round(rev, 2),
+                    "cogs": round(cogs, 2),
+                    "gross_profit": round(gp, 2),
+                    "bills_count": bills,
+                    "cash": round(cash, 2),
+                    "upi": round(upi, 2),
+                    "credit": round(credit, 2),
+                    "expenses": round(exp, 2),
+                    "net_profit": round(np, 2)
+                })
+
+        elif days_count <= 400:
+            # Weekly granularity (Clean 7-day rolling buckets)
+            weekly_slots = []
+            curr = start_date
+            while curr <= end_date:
+                w_end = min(curr + timedelta(days=6, hours=23, minutes=59, seconds=59), end_date)
+                weekly_slots.append((curr, w_end))
+                curr = curr + timedelta(days=7)
+
+            daily_inv_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
+                func.sum(Invoice.grand_total).label("revenue"),
+                func.count(Invoice.id).label("bills_count"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.UPI, Invoice.paid_amount), else_=0.0)).label("upi"),
+                func.sum(Invoice.due_amount).label("credit")
+            ).filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+
+            daily_cogs_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
+                func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
+            ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
+             .filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+
+            daily_exp_query = db.query(
+                func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("day_str"),
+                func.sum(Expense.amount).label("expenses")
+            ).filter(
+                Expense.expense_date >= start_date,
+                Expense.expense_date <= end_date
+            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
+
+            inv_map = {r.day_str: r for r in daily_inv_query}
+            cogs_map = {r.day_str: float(r.cogs or 0.0) for r in daily_cogs_query}
+            exp_map = {r.day_str: float(r.expenses or 0.0) for r in daily_exp_query}
+
+            for w_start, w_end in weekly_slots:
+                rev, bills, cash, upi, credit, cogs, exp = 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0
+                cur_d = w_start.date()
+                while cur_d <= w_end.date():
+                    ds = cur_d.strftime("%Y-%m-%d")
+                    if ds in inv_map:
+                        rev += float(inv_map[ds].revenue or 0.0)
+                        bills += int(inv_map[ds].bills_count or 0)
+                        cash += float(inv_map[ds].cash or 0.0)
+                        upi += float(inv_map[ds].upi or 0.0)
+                        credit += float(inv_map[ds].credit or 0.0)
+                    cogs += cogs_map.get(ds, 0.0)
+                    exp += exp_map.get(ds, 0.0)
+                    cur_d += timedelta(days=1)
+
+                lbl = f"{w_start.strftime('%d %b')} - {w_end.strftime('%d %b')}"
+                full_lbl = f"{w_start.strftime('%d %b %Y')} to {w_end.strftime('%d %b %Y')} (Weekly Aggregate)"
+                gp = rev - cogs
+                np = gp - exp
+
+                daily_timeline.append({
+                    "date": w_start.strftime("%Y-%m-%d"),
+                    "label": lbl,
+                    "full_date": full_lbl,
+                    "revenue": round(rev, 2),
+                    "cogs": round(cogs, 2),
+                    "gross_profit": round(gp, 2),
+                    "bills_count": bills,
+                    "cash": round(cash, 2),
+                    "upi": round(upi, 2),
+                    "credit": round(credit, 2),
+                    "expenses": round(exp, 2),
+                    "net_profit": round(np, 2)
+                })
+
+        else:
+            # Monthly granularity (Smooth ~60 monthly trend points for 5 Years)
+            monthly_inv_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+                func.sum(Invoice.grand_total).label("revenue"),
+                func.count(Invoice.id).label("bills_count"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
+                func.sum(case((Invoice.payment_mode == PaymentMode.UPI, Invoice.paid_amount), else_=0.0)).label("upi"),
+                func.sum(Invoice.due_amount).label("credit")
+            ).filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+
+            monthly_cogs_query = db.query(
+                func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+                func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
+            ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
+             .filter(
+                Invoice.created_at >= start_date,
+                Invoice.created_at <= end_date,
+                Invoice.is_cancelled == False,
+                Invoice.is_held == False
+            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+
+            monthly_exp_query = db.query(
+                func.to_char(Expense.expense_date, 'YYYY-MM').label("month_str"),
+                func.sum(Expense.amount).label("expenses")
+            ).filter(
+                Expense.expense_date >= start_date,
+                Expense.expense_date <= end_date
+            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM')).all()
+
+            inv_map = {r.month_str: r for r in monthly_inv_query}
+            cogs_map = {r.month_str: float(r.cogs or 0.0) for r in monthly_cogs_query}
+            exp_map = {r.month_str: float(r.expenses or 0.0) for r in monthly_exp_query}
+
+            cur_m = start_date.replace(day=1)
+            end_m = end_date.replace(day=1)
+            months_list = []
+            while cur_m <= end_m:
+                months_list.append(cur_m.strftime("%Y-%m"))
+                total_m = cur_m.year * 12 + (cur_m.month - 1) + 1
+                cur_m = datetime(total_m // 12, (total_m % 12) + 1, 1)
+
+            for m_str in months_list:
+                row = inv_map.get(m_str)
+                rev = float(row.revenue or 0.0) if row else 0.0
+                bills = int(row.bills_count or 0) if row else 0
+                cash = float(row.cash or 0.0) if row else 0.0
+                upi = float(row.upi or 0.0) if row else 0.0
+                credit = float(row.credit or 0.0) if row else 0.0
+                cogs = cogs_map.get(m_str, 0.0)
+                exp = exp_map.get(m_str, 0.0)
+                gp = rev - cogs
+                np = gp - exp
+
+                try:
+                    m_dt = datetime.strptime(m_str, "%Y-%m")
+                    lbl = m_dt.strftime("%b %Y")
+                    full_lbl = m_dt.strftime("%B %Y (Monthly Aggregate)")
+                except Exception:
+                    lbl = m_str
+                    full_lbl = m_str
+
+                daily_timeline.append({
+                    "date": m_str,
+                    "label": lbl,
+                    "full_date": full_lbl,
+                    "revenue": round(rev, 2),
+                    "cogs": round(cogs, 2),
+                    "gross_profit": round(gp, 2),
+                    "bills_count": bills,
+                    "cash": round(cash, 2),
+                    "upi": round(upi, 2),
+                    "credit": round(credit, 2),
+                    "expenses": round(exp, 2),
+                    "net_profit": round(np, 2)
+                })
+
 
         # 4. Strictly 12-Month Macro Data (1 Full Year)
         target_months = []
