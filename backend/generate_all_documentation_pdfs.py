@@ -185,6 +185,13 @@ def get_custom_styles():
         leading=11,
         textColor=dark_slate
     ))
+    styles.add(ParagraphStyle(
+        name="TableCellCode",
+        fontName="Courier",
+        fontSize=7.5,
+        leading=10,
+        textColor=colors.HexColor("#0F172A")
+    ))
     return styles
 
 # =========================================================================
@@ -322,152 +329,455 @@ def generate_technical_handoff():
     styles = get_custom_styles()
     story = []
 
-    story.append(Paragraph("Dolly POS — Technical Handoff Document", styles["DocTitle"]))
-    story.append(Paragraph("Engineering Architecture, Codebase Walkthrough, Database ERD & Development Changelog", styles["DocSubtitle"]))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#4F46E5"), spaceBefore=0, spaceAfter=12))
+    # Title & Metadata Banner
+    story.append(Paragraph("Dolly POS — Master Technical Handoff Document", styles["DocTitle"]))
+    story.append(Paragraph("Comprehensive Engineering Architecture, Modules, Phases, File Hierarchy, Database Schemas, ERD & Coding Rules", styles["DocSubtitle"]))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#4F46E5"), spaceBefore=0, spaceAfter=10))
 
-    # Section 1: Tech Stack
-    story.append(Paragraph("1. Technology Stack & Pinned Versions", styles["DocH1"]))
+    # =========================================================================
+    # SECTION 1: COMPLETE PROJECT SUMMARY & MISSION
+    # =========================================================================
+    story.append(Paragraph("1. Executive Project Summary & System Architecture", styles["DocH1"]))
+    story.append(Paragraph(
+        "<b>Dolly POS</b> is an enterprise-grade, high-concurrency retail point-of-sale and store management ecosystem engineered "
+        "specifically for <b>Dolly Toys & Kids Wear</b> in Dhule, Maharashtra. The system unites high-speed checkout billing, "
+        "deep inventory management with size/color variants, Customer Khata (store credit) ledgers, wholesale vendor procurement, "
+        "hardware thermal receipt & barcode printing, WhatsApp marketing automation, AI-driven stock intelligence, and multi-year "
+        "Profit-and-Loss (P&L) accounting into a unified, standalone desktop application.",
+        styles["DocBody"]
+    ))
+    story.append(Paragraph(
+        "The application is built on a modern decoupled architecture: a high-performance Python FastAPI asynchronous backend, "
+        "a PostgreSQL 16 ACID-compliant relational database, an interactive React 18 TypeScript Single Page Application (SPA), "
+        "and an embedded Microsoft Edge WebView2 native desktop wrapper running with zero terminal dependencies.",
+        styles["DocBody"]
+    ))
+
+    # Technology Stack Table
     tech_data = [
-        [Paragraph("Layer", styles["TableHeader"]), Paragraph("Technology / Framework", styles["TableHeader"]), Paragraph("Version", styles["TableHeader"]), Paragraph("Role & Purpose", styles["TableHeader"])],
-        [Paragraph("Backend Framework", styles["TableCellBold"]), Paragraph("Python FastAPI", styles["TableCell"]), Paragraph("0.141.1", styles["TableCell"]), Paragraph("High-speed async REST API core", styles["TableCell"])],
-        [Paragraph("ASGI Web Server", styles["TableCellBold"]), Paragraph("Uvicorn (Standard)", styles["TableCell"]), Paragraph("0.52.4", styles["TableCell"]), Paragraph("High-concurrency async HTTP server", styles["TableCell"])],
-        [Paragraph("ORM / DB Engine", styles["TableCellBold"]), Paragraph("SQLAlchemy + Psycopg2", styles["TableCell"]), Paragraph("2.0.52 / 2.9.12", styles["TableCell"]), Paragraph("Relational data mapping & connection pooling", styles["TableCell"])],
-        [Paragraph("Database", styles["TableCellBold"]), Paragraph("PostgreSQL (x64)", styles["TableCell"]), Paragraph("16.x", styles["TableCell"]), Paragraph("ACID transactional enterprise database", styles["TableCell"])],
-        [Paragraph("Frontend Library", styles["TableCellBold"]), Paragraph("React 18 + TypeScript", styles["TableCell"]), Paragraph("18.2.0 / 5.2.2", styles["TableCell"]), Paragraph("Type-safe interactive single page application", styles["TableCell"])],
-        [Paragraph("Build Tool & Bundler", styles["TableCellBold"]), Paragraph("Vite", styles["TableCell"]), Paragraph("5.1.6", styles["TableCell"]), Paragraph("Ultra-fast HMR and optimized ES build", styles["TableCell"])],
-        [Paragraph("UI Styling & Icons", styles["TableCellBold"]), Paragraph("Tailwind CSS + Lucide", styles["TableCell"]), Paragraph("3.4.1 / 0.363", styles["TableCell"]), Paragraph("Modern responsive glassmorphic design system", styles["TableCell"])],
-        [Paragraph("State Management", styles["TableCellBold"]), Paragraph("Zustand", styles["TableCell"]), Paragraph("4.5.2", styles["TableCell"]), Paragraph("Persistent lightweight client state (Auth & Cart)", styles["TableCell"])],
-        [Paragraph("PDF Generation", styles["TableCellBold"]), Paragraph("ReportLab", styles["TableCell"]), Paragraph("5.0.1", styles["TableCell"]), Paragraph("Programmatic invoice & manual PDF engine", styles["TableCell"])],
-        [Paragraph("Data Analytics", styles["TableCellBold"]), Paragraph("Pandas + OpenPyXL", styles["TableCell"]), Paragraph("3.0.5 / 3.1.5", styles["TableCell"]), Paragraph("Excel export and financial aggregation", styles["TableCell"])]
+        [Paragraph("Layer / Subsystem", styles["TableHeader"]), Paragraph("Technology / Framework", styles["TableHeader"]), Paragraph("Version", styles["TableHeader"]), Paragraph("Key Role & Responsibility", styles["TableHeader"])],
+        [Paragraph("Backend Framework", styles["TableCellBold"]), Paragraph("Python FastAPI", styles["TableCell"]), Paragraph("0.141.1", styles["TableCell"]), Paragraph("High-speed asynchronous REST API endpoints & DI", styles["TableCell"])],
+        [Paragraph("ASGI Server Engine", styles["TableCellBold"]), Paragraph("Uvicorn (Standard)", styles["TableCell"]), Paragraph("0.52.4", styles["TableCell"]), Paragraph("High-concurrency async event loop & HTTP routing", styles["TableCell"])],
+        [Paragraph("ORM & Database Core", styles["TableCellBold"]), Paragraph("SQLAlchemy + Psycopg2", styles["TableCell"]), Paragraph("2.0.52 / 2.9.12", styles["TableCell"]), Paragraph("Relational model mapping & connection pooling", styles["TableCell"])],
+        [Paragraph("Database Engine", styles["TableCellBold"]), Paragraph("PostgreSQL (x64)", styles["TableCell"]), Paragraph("16.x", styles["TableCell"]), Paragraph("ACID relational store with B-Tree compound indexes", styles["TableCell"])],
+        [Paragraph("Desktop GUI Runtime", styles["TableCellBold"]), Paragraph("pywebview (Edge Chromium)", styles["TableCell"]), Paragraph("6.2.1", styles["TableCell"]), Paragraph("Embedded native desktop window (no browser tabs)", styles["TableCell"])],
+        [Paragraph("Frontend SPA Core", styles["TableCellBold"]), Paragraph("React 18 + TypeScript", styles["TableCell"]), Paragraph("18.2.0 / 5.2.2", styles["TableCell"]), Paragraph("Type-safe reactive stateful user interface", styles["TableCell"])],
+        [Paragraph("Build Tool & Bundler", styles["TableCellBold"]), Paragraph("Vite", styles["TableCell"]), Paragraph("5.1.6", styles["TableCell"]), Paragraph("Optimized single-bundle asset compilation", styles["TableCell"])],
+        [Paragraph("UI Styling & Icons", styles["TableCellBold"]), Paragraph("Tailwind CSS + Lucide", styles["TableCell"]), Paragraph("3.4.1 / 0.363", styles["TableCell"]), Paragraph("Glassmorphic modern responsive design system", styles["TableCell"])],
+        [Paragraph("State Management", styles["TableCellBold"]), Paragraph("Zustand", styles["TableCell"]), Paragraph("4.5.2", styles["TableCell"]), Paragraph("Persistent client state (Cart, Auth, Theme)", styles["TableCell"])],
+        [Paragraph("Hardware Printing", styles["TableCellBold"]), Paragraph("Raw TSPL & ESC/POS", styles["TableCell"]), Paragraph("Custom Driver", styles["TableCell"]), Paragraph("1-Up/2-Up barcode labels & 80mm thermal receipts", styles["TableCell"])],
+        [Paragraph("Analytics & Reporting", styles["TableCellBold"]), Paragraph("Pandas + OpenPyXL + ReportLab", styles["TableCell"]), Paragraph("Latest", styles["TableCell"]), Paragraph("Excel export, SVG spline curves, PDF generator", styles["TableCell"])]
     ]
-    t = Table(tech_data, colWidths=[100, 130, 70, 204])
-    t.setStyle(TableStyle([
+    t_tech = Table(tech_data, colWidths=[90, 115, 60, 239])
+    t_tech.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#4F46E5")),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor("#F8FAFC"), colors.white]),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
     ]))
-    story.append(t)
-    story.append(Spacer(1, 10))
+    story.append(t_tech)
+    story.append(Spacer(1, 8))
 
-    # Section 2: File & Directory Tree
-    story.append(Paragraph("2. Project Directory Structure & Manifest", styles["DocH1"]))
-    story.append(Paragraph(
-        "<b>Root Folder:</b> <code>c:\\Users\\SomeshBang\\Desktop\\Antigravity DollyPos\\</code>",
-        styles["DocBody"]
-    ))
-    tree_text = """
-Antigravity DollyPos/
-├── DollyPOS_Launcher.bat           # Root one-click Windows launcher
-├── LICENSE                          # MIT Open Source License
-├── README.md                        # Complete technical handoff mirror
-├── backend/                         # FastAPI Python Core Backend
-│   ├── desktop_app.py               # Production standalone desktop server runner
-│   ├── requirements.txt             # Pinned Python package dependencies
-│   ├── .env.example                 # Clean configuration template
-│   ├── app/
-│   │   ├── config.py                # Global settings, DB connection string, JWT secret
-│   │   ├── main.py                  # FastAPI bootstrap, lifespan, static mount & CORS
-│   │   ├── core/
-│   │   │   ├── database.py          # SQLAlchemy SessionLocal & connection engine
-│   │   │   └── security.py          # Password hashing (bcrypt) & JWT token encoders
-│   │   ├── models/                  # SQLAlchemy Relational Models (12 tables)
-│   │   │   ├── user.py, product.py, category.py, invoice.py, customer.py
-│   │   │   ├── vendor.py, purchase.py, expense.py, settings.py, audit_log.py
-│   │   │   └── return_order.py, lost_demand.py, whatsapp_log.py
-│   │   ├── api/                     # REST API Endpoint Routers
-│   │   │   ├── auth_router.py, product_router.py, invoice_router.py
-│   │   │   ├── customer_router.py, vendor_router.py, purchase_router.py
-│   │   │   ├── returns_router.py, expense_router.py, reports_router.py
-│   │   │   ├── settings_router.py, backup_router.py, marketing_router.py
-│   │   └── services/                # Core Business Logic Services
-│   │       ├── analytics_service.py # Dashboard KPIs, 5Y smooth cubic spline curves
-│   │       ├── printer_service.py   # Raw TSPL barcode & ESC/POS receipt generation
-│   │       └── whatsapp_service.py  # Cloud API messaging & birthday cron
-├── frontend/                        # React 18 + TypeScript + Vite SPA
-│   ├── package.json                 # Pinned Node dependencies & npm scripts
-│   ├── vite.config.ts               # Vite bundler configuration & proxy
-│   ├── src/
-│   │   ├── App.tsx, main.tsx        # React Root router & application shell
-│   │   ├── pages/                   # Main Page Views
-│   │   │   ├── DashboardPage.tsx    # Live KPIs, smooth cubic Bézier 5Y chart
-│   │   │   ├── BillingPage.tsx      # Barcode checkout, split payment, thermal bill
-│   │   │   ├── InventoryPage.tsx    # Stock management, 1-Up/2-Up barcode printer
-│   │   │   ├── CustomersPage.tsx    # Khata ledger, Udhar WhatsApp recovery
-│   │   │   ├── VendorsPage.tsx      # Wholesale suppliers, purchase inward orders
-│   │   │   ├── ReportsPage.tsx      # P&L accounting, YoY comparison, Excel export
-│   │   │   ├── SettingsPage.tsx     # Printers, sound toggle, master key, backup
-│   │   │   └── LoginPage.tsx        # Dual-role authentication gate
-│   │   ├── components/              # Modular UI Components (Navbar, Modals, Tables)
-│   │   └── store/authStore.ts       # Zustand persistent JWT token store
-├── docs/                            # Publication-grade PDF Documentation
-│   ├── Dolly_POS_User_Manual.pdf
-│   ├── Dolly_POS_Technical_Handoff.pdf
-│   └── Dolly_POS_Disaster_Recovery_and_New_Laptop_Guide.pdf
-└── installer/                       # Windows Installation & Uninstallation Scripts
-    ├── Install-DollyPOS.bat
-    ├── Uninstall-DollyPOS.bat
-    └── setup_inno.iss
-"""
-    story.append(Paragraph(f"<pre>{tree_text.strip()}</pre>", styles["DocCode"]))
+    # =========================================================================
+    # SECTION 2: ALL DEVELOPMENT PHASES
+    # =========================================================================
+    story.append(Paragraph("2. All Development Phases & Evolution Roadmap", styles["DocH1"]))
+    
+    phases = [
+        ("Phase 1: Architecture Inception & Core Foundation", 
+         "Established PostgreSQL relational schemas, FastAPI REST API structure, and React 18 TypeScript frontend scaffold. Designed dual-role security (Admin vs Cashier) with bcrypt password hashing and JWT token authentication."),
+        
+        ("Phase 2: High-Speed POS Counter & Hardware Integration", 
+         "Engineered 2-second fast-track checkout screen with keyboard shortcuts (F2/F10), barcode laser scanner listening, 3-digit speed dials, unlisted item modal, split payments (Cash, UPI, Khata), dynamic NPCI UPI QR generator, raw TSPL 1-Up (50x25mm) and 2-Up (100x50mm) barcode thermal label engine, and 80mm ESC/POS thermal receipt printer integration."),
+        
+        ("Phase 3: Deep Inventory, Category Hierarchy & Customer Khata", 
+         "Structured 18 primary store categories and 130 subcategories. Built product variant matrix (Sizes, Colors, Age Groups), EAN-13 automatic barcode generator, and live stock tracking. Implemented Customer Khata (store credit) ledger with real-time balance tracking and 1-click WhatsApp payment reminders with store UPI QR codes."),
+        
+        ("Phase 4: Vendor Procurement, Damaged Stock & AI Retail Advisor", 
+         "Added wholesale supplier directory, inward purchase orders with cost tracking, and damaged/defective merchandise logging. Developed AI Smart Stock Advisor to detect dead/slow-moving stock, compute sell-through velocity, and generate automated purchase reorder recommendations."),
+        
+        ("Phase 5: Financial P&L Cockpit & Multi-Year Timeline Analytics", 
+         "Built complete Profit-and-Loss (P&L) accounting engine computing Gross Turnover, wholesale COGS, store overhead expenses, and true Take-Home Net Profit. Built dynamic 1M, 6M, 1Y, 5Y timeline views with smart grouping (Daily <=45d, Weekly 46-400d, Monthly >400d) and smooth SVG Monotone Cubic Bézier Spline curves."),
+        
+        ("Phase 6: Hardcore QA, 10,000 Product Stress-Testing & Performance Tuning", 
+         "Conducted extreme load testing with 10,000+ products and 10-year synthetic transaction logs. Optimized database queries using compound B-Tree indexes, compound SQL joins, and payload compression to achieve sub-10ms response times across all endpoints."),
+        
+        ("Phase 7: Production Hardening, Database Sanitization & Standalone Distribution", 
+         "Engineered topological JSON database backup and restore with ON DELETE CASCADE integrity. Sanitized database to 0 test records while keeping master categories and admin credentials intact. Packaged application into a standalone Windows .exe with Microsoft Edge WebView2, automated batch installer, and publication manuals.")
+    ]
+
+    for p_num, p_desc in phases:
+        story.append(Paragraph(f"• <b>{p_num}</b>", styles["DocH2"]))
+        story.append(Paragraph(p_desc, styles["DocBody"]))
+
     story.append(PageBreak())
 
-    # Section 3: Deep Code Walkthrough (Module by Module)
-    story.append(Paragraph("3. Deep Code Walkthrough & Interconnections", styles["DocH1"]))
-    
-    modules = [
-        ("app.core.database (database.py)", "Manages SQLAlchemy engine with PostgreSQL connection pool (pool_size=20, max_overflow=10). Yields thread-safe SessionLocal instances for FastAPI dependency injection via get_db()."),
-        ("app.services.analytics_service (analytics_service.py)", "Executes sub-10ms SQL aggregations for Dashboard metrics. Implements smart timeline granularity: Daily (<=45d), Weekly (46-400d), and Monthly (>400d/5Y). Returns smooth timeline curves, 50/30 category balancing metrics, and Units Per Transaction (UPT) cross-sell KPIs."),
-        ("app.services.printer_service (printer_service.py)", "Generates raw TSPL (TSC Printer Language) byte streams for 1-Up (50x25mm) and 2-Up (100x50mm) barcode thermal printing. Generates 80mm ESC/POS receipt commands with store logo, QR code, and thermal cut pulses."),
-        ("app.api.invoice_router (invoice_router.py)", "Handles billing transactions: validates barcode stock, calculates taxes, applies item/bill discounts, creates immutable Invoice and InvoiceItem records, reduces product stock quantity, logs payment method (Cash, UPI, Split, Khata), and triggers WhatsApp digital receipt dispatch."),
-        ("app.api.backup_router (backup_router.py)", "Implements full relational database dump and restoration to/from self-contained JSON backup files. Strips sensitive machine-specific store credentials during export and validates foreign keys during import."),
-        ("frontend.src.pages.DashboardPage (DashboardPage.tsx)", "Renders real-time retail pulse, KPI cards (Today's Sales, Monthly Revenue, Today's Net Profit, Inventory Valuation), Cash Flow Liquidity strip, and interactive SVG Monotone Cubic Bézier Spline revenue curves with dynamic hover HUD."),
-        ("frontend.src.pages.BillingPage (BillingPage.tsx)", "High-speed counter checkout terminal. Features barcode laser listening, speed dial quick selection, live cart subtotals, split payments modal, change due calculator, and direct thermal print triggers.")
-    ]
-    for mod_name, mod_desc in modules:
-        story.append(Paragraph(f"• <b><code>{mod_name}</code></b>", styles["DocH2"]))
-        story.append(Paragraph(mod_desc, styles["DocBody"]))
+    # =========================================================================
+    # SECTION 3: ALL MODULE NAMES & RESPONSIBILITIES
+    # =========================================================================
+    story.append(Paragraph("3. All Modules Inventory & Architectural Responsibilities", styles["DocH1"]))
+    story.append(Paragraph(
+        "The Dolly POS system is organized into modular subsystems across the backend API, service business logic, and frontend UI:",
+        styles["DocBody"]
+    ))
 
-    # Section 4: Database ERD & Relational Schema
-    story.append(Paragraph("4. Database Schema & Relational Structure", styles["DocH1"]))
-    schema_data = [
-        [Paragraph("Table Name", styles["TableHeader"]), Paragraph("Primary Key", styles["TableHeader"]), Paragraph("Foreign Keys", styles["TableHeader"]), Paragraph("Indexed Columns & Constraints", styles["TableHeader"])],
-        [Paragraph("users", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), Paragraph("username (Unique), role, is_active", styles["TableCell"])],
-        [Paragraph("categories", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), Paragraph("name (Unique)", styles["TableCell"])],
-        [Paragraph("subcategories", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("category_id -> categories.id", styles["TableCell"]), Paragraph("category_id, name", styles["TableCell"])],
-        [Paragraph("products", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("category_id, subcategory_id", styles["TableCell"]), Paragraph("barcode (Unique), sku, speed_dial, is_active", styles["TableCell"])],
-        [Paragraph("invoices", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("customer_id, user_id", styles["TableCell"]), Paragraph("bill_number (Unique), created_at, payment_mode", styles["TableCell"])],
-        [Paragraph("invoice_items", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("invoice_id, product_id", styles["TableCell"]), Paragraph("invoice_id, product_id", styles["TableCell"])],
-        [Paragraph("customers", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), Paragraph("phone (Unique), name, current_balance", styles["TableCell"])],
-        [Paragraph("customer_ledger", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("customer_id, invoice_id", styles["TableCell"]), Paragraph("customer_id, transaction_date", styles["TableCell"])],
-        [Paragraph("purchases", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("vendor_id", styles["TableCell"]), Paragraph("vendor_id, purchase_date, invoice_number", styles["TableCell"])],
-        [Paragraph("expenses", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), Paragraph("expense_date, category", styles["TableCell"])]
+    modules_data = [
+        [Paragraph("Module / Namespace", styles["TableHeader"]), Paragraph("Layer", styles["TableHeader"]), Paragraph("Key Files", styles["TableHeader"]), Paragraph("Core Responsibilities & Capabilities", styles["TableHeader"])],
+        
+        [Paragraph("Authentication & Security", styles["TableCellBold"]), Paragraph("Backend", styles["TableCell"]), 
+         Paragraph("<code>auth_router.py</code><br/><code>security.py</code>", styles["TableCellCode"]), 
+         Paragraph("Handles user login, bcrypt password hashing, JWT bearer tokens, role validation (Admin vs Cashier), and Master Security PIN checks.", styles["TableCell"])],
+        
+        [Paragraph("Billing & POS Engine", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>billing_router.py</code><br/><code>BillingPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Barcode checkout, cart calculations, item/bill discounts, split payments (Cash/UPI/Khata), change calculator, and invoice generation.", styles["TableCell"])],
+        
+        [Paragraph("Inventory & Catalog", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>product_router.py</code><br/><code>InventoryPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Product CRUD, SKU/Barcode lookup, stock quantities, min stock alerts, price history modal, and CSV/Excel batch imports.", styles["TableCell"])],
+        
+        [Paragraph("Category Hierarchy", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>category_router.py</code><br/><code>category_schema.py</code>", styles["TableCellCode"]), 
+         Paragraph("Maintains 18 root store categories and 130 granular subcategories with parent-child cascade validation.", styles["TableCell"])],
+        
+        [Paragraph("Customer & Khata Ledger", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>customer_router.py</code><br/><code>CustomerPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Customer directory, Udhar credit balance, ledger transaction history, payment collection, and WhatsApp payment recovery.", styles["TableCell"])],
+        
+        [Paragraph("Vendor Procurement", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>vendor_router.py</code><br/><code>purchase_router.py</code>", styles["TableCellCode"]), 
+         Paragraph("Wholesale supplier profiles, inward purchase orders, batch cost tracking, and vendor balance ledgers.", styles["TableCell"])],
+        
+        [Paragraph("Damaged & Defective Stock", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>return_router.py</code><br/><code>DefectiveStockPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Logs soiled/defective merchandise, deducts from active sellable stock, and tracks vendor debit note returns.", styles["TableCell"])],
+        
+        [Paragraph("Returns & Exchanges", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>return_router.py</code><br/><code>ReturnsPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Processes customer bill returns, refunds cash or store credit, restocks sellable goods, and updates P&L.", styles["TableCell"])],
+        
+        [Paragraph("Operating Expenses", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>expense_router.py</code><br/><code>ExpensePage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Tracks shop overheads (Rent, Electricity, Staff Salaries, Tea/Snacks, Maintenance) categorized by date.", styles["TableCell"])],
+        
+        [Paragraph("Financial Reports & P&L", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>reports_router.py</code><br/><code>ReportsPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Calculates Gross Turnover, COGS, Net Margin, Operating Overheads, Net Take-Home Profit, YoY growth, and Excel export.", styles["TableCell"])],
+        
+        [Paragraph("Analytics & Spline Curves", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>analytics_service.py</code><br/><code>DashboardPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Sub-10ms SQL aggregations, 1M/6M/1Y/5Y granularity, smooth Monotone Cubic Bézier Splines, and Category 50/30 health.", styles["TableCell"])],
+        
+        [Paragraph("Hardware Printers & TSPL", styles["TableCellBold"]), Paragraph("Backend Service", styles["TableCell"]), 
+         Paragraph("<code>printer_drivers.py</code><br/><code>receipt_service.py</code>", styles["TableCellCode"]), 
+         Paragraph("Generates raw TSPL byte streams for 1-Up (50x25mm) / 2-Up (100x50mm) TSC barcode labels and 80mm ESC/POS receipts.", styles["TableCell"])],
+        
+        [Paragraph("AI Retail Advisor", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>ai_advisor_service.py</code><br/><code>SmartAdvisorPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Statistical sales velocity analysis, dead stock categorization, and automated procurement reorder planning.", styles["TableCell"])],
+        
+        [Paragraph("WhatsApp Marketing", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>whatsapp_service.py</code><br/><code>marketing_router.py</code>", styles["TableCellCode"]), 
+         Paragraph("Automated 9:00 AM daily kids' birthday greetings with coupons, festival promotional campaigns, and digital bill PDFs.", styles["TableCell"])],
+        
+        [Paragraph("Database Backup & Restore", styles["TableCellBold"]), Paragraph("Backend Service", styles["TableCell"]), 
+         Paragraph("<code>backup_router.py</code><br/><code>backup_service.py</code>", styles["TableCellCode"]), 
+         Paragraph("Self-contained JSON relational export and topological foreign-key safe restoration with automatic integrity checks.", styles["TableCell"])],
+        
+        [Paragraph("Store Settings & Audio", styles["TableCellBold"]), Paragraph("Backend + Frontend", styles["TableCell"]), 
+         Paragraph("<code>settings_router.py</code><br/><code>SettingsPage.tsx</code>", styles["TableCellCode"]), 
+         Paragraph("Receipt header/footer customization, printer port selection, sound toggle for barcode beeps, and master key update.", styles["TableCell"])],
+        
+        [Paragraph("Native Desktop Runner", styles["TableCellBold"]), Paragraph("Backend Core", styles["TableCell"]), 
+         Paragraph("<code>desktop_app.py</code><br/><code>build_standalone_exe.py</code>", styles["TableCellCode"]), 
+         Paragraph("Launches borderless Microsoft Edge WebView2 desktop window with background Uvicorn daemon and SafeNullStream.", styles["TableCell"])]
     ]
-    st = Table(schema_data, colWidths=[90, 60, 130, 224])
-    st.setStyle(TableStyle([
+
+    t_mod = Table(modules_data, colWidths=[90, 55, 105, 254])
+    t_mod.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#0F172A")),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3.5),
-        ('TOPPADDING', (0,0), (-1,-1), 3.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor("#F8FAFC"), colors.white]),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
     ]))
-    story.append(st)
-    story.append(Spacer(1, 10))
+    story.append(t_mod)
+    story.append(Spacer(1, 8))
+    story.append(PageBreak())
 
-    # Section 5: Historical Bugs & Engineering Solutions
-    story.append(Paragraph("5. Historical Bug Log & Resolutions", styles["DocH1"]))
+    # =========================================================================
+    # SECTION 4: FILE AND FOLDER HIERARCHY WITH DETAILED DESCRIPTIONS
+    # =========================================================================
+    story.append(Paragraph("4. Complete File and Folder Hierarchy with Detailed Descriptions", styles["DocH1"]))
+    story.append(Paragraph(
+        "Below is the complete, exhaustive directory and file mapping of the Dolly POS codebase:",
+        styles["DocBody"]
+    ))
+
+    file_hierarchy_data = [
+        [Paragraph("File / Folder Path", styles["TableHeader"]), Paragraph("Category", styles["TableHeader"]), Paragraph("Exact Purpose & Functional Description", styles["TableHeader"])],
+        
+        # Root Files
+        [Paragraph("<code>DollyPOS_Setup_Installer.bat</code>", styles["TableCellCode"]), Paragraph("Root Installer", styles["TableCell"]), Paragraph("Scans system requirements, checks binary, and creates 1-click Desktop and Start Menu shortcuts.", styles["TableCell"])],
+        [Paragraph("<code>DollyPOS_Launcher.bat</code>", styles["TableCellCode"]), Paragraph("Root Launcher", styles["TableCell"]), Paragraph("Quick developer batch launcher that spins up Uvicorn backend and Vite frontend concurrently.", styles["TableCell"])],
+        [Paragraph("<code>README.md</code>", styles["TableCellCode"]), Paragraph("Documentation", styles["TableCell"]), Paragraph("Master technical documentation, schema definitions, and operational playbook.", styles["TableCell"])],
+        
+        # Backend Core
+        [Paragraph("<code>backend/desktop_app.py</code>", styles["TableCellCode"]), Paragraph("Backend Core", styles["TableCell"]), Paragraph("Production desktop launcher. Starts background Uvicorn daemon and opens native Edge WebView2 window.", styles["TableCell"])],
+        [Paragraph("<code>backend/build_standalone_exe.py</code>", styles["TableCellCode"]), Paragraph("Build Script", styles["TableCell"]), Paragraph("PyInstaller compilation script bundling Python backend, ReportLab, pywebview, and React frontend build.", styles["TableCell"])],
+        [Paragraph("<code>backend/requirements.txt</code>", styles["TableCellCode"]), Paragraph("Config", styles["TableCell"]), Paragraph("Pinned Python package dependencies (FastAPI, SQLAlchemy, pywebview, ReportLab, etc.).", styles["TableCell"])],
+        [Paragraph("<code>backend/app/config.py</code>", styles["TableCellCode"]), Paragraph("Backend Config", styles["TableCell"]), Paragraph("Pydantic BaseSettings loading PostgreSQL connection URI, JWT secret key, and CORS origins.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/main.py</code>", styles["TableCellCode"]), Paragraph("Backend Core", styles["TableCell"]), Paragraph("FastAPI app instance, lifespan initialization, CORS middleware, API router mounting, and static SPA serving.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/core/database.py</code>", styles["TableCellCode"]), Paragraph("Database Core", styles["TableCell"]), Paragraph("SQLAlchemy engine, connection pooling (pool_size=20), Base declarative class, and get_db() session provider.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/core/security.py</code>", styles["TableCellCode"]), Paragraph("Security Core", styles["TableCell"]), Paragraph("Bcrypt password hashing, token generation, and OAuth2 password bearer token authentication.", styles["TableCell"])],
+        
+        # Backend Models
+        [Paragraph("<code>backend/app/models/user.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("SQLAlchemy model for store users (id, username, password_hash, role, is_active).", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/product.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Product catalog model (barcode, sku, name, category, purchase_price, selling_price, stock_qty).", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/category.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Root Category and Subcategory relational models with parent-child foreign key cascade.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/invoice.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Immutable Invoice and InvoiceItem models tracking bill totals, taxes, discounts, and payment modes.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/customer.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Customer master model and CustomerLedger tracking Khata credit balances and payment repayments.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/vendor.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Wholesale supplier model (name, phone, address, GST, current balance due).", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/purchase.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Purchase inward master and PurchaseItem models for wholesale stock additions and supplier bills.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/expense.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Store operating expenses model (category, amount, payment_mode, expense_date, notes).", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/return_order.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("ReturnOrder and ReturnItem models for customer product returns and damaged stock logging.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/settings.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("StoreSettings model storing shop name, address, GSTIN, receipt footers, audio toggle, and master PIN.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/audit_log.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Audit log model recording user actions, price edits, deletions, and administrative events.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/whatsapp.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("WhatsApp marketing campaign and message dispatch log model.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/models/lost_demand.py</code>", styles["TableCellCode"]), Paragraph("ORM Model", styles["TableCell"]), Paragraph("Logs customer requests for out-of-stock items to guide procurement planning.", styles["TableCell"])],
+        
+        # Backend Services
+        [Paragraph("<code>backend/app/services/analytics_service.py</code>", styles["TableCellCode"]), Paragraph("Service", styles["TableCell"]), Paragraph("High-speed SQL aggregations for Dashboard KPIs, 50/30 category health, and 5-year timeline curves.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/services/printer_drivers.py</code>", styles["TableCellCode"]), Paragraph("Service", styles["TableCell"]), Paragraph("Direct socket/spooler TSPL barcode generator and ESC/POS thermal receipt formatter.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/services/receipt_service.py</code>", styles["TableCellCode"]), Paragraph("Service", styles["TableCell"]), Paragraph("Generates 80mm thermal receipts with store logo, tax breakdown, and dynamic UPI QR code.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/services/ai_advisor_service.py</code>", styles["TableCellCode"]), Paragraph("Service", styles["TableCell"]), Paragraph("Statistical stock intelligence, dead inventory detection, and procurement forecasting.", styles["TableCell"])],
+        [Paragraph("<code>backend/app/services/backup_service.py</code>", styles["TableCellCode"]), Paragraph("Service", styles["TableCell"]), Paragraph("Relational database JSON dump and topological foreign-key safe restoration.", styles["TableCell"])],
+        
+        # Frontend Pages
+        [Paragraph("<code>frontend/src/pages/DashboardPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Executive dashboard displaying live sales KPIs, liquidity strip, and SVG Monotone Cubic Bézier charts.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/BillingPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("POS checkout screen with barcode scanner input, speed dials, cart grid, and split payment modal.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/InventoryPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Product catalog with low-stock badges, price history modal, and batch barcode print actions.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/BarcodePage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("1-Up (50x25mm) and 2-Up (100x50mm) barcode sticker preview and batch thermal print trigger.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/CustomerPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Customer Khata directory, ledger transaction history, and 1-click WhatsApp payment reminders.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/VendorPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Wholesale suppliers list, supplier balance ledger, and contact management.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/PurchasePage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Inward purchase order entry interface with cost prices and automatic inventory stock increment.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/ReturnsPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Customer bill returns interface with condition inspection and refund method selection.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/DefectiveStockPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Damaged merchandise tracker with auto-hiding search dropdown and vendor debit note logger.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/ExpensePage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Daily/monthly store overhead expenses manager with category breakdown.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/ReportsPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Financial P&L statement, COGS breakdown, gross vs net profit, and Excel (.xlsx) download.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/SmartAdvisorPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("AI inventory health advisor, dead stock detection, and procurement reorder planner.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/WhatsAppMarketingPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Festival bulk messaging campaigns and 9:00 AM automated birthday greeting scheduler.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/SettingsPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Receipt footer customization, sound toggle, printer configuration, and JSON backup/restore.", styles["TableCell"])],
+        [Paragraph("<code>frontend/src/pages/LoginPage.tsx</code>", styles["TableCellCode"]), Paragraph("UI Page", styles["TableCell"]), Paragraph("Dual-role login screen (Admin vs Staff) with JWT persistence.", styles["TableCell"])]
+    ]
+
+    t_files = Table(file_hierarchy_data, colWidths=[130, 75, 299])
+    t_files.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#4F46E5")),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor("#F8FAFC"), colors.white]),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
+    ]))
+    story.append(t_files)
+    story.append(Spacer(1, 8))
+    story.append(PageBreak())
+
+    # =========================================================================
+    # SECTION 5: DATABASE ERD DIAGRAM & ALL 19 TABLE SCHEMAS
+    # =========================================================================
+    story.append(Paragraph("5. Database Relational Diagram (ERD) & Schema Specification", styles["DocH1"]))
+    story.append(Paragraph(
+        "Dolly POS operates on a normalized, ACID-compliant PostgreSQL schema with 19 tables connected through strict foreign keys:",
+        styles["DocBody"]
+    ))
+
+    # ASCII ERD Diagram
+    erd_text = """
++------------------+         1 : N         +----------------------+
+|    categories    |---------------------->|    subcategories     |
++------------------+                       +----------------------+
+        |                                             |
+        | 1 : N                                       | 1 : N
+        v                                             v
++-----------------------------------------------------------------+
+|                            products                             |
++-----------------------------------------------------------------+
+   | 1 : N            | 1 : N             | 1 : N            | 1 : N
+   v                  v                   v                  v
++--------------+  +----------------+  +----------------+  +-----------------+
+|invoice_items |  | purchase_items |  |  return_items  |  | price_history   |
++--------------+  +----------------+  +----------------+  +-----------------+
+   | N : 1            | N : 1             | N : 1
+   v                  v                   v
++--------------+  +----------------+  +----------------+
+|   invoices   |  |   purchases    |  | return_orders  |
++--------------+  +----------------+  +----------------+
+   | N : 1                | N : 1             | N : 1
+   v                      v                   v
++--------------+  +----------------+          |
+|  customers   |  |    vendors     |          |
++--------------+  +----------------+          |
+   | 1 : N                                    |
+   v                                          |
++------------------+                          |
+| customer_ledger  |                          |
++------------------+                          |
+                                              |
++---------------------------------------------+
+| System & Governance: users, store_settings, audit_logs, expenses, whatsapp_logs |
++---------------------------------------------------------------------------------+
+"""
+    story.append(Paragraph(f"<pre>{erd_text.strip()}</pre>", styles["DocCode"]))
+    story.append(Spacer(1, 6))
+
+    story.append(Paragraph("Complete 19-Table Database Schema Reference:", styles["DocH2"]))
+
+    schema_tables_data = [
+        [Paragraph("Table Name", styles["TableHeader"]), Paragraph("Primary Key", styles["TableHeader"]), Paragraph("Foreign Keys & Connections", styles["TableHeader"]), Paragraph("Key Columns, Data Types & Constraints", styles["TableHeader"])],
+        
+        [Paragraph("<code>users</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("username (Varchar 50, Unique), password_hash (Text), role (Enum: admin/staff), full_name (Varchar 100), is_active (Bool)", styles["TableCell"])],
+        
+        [Paragraph("<code>categories</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("name (Varchar 100, Unique), display_order (Int), is_active (Bool)", styles["TableCell"])],
+        
+        [Paragraph("<code>subcategories</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("category_id -> categories.id (Cascade)", styles["TableCell"]), 
+         Paragraph("category_id (Int, Indexed), name (Varchar 100), age_group (Varchar 50), is_active (Bool)", styles["TableCell"])],
+        
+        [Paragraph("<code>products</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("category_id -> categories.id<br/>subcategory_id -> subcategories.id", styles["TableCell"]), 
+         Paragraph("barcode (Varchar 64, Unique, Indexed), sku (Varchar 64), name (Varchar 255), purchase_price (Numeric 10,2), selling_price (Numeric 10,2), stock_qty (Int), min_stock (Int), speed_dial (Varchar 10, Indexed)", styles["TableCell"])],
+        
+        [Paragraph("<code>product_price_history</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("product_id -> products.id (Cascade)", styles["TableCell"]), 
+         Paragraph("product_id (Int, Indexed), old_price (Numeric 10,2), new_price (Numeric 10,2), changed_by (Int), changed_at (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>customers</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("phone (Varchar 20, Unique, Indexed), name (Varchar 150), kid_name (Varchar 100), kid_dob (Date), current_balance (Numeric 10,2), loyalty_points (Int)", styles["TableCell"])],
+        
+        [Paragraph("<code>customer_ledger</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("customer_id -> customers.id (Cascade)<br/>invoice_id -> invoices.id", styles["TableCell"]), 
+         Paragraph("customer_id (Int, Indexed), transaction_type (Enum: debit/credit), amount (Numeric 10,2), balance_after (Numeric 10,2), description (Text), created_at (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>invoices</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("customer_id -> customers.id<br/>user_id -> users.id", styles["TableCell"]), 
+         Paragraph("bill_number (Varchar 50, Unique, Indexed), subtotal (Numeric 10,2), discount_amount (Numeric 10,2), tax_amount (Numeric 10,2), final_total (Numeric 10,2), payment_mode (Varchar 50), is_cancelled (Bool), created_at (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>invoice_items</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("invoice_id -> invoices.id (Cascade)<br/>product_id -> products.id", styles["TableCell"]), 
+         Paragraph("invoice_id (Int, Indexed), product_id (Int, Indexed), quantity (Int), unit_price (Numeric 10,2), purchase_price (Numeric 10,2), item_discount (Numeric 10,2), total_amount (Numeric 10,2)", styles["TableCell"])],
+        
+        [Paragraph("<code>vendors</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("name (Varchar 150, Unique), phone (Varchar 20), gstin (Varchar 20), city (Varchar 100), current_balance (Numeric 10,2), is_active (Bool)", styles["TableCell"])],
+        
+        [Paragraph("<code>purchases</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("vendor_id -> vendors.id", styles["TableCell"]), 
+         Paragraph("invoice_number (Varchar 100), vendor_id (Int, Indexed), total_amount (Numeric 10,2), payment_status (Varchar 50), purchase_date (Date, Indexed)", styles["TableCell"])],
+        
+        [Paragraph("<code>purchase_items</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("purchase_id -> purchases.id (Cascade)<br/>product_id -> products.id (Cascade)", styles["TableCell"]), 
+         Paragraph("purchase_id (Int, Indexed), product_id (Int, Indexed), quantity (Int), cost_price (Numeric 10,2), total_cost (Numeric 10,2)", styles["TableCell"])],
+        
+        [Paragraph("<code>expenses</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("category (Varchar 100, Indexed), amount (Numeric 10,2), payment_mode (Varchar 50), expense_date (Date, Indexed), description (Text)", styles["TableCell"])],
+        
+        [Paragraph("<code>return_orders</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("invoice_id -> invoices.id<br/>customer_id -> customers.id", styles["TableCell"]), 
+         Paragraph("return_number (Varchar 50, Unique), invoice_id (Int, Indexed), refund_amount (Numeric 10,2), refund_mode (Varchar 50), return_date (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>return_items</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("return_order_id -> return_orders.id (Cascade)<br/>product_id -> products.id (Cascade)", styles["TableCell"]), 
+         Paragraph("return_order_id (Int, Indexed), product_id (Int, Indexed), quantity (Int), condition (Enum: restock/damaged), refund_amount (Numeric 10,2)", styles["TableCell"])],
+        
+        [Paragraph("<code>lost_demands</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("item_name (Varchar 150), category (Varchar 100), customer_phone (Varchar 20), request_count (Int), recorded_at (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>store_settings</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("None", styles["TableCell"]), 
+         Paragraph("shop_name (Varchar 150), address (Text), gstin (Varchar 30), upi_id (Varchar 100), receipt_footer (Text), sound_enabled (Bool), master_pin (Varchar 10)", styles["TableCell"])],
+        
+        [Paragraph("<code>audit_logs</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("user_id -> users.id", styles["TableCell"]), 
+         Paragraph("user_id (Int, Indexed), action (Varchar 100), entity (Varchar 100), entity_id (Int), details (JSONB/Text), created_at (Timestamp)", styles["TableCell"])],
+        
+        [Paragraph("<code>whatsapp_logs</code>", styles["TableCellBold"]), Paragraph("id (Int)", styles["TableCell"]), Paragraph("customer_id -> customers.id", styles["TableCell"]), 
+         Paragraph("customer_id (Int), campaign_type (Varchar 100), recipient_phone (Varchar 20), message_body (Text), status (Varchar 50), sent_at (Timestamp)", styles["TableCell"])]
+    ]
+
+    t_schemas = Table(schema_tables_data, colWidths=[80, 50, 110, 264])
+    t_schemas.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#0F172A")),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor("#F8FAFC"), colors.white]),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
+    ]))
+    story.append(t_schemas)
+    story.append(Spacer(1, 8))
+    story.append(PageBreak())
+
+    # =========================================================================
+    # SECTION 6: IMPORTANT CODING RULES & ARCHITECTURAL STANDARDS
+    # =========================================================================
+    story.append(Paragraph("6. Core Coding Rules & Architectural Standards", styles["DocH1"]))
+    story.append(Paragraph(
+        "The following 8 engineering rules were strictly enforced across the codebase to ensure rock-solid stability, high speed, and financial accuracy:",
+        styles["DocBody"]
+    ))
+
+    rules = [
+        ("Rule 1: Strict Separation of Concerns", 
+         "FastAPI routers only handle request parsing, parameter validation, and response serialization. All complex financial logic, aggregations, and hardware byte streams reside in dedicated service layers (<code>services/</code>) and reusable SQLAlchemy repositories."),
+        
+        ("Rule 2: Zero Floating-Point Currency Drift", 
+         "All monetary fields (purchase_price, selling_price, subtotal, discount, tax, final_total, current_balance) are strictly stored as PostgreSQL <code>Numeric(10,2)</code> and computed in Python using fixed 2-decimal rounded arithmetic to eliminate IEEE-754 floating-point inaccuracies."),
+        
+        ("Rule 3: Immutable Financial Invoices & Audited Operations", 
+         "Billed invoices are immutable once settled. Cancellations and product returns generate explicit compensating entries (ReturnOrder, ReturnItem, CustomerLedger) with audit logs, ensuring strict non-repudiation and compliance with Indian GST accounting standards."),
+        
+        ("Rule 4: Role-Based Margin Masking on the API Level", 
+         "Cashier staff accounts (<code>role='staff'</code>) are strictly blocked from viewing purchase cost prices, supplier margins, and store-level P&L metrics. The API filters out sensitive margin fields before returning responses to non-admin tokens."),
+        
+        ("Rule 5: Sub-10ms Benchmark & B-Tree Indexing on All Foreign Keys", 
+         "Every foreign key column, barcode string, customer phone number, and transaction date is indexed with B-Tree indexes. N+1 queries are strictly banned; all multi-entity queries use joined loads or composite SQL aggregations."),
+        
+        ("Rule 6: Deterministic Topological Database Restoration", 
+         "The database restore engine processes tables in deterministic topological order (e.g. Users ➔ Categories ➔ Subcategories ➔ Products ➔ Customers ➔ Invoices ➔ InvoiceItems) and applies <code>ON DELETE CASCADE</code> to prevent foreign key constraint violations."),
+        
+        ("Rule 7: Silent Windows GUI Execution with SafeNullStream", 
+         "In standalone Windows GUI mode (<code>--noconsole</code>), standard output streams (<code>sys.stdout</code> and <code>sys.stderr</code>) are <code>None</code>. A custom <code>SafeNullStream</code> wrapper prevents <code>isatty</code> exceptions during Uvicorn logger initialization."),
+        
+        ("Rule 8: Hardware Resiliency & Offline-First Thermal Printing", 
+         "Barcode label generation generates direct binary TSPL byte streams (for TSC thermal printers) and ESC/POS byte streams (for 80mm receipt printers) directly to the Windows printer spooler, bypassing slow browser print dialogues.")
+    ]
+
+    for r_title, r_desc in rules:
+        story.append(Paragraph(f"• <b>{r_title}</b>", styles["DocH2"]))
+        story.append(Paragraph(r_desc, styles["DocBody"]))
+
+    # =========================================================================
+    # SECTION 7: HISTORICAL BUG LOG & PERMANENT RESOLUTIONS
+    # =========================================================================
+    story.append(Paragraph("7. Historical Bug Log & Permanent Engineering Fixes", styles["DocH1"]))
     bugs = [
-        ("Database Restore Foreign Key Violation (purchases / purchase_items)", "backend/app/api/backup_router.py", "Deleting products during database restore violated foreign keys on purchase_items and return_items.", "Added ON DELETE CASCADE to purchase_items and return_items foreign keys, and wrapped restore in sequential topological deletion."),
-        ("Dashboard Net Profit Today showing negative value", "backend/app/services/analytics_service.py", "Expenses query in get_dashboard_summary was not bounded to today, subtracting entire lifetime expenses.", "Strictly bounded Expense.expense_date between today_start (00:00:00) and today_end (23:59:59)."),
-        ("5-Year Timeline Chart Clutter (1,825 daily jagged spikes)", "frontend/src/pages/DashboardPage.tsx", "Plotting daily points over 5 years created dense vertical line spikes.", "Implemented Smart Monthly Grouping (61 months) in backend and Monotone Cubic Bézier Spline paths in frontend SVG."),
-        ("Damaged Stock Product Search dropdown staying open", "frontend/src/pages/DamagedStockPage.tsx", "Dropdown had no onBlur / click-outside handler.", "Added active input focus tracking and click-outside dismissal refs."),
-        ("Footer Settings Desynchronization between Settings and Printout", "frontend/src/pages/SettingsPage.tsx", "Settings saved into browser localStorage while receipt generation read from database.", "Migrated all footer styling (font size, bold, terms) to database table store_settings with live sync.")
+        ("Database Restore Foreign Key Violation (purchases / purchase_items)", "backend/app/api/backup_router.py", 
+         "Deleting products during database restore violated foreign keys on purchase_items and return_items.", 
+         "Added ON DELETE CASCADE to purchase_items and return_items foreign keys, and wrapped restore in sequential topological deletion."),
+        
+        ("Dashboard Net Profit Today showing negative value", "backend/app/services/analytics_service.py", 
+         "Expenses query in get_dashboard_summary was not bounded to today, subtracting entire lifetime expenses.", 
+         "Strictly bounded Expense.expense_date between today_start (00:00:00) and today_end (23:59:59)."),
+        
+        ("5-Year Timeline Chart Clutter (1,825 daily jagged spikes)", "frontend/src/pages/DashboardPage.tsx", 
+         "Plotting daily points over 5 years created dense vertical line spikes.", 
+         "Implemented Smart Monthly Grouping (61 months) in backend and Monotone Cubic Bézier Spline paths in frontend SVG."),
+        
+        ("Damaged Stock Product Search dropdown staying open", "frontend/src/pages/DefectiveStockPage.tsx", 
+         "Dropdown had no onBlur / click-outside handler.", 
+         "Added active input focus tracking and click-outside dismissal refs."),
+        
+        ("Footer Settings Desynchronization between Settings and Printout", "frontend/src/pages/SettingsPage.tsx", 
+         "Settings saved into browser localStorage while receipt generation read from database.", 
+         "Migrated all footer styling (font size, bold, terms) to database table store_settings with live sync.")
     ]
     for bug_title, bug_file, bug_cause, bug_fix in bugs:
         story.append(Paragraph(f"• <b>Bug: {bug_title}</b> (<code>{bug_file}</code>)", styles["DocH3"]))
@@ -475,6 +785,7 @@ Antigravity DollyPos/
 
     doc.build(story, canvasmaker=NumberedCanvas)
     print(f"Generated Technical Handoff Document: {pdf_path}")
+
 
 # =========================================================================
 # 3. DISASTER RECOVERY & NEW LAPTOP GUIDE GENERATION
