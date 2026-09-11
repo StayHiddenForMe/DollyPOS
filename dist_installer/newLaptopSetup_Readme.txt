@@ -17,7 +17,8 @@ Copy the "dist_installer" folder onto your new laptop. It contains:
 2. setup_database.ps1             --> Core engine script (Called automatically)
 3. DollyToys_Publisher.cer        --> Digital Security Certificate
 4. DollyPOS_Setup_v1.0.0.exe      --> [STEP 2] Run this second (Installs POS App)
-5. newLaptopSetup_Readme.txt      --> This guide for quick reference
+5. newLaptopSetup_Readme.txt      --> This guide for quick reference (Open in Notepad)
+6. NEW_LAPTOP_SETUP_README.md     --> Formatted Markdown guide
 
 
 ================================================================================
@@ -97,7 +98,30 @@ Database & Backups:
 
 
 ================================================================================
-6. TROUBLESHOOTING & COMMON SCENARIOS
+6. LOCAL SQLITE VS. POSTGRESQL: SCHEMA EQUIVALENCE & SWITCHING GUIDE
+================================================================================
+
+Q1: Will all database tables and schemas remain the same in Local SQLite?
+--> YES, 100% Identical! Every single table (products, bills, customers, settings,
+    categories, expenses, vendors, khata ledger) is created from the exact same
+    SQLAlchemy blueprints. All features, barcode generation, thermal printing,
+    and reports work identically.
+
+Q2: If connected to Local SQLite, can we switch to PostgreSQL?
+--> YES!
+    1. Automatic Engine Priority: Every time Dolly POS starts, it always tries
+       connecting to PostgreSQL first. If PostgreSQL is running, it connects
+       to PostgreSQL automatically.
+    2. How to switch: Run "Setup_PostgreSQL_Database.bat" or run:
+       net start postgresql-x64-16
+       Restart Dolly POS -> It immediately connects to PostgreSQL!
+    3. Moving SQLite data to PostgreSQL:
+       While on SQLite -> Go to Settings -> Backup & Restore -> Create Backup.
+       Start PostgreSQL -> Open Dolly POS -> Settings -> Restore Backup -> Done in 2s!
+
+
+================================================================================
+7. TROUBLESHOOTING & COMMON SCENARIOS
 ================================================================================
 
 Scenario A: PostgreSQL is already installed on the laptop
@@ -124,7 +148,7 @@ Scenario D: Thermal Printer & Barcode Scanner Setup
 
 
 ================================================================================
-7. QUICK COMMANDS (Run in PowerShell / CMD as Administrator)
+8. QUICK COMMANDS (Run in PowerShell / CMD as Administrator)
 ================================================================================
 
 Start PostgreSQL Service : net start postgresql-x64-16

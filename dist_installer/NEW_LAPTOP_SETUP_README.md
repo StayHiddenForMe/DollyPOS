@@ -15,13 +15,14 @@
    - [Phase 2: POS Application Setup via `.exe` file](#phase-2-run-dollypos_setup_v100exe-pos-application)
 4. [Expected Screen Prompts & Popups](#4-expected-screen-prompts--popups)
 5. [Files & Folders Created on the Laptop](#5-files--folders-created-on-the-laptop)
-6. [Troubleshooting & Scenario Handling (What If...)](#6-troubleshooting--scenario-handling)
+6. [Local SQLite vs. PostgreSQL: Schema Equivalence & Switching Guide](#6-local-sqlite-vs-postgresql-schema-equivalence--switching-guide)
+7. [Troubleshooting & Scenario Handling (What If...)](#7-troubleshooting--scenario-handling)
    - [Scenario A: PostgreSQL is already installed](#scenario-a-postgresql-already-installed-on-laptop)
    - [Scenario B: "Windows protected your PC" (SmartScreen) appears](#scenario-b-windows-protected-your-pc-smartscreen-warning)
    - [Scenario C: Status bar shows "Local SQLite Live" instead of "PostgreSQL Live"](#scenario-c-status-bar-shows-local-sqlite-live-offline-mode)
    - [Scenario D: Restoring real store data from the old laptop](#scenario-d-restoring-store-data-from-old-laptop-to-new-laptop)
    - [Scenario E: Connecting Thermal Receipt Printer & Barcode Scanner](#scenario-e-thermal-receipt-printer--barcode-scanner-setup)
-7. [Quick Admin Commands Cheat Sheet](#7-quick-admin-commands-cheat-sheet)
+8. [Quick Admin Commands Cheat Sheet](#8-quick-admin-commands-cheat-sheet)
 
 ---
 
@@ -36,7 +37,8 @@ Copy the entire **`dist_installer/`** folder (via Pen Drive, Google Drive, or Lo
 ├── ⚙️ setup_database.ps1              <-- Core engine script (Called automatically by the .bat)
 ├── 🔒 DollyToys_Publisher.cer         <-- Digital Publisher Certificate for Dolly Toys & Kids Wear
 ├── 📦 DollyPOS_Setup_v1.0.0.exe       <-- [STEP 2] Run this second (Installs POS & Desktop Icon)
-└── 📖 NEW_LAPTOP_SETUP_README.md      <-- This guide for reference
+├── 📖 NEW_LAPTOP_SETUP_README.md      <-- Full guide with tables & formatting
+└── 📄 newLaptopSetup_Readme.txt      <-- Plain-text guide (Open in Notepad)
 ```
 
 ---
@@ -143,7 +145,45 @@ Once installed, the application and database files are organized cleanly across 
 
 ---
 
-## 6. Troubleshooting & Scenario Handling
+## 6. Local SQLite vs. PostgreSQL: Schema Equivalence & Switching Guide
+
+### Q1: If the software connects to Local SQLite instead of PostgreSQL, will all database tables and schemas remain the same?
+**YES, 100% Identical!**
+
+* **Same Tables & Columns**: Every single table (`products`, `bills`, `bill_items`, `customers`, `store_settings`, `categories`, `subcategories`, `expenses`, `vendors`, `payments`, `return_items`, `inventory_movements`, etc.) is generated from the exact same SQLAlchemy ORM model blueprints.
+* **Same Features**: All operations work identically:
+  - Barcode scanning & 50x25mm label printing
+  - 80mm / 58mm thermal receipt printing
+  - Customer Khata (Credit Ledger)
+  - Daily P&L and GST sales/purchase reports
+  - AI Reorder Advisor
+  - Staff and Admin authentication (`somesh123` / `staff123`)
+* You will experience zero missing features or UI changes.
+
+---
+
+### Q2: If we are connected to Local SQLite, can we switch back to PostgreSQL?
+**YES, seamlessly and automatically!**
+
+#### 1. Automatic Priority on App Startup
+Every time Dolly POS launches, it follows this strict check:
+1. **Checks PostgreSQL first**: Tries connecting to `localhost:5432` with user `postgres` and password `somesh123`. If PostgreSQL is available, it connects immediately (`PostgreSQL Live`).
+2. **Fallback to SQLite**: Only if PostgreSQL is stopped or missing does it switch to SQLite (`Local SQLite Live`).
+
+> **To Switch to PostgreSQL**: Simply run `Setup_PostgreSQL_Database.bat` (or run `net start postgresql-x64-16` in CMD as Admin). The next time you open Dolly POS, it automatically switches to PostgreSQL!
+
+#### 2. Migrating Data from Local SQLite to PostgreSQL
+If you created products or generated bills while in Local SQLite mode and want to move that data into PostgreSQL:
+1. Open Dolly POS (while in Local SQLite mode).
+2. Go to **Settings $\rightarrow$ Backup & Restore $\rightarrow$ Click "Create Full Backup Now"**. (This saves a complete `.sql` snapshot).
+3. Start PostgreSQL by running `Setup_PostgreSQL_Database.bat`.
+4. Launch Dolly POS (it now connects to PostgreSQL).
+5. Go to **Settings $\rightarrow$ Backup & Restore $\rightarrow$ Under "Restore Database", upload the `.sql` backup file $\rightarrow$ Click "Restore Database"**.
+6. All products, sales bills, customer khata, and stock are transferred to PostgreSQL in **2 seconds**!
+
+---
+
+## 7. Troubleshooting & Scenario Handling
 
 ### Scenario A: PostgreSQL Already Installed on Laptop
 
@@ -218,7 +258,7 @@ To bring all your products, customers, billing history, and stock from your old 
 
 ---
 
-## 7. Quick Admin Commands Cheat Sheet
+## 8. Quick Admin Commands Cheat Sheet
 
 | Task | Command (Run in PowerShell / CMD as Admin) |
 | :--- | :--- |
