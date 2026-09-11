@@ -137,24 +137,25 @@ if (-not $connected) {
     Write-Host "If the postgres password is not 'somesh123', please update it in pgAdmin." -ForegroundColor Yellow
 }
 
-# 6. Create Database dollytoyskidswear & dollytoysandkidswear
+# 6. Create Database dollytoyskidswear
 Write-Host ""
-Write-Host "Configuring Databases..." -ForegroundColor Cyan
+Write-Host "Configuring Database: dollytoyskidswear..." -ForegroundColor Cyan
 
-$dbNames = @("dollytoyskidswear", "dollytoysandkidswear")
+$dbName = "dollytoyskidswear"
 
-foreach ($db in $dbNames) {
-    $checkDb = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$db';" 2>&1
-    if ($checkDb -match "1") {
-        Write-Host "  [OK] Database '$db' already exists." -ForegroundColor Green
+# Clean up accidental alias database if present
+$null = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "DROP DATABASE IF EXISTS dollytoysandkidswear WITH (FORCE);" 2>&1
+
+$checkDb = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$dbName';" 2>&1
+if ($checkDb -match "1") {
+    Write-Host "  [OK] Database '$dbName' already exists." -ForegroundColor Green
+} else {
+    Write-Host "  [*] Creating database '$dbName' with UTF-8 encoding..." -ForegroundColor Yellow
+    $createRes = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "CREATE DATABASE $dbName WITH OWNER postgres ENCODING 'UTF8';" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [SUCCESS] Database '$dbName' created successfully!" -ForegroundColor Green
     } else {
-        Write-Host "  [*] Creating database '$db' with UTF-8 encoding..." -ForegroundColor Yellow
-        $createRes = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "CREATE DATABASE $db WITH OWNER postgres ENCODING 'UTF8';" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [SUCCESS] Database '$db' created successfully!" -ForegroundColor Green
-        } else {
-            Write-Host "  [NOTICE] Create DB response: $createRes" -ForegroundColor Gray
-        }
+        Write-Host "  [NOTICE] Create DB response: $createRes" -ForegroundColor Gray
     }
 }
 
@@ -181,8 +182,7 @@ Write-Host "   PostgreSQL Host : 127.0.0.1 (localhost)" -ForegroundColor White
 Write-Host "   Port            : 5432" -ForegroundColor White
 Write-Host "   Superuser       : postgres" -ForegroundColor White
 Write-Host "   Password        : somesh123" -ForegroundColor White
-Write-Host "   Primary DB      : dollytoyskidswear (Live & Verified)" -ForegroundColor Yellow
-Write-Host "   Alias DB        : dollytoysandkidswear (Live & Verified)" -ForegroundColor Yellow
+Write-Host "   Database Name   : dollytoyskidswear (Live & Verified)" -ForegroundColor Yellow
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next Step: You can now launch Dolly POS:" -ForegroundColor Cyan

@@ -137,24 +137,25 @@ if (-not $connected) {
     Write-Host "If the postgres password is not 'somesh123', please update it in pgAdmin." -ForegroundColor Yellow
 }
 
-# 6. Create Database dollytoyskidswear & dollytoysandkidswear
+# 6. Create Database dollytoyskidswear
 Write-Host ""
-Write-Host "Configuring Databases..." -ForegroundColor Cyan
+Write-Host "Configuring Database: dollytoyskidswear..." -ForegroundColor Cyan
 
-$dbNames = @("dollytoyskidswear", "dollytoysandkidswear")
+$dbName = "dollytoyskidswear"
 
-foreach ($db in $dbNames) {
-    $checkDb = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$db';" 2>&1
-    if ($checkDb -match "1") {
-        Write-Host "  [OK] Database '$db' already exists." -ForegroundColor Green
+# Clean up accidental alias database if present
+$null = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "DROP DATABASE IF EXISTS dollytoysandkidswear WITH (FORCE);" 2>&1
+
+$checkDb = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$dbName';" 2>&1
+if ($checkDb -match "1") {
+    Write-Host "  [OK] Database '$dbName' already exists." -ForegroundColor Green
+} else {
+    Write-Host "  [*] Creating database '$dbName' with UTF-8 encoding..." -ForegroundColor Yellow
+    $createRes = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "CREATE DATABASE $dbName WITH OWNER postgres ENCODING 'UTF8';" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [SUCCESS] Database '$dbName' created successfully!" -ForegroundColor Green
     } else {
-        Write-Host "  [*] Creating database '$db' with UTF-8 encoding..." -ForegroundColor Yellow
-        $createRes = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "CREATE DATABASE $db WITH OWNER postgres ENCODING 'UTF8';" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [SUCCESS] Database '$db' created successfully!" -ForegroundColor Green
-        } else {
-            Write-Host "  [NOTICE] Create DB response: $createRes" -ForegroundColor Gray
-        }
+        Write-Host "  [NOTICE] Create DB response: $createRes" -ForegroundColor Gray
     }
 }
 
@@ -181,8 +182,7 @@ Write-Host "   PostgreSQL Host : 127.0.0.1 (localhost)" -ForegroundColor White
 Write-Host "   Port            : 5432" -ForegroundColor White
 Write-Host "   Superuser       : postgres" -ForegroundColor White
 Write-Host "   Password        : somesh123" -ForegroundColor White
-Write-Host "   Primary DB      : dollytoyskidswear (Live & Verified)" -ForegroundColor Yellow
-Write-Host "   Alias DB        : dollytoysandkidswear (Live & Verified)" -ForegroundColor Yellow
+Write-Host "   Database Name   : dollytoyskidswear (Live & Verified)" -ForegroundColor Yellow
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next Step: You can now launch Dolly POS:" -ForegroundColor Cyan
@@ -194,8 +194,8 @@ Read-Host "Press Enter to close this window..."
 # SIG # Begin signature block
 # MIIFrQYJKoZIhvcNAQcCoIIFnjCCBZoCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA94cg3POXLYNa6
-# 0flKueuONDpLY1H+HTlnMger5WlDbKCCAxowggMWMIIB/qADAgECAhAV3yWlToTs
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC3nQAg7oRWLTET
+# w0MRr3o4CosU+9WqufuCnd9LCnAunaCCAxowggMWMIIB/qADAgECAhAV3yWlToTs
 # pE4IHJXI+ymmMA0GCSqGSIb3DQEBCwUAMCMxITAfBgNVBAMMGERvbGx5IFRveXMg
 # YW5kIEtpZHMgV2VhcjAeFw0yNjA5MTExODA5MTRaFw0zNjA5MTExODE5MTNaMCMx
 # ITAfBgNVBAMMGERvbGx5IFRveXMgYW5kIEtpZHMgV2VhcjCCASIwDQYJKoZIhvcN
@@ -215,12 +215,12 @@ Read-Host "Press Enter to close this window..."
 # 8/BDrDGCAekwggHlAgEBMDcwIzEhMB8GA1UEAwwYRG9sbHkgVG95cyBhbmQgS2lk
 # cyBXZWFyAhAV3yWlToTspE4IHJXI+ymmMA0GCWCGSAFlAwQCAQUAoIGEMBgGCisG
 # AQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQw
-# HAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIIjE
-# 5PwwFF/PuLg5MEMpU4jCWQ8AoGK+5xxFkSvqQWA7MA0GCSqGSIb3DQEBAQUABIIB
-# AFx8tMEmuZL7hojLU+y/3w7/fYMueqsLM52aqgDrf4x+DyTCMZy3TOnzB/KlKdG6
-# 4aeVkL4Tf+dv2kqDCo/avuwdVEqtAzCZTAPNDrBASiiFk09xl2eVq5DLR63FN1ld
-# e1a2WXyObWgHDWvx3sZCVgsc4VW6R8tZqp8DYAMOMcYVAogXs292lF78HKKmTsnH
-# lbvB4SsbTeA4HvIcrnvCsV8ttric9cvzvZmgJFUUt0WUSb/SVDeY++wtqQ3oO8Dq
-# ZU0isnvZXEsCxMQrcnrmZmxpTJOb1ezz9KfnuF7LzvGyywD2s5zTJWe2Z3/3saXW
-# VX5Aty9z5LNyuDNoCLAMc3s=
+# HAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIOCH
+# tJjsl7uS3W7O/plT7V3beMwvGd5qrfrfOp4ykZsbMA0GCSqGSIb3DQEBAQUABIIB
+# AH1uWwYTi40lMXTCBuGrp6RPzeVRmrnds9t/221/uR6Ka64JmHD6kgVornXPo8Nh
+# x0OitaUC8xe8PpFrW7bmSMRDTE10KR4x0DhIBk8qqmTlX3gDjDlCiF5ms3vkNoOt
+# DzOkSNRPwFbFKKBPp2sOIGeo9Mz04pCCKiJ33uFKVArmocG0BkV9Mmcy+8gWrZno
+# PKvTXp4MytLDHKCF5iaPs9b5xgJJwM1RjqpzDtW9jCJiPGUBKUXbkbfBlsAoqdem
+# ynuAxxqDeGt4jcUpjRogGGGR2LKIsz/YdmvcLsy81S4VjO47V8Fu0q8jYKLov4J0
+# Rb8Mls0lZd+twvjjJnnt31g=
 # SIG # End signature block
