@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title Dolly POS - Setup & Installation Wizard
+title Dolly POS - Setup and Installation Wizard
 cd /d "%~dp0"
 
 echo ======================================================================
@@ -15,9 +15,9 @@ echo.
 :: 1. System Requirements Scan
 echo [1/4] Scanning System Requirements...
 echo  - Operating System: Windows 64-bit... [OK]
-echo  - Display & Audio Capabilities... [OK]
-echo  - Thermal & Barcode Printer Ports... [OK]
-timeout /t 1 /nobreak >nul
+echo  - Display and Audio Capabilities... [OK]
+echo  - Thermal and Barcode Printer Ports... [OK]
+echo.
 
 :: 2. Check if Standalone DollyPOS.exe is built
 if not exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
