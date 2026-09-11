@@ -3,10 +3,24 @@ import sys
 import time
 import urllib.request
 import threading
+import webbrowser
 import uvicorn
-import webview
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+# Ensure sys.stdout and sys.stderr are safe streams in windowed mode
+class SafeNullStream:
+    def write(self, text):
+        pass
+    def flush(self):
+        pass
+    def isatty(self):
+        return False
+
+if sys.stdout is None:
+    sys.stdout = SafeNullStream()
+if sys.stderr is None:
+    sys.stderr = SafeNullStream()
 
 # Setup base directory
 if getattr(sys, "frozen", False):
@@ -39,8 +53,22 @@ if os.path.exists(FRONTEND_DIST_DIR):
             return FileResponse(file_path)
         return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
 
-def run_uvicorn_server():
-    """Run uvicorn backend server."""
+def open_browser():
+    """Wait for backend health endpoint, then open Chrome / default browser."""
+    for _ in range(30):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
+                if resp.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.2)
+    webbrowser.open("http://127.0.0.1:8000")
+
+def main():
+    # 1. Start browser opener thread
+    threading.Thread(target=open_browser, daemon=True).start()
+
+    # 2. Configure and run Uvicorn server on main thread
     log_config = uvicorn.config.LOGGING_CONFIG.copy()
     if "formatters" in log_config:
         if "default" in log_config["formatters"]:
@@ -57,39 +85,6 @@ def run_uvicorn_server():
     )
     server = uvicorn.Server(config)
     server.run()
-
-def wait_for_server():
-    """Poll health endpoint until server is ready."""
-    for _ in range(30):
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
-                if resp.status == 200:
-                    return True
-        except Exception:
-            time.sleep(0.2)
-    return False
-
-def main():
-    # 1. Start backend server in a background daemon thread
-    server_thread = threading.Thread(target=run_uvicorn_server, daemon=True)
-    server_thread.start()
-
-    # 2. Wait for backend to be ready
-    wait_for_server()
-
-    # 3. Create and launch Native Desktop Application Window
-    window = webview.create_window(
-        title="Dolly Toys & Kids Wear - POS System",
-        url="http://127.0.0.1:8000",
-        width=1366,
-        height=820,
-        min_size=(1024, 700),
-        confirm_close=False,
-        text_select=True
-    )
-
-    # 4. Start GUI event loop
-    webview.start(gui="edgechromium", debug=False)
 
 if __name__ == "__main__":
     main()
