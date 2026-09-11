@@ -235,11 +235,11 @@ export const ReportsPage: React.FC = () => {
             {/* Period Tabs */}
             <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               {[
-                { id: 'daily', label: 'Daily / Today' },
-                { id: 'weekly', label: 'Weekly' },
-                { id: 'monthly', label: 'Monthly' },
-                { id: 'yearly', label: 'Yearly' },
-                { id: 'custom', label: 'Custom Range' },
+                { id: 'daily', label: '⚡ Today' },
+                { id: 'weekly', label: '📅 Last 7 Days' },
+                { id: 'monthly', label: '📆 This Month (Sep)' },
+                { id: 'yearly', label: '📊 This Year (2026)' },
+                { id: 'custom', label: '🎯 Custom Range' },
               ].map((p) => (
                 <button
                   key={p.id}
