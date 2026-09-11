@@ -159,11 +159,23 @@ class AnalyticsService:
         ]
 
     @staticmethod
-    def get_analytics_charts(db: Session, days: int = 30) -> Dict[str, Any]:
+    def get_analytics_charts(db: Session, days: int = 30, start_date_str: Optional[str] = None, end_date_str: Optional[str] = None) -> Dict[str, Any]:
         """Generates detailed financial and stock-market style analytics charts and projections using ultra-fast SQL aggregation."""
         now = datetime.utcnow()
-        days_count = max(7, min(365, days))
-        start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(start_date_str).replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = datetime.fromisoformat(end_date_str).replace(hour=23, minute=59, second=59, microsecond=999999) if end_date_str else now.replace(hour=23, minute=59, second=59, microsecond=999999)
+                days_count = max(1, (end_date.date() - start_date.date()).days + 1)
+            except Exception:
+                days_count = max(1, min(3650, days))
+                start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        else:
+            days_count = max(1, min(3650, days))
+            start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         # 1. SQL Daily Invoice Aggregations
         daily_inv_query = db.query(
@@ -175,6 +187,7 @@ class AnalyticsService:
             func.sum(Invoice.due_amount).label("credit")
         ).filter(
             Invoice.created_at >= start_date,
+            Invoice.created_at <= end_date,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
@@ -188,6 +201,7 @@ class AnalyticsService:
         ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
          .filter(
             Invoice.created_at >= start_date,
+            Invoice.created_at <= end_date,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
@@ -198,12 +212,14 @@ class AnalyticsService:
         daily_exp_query = db.query(
             func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("day_str"),
             func.sum(Expense.amount).label("expenses")
-        ).filter(Expense.expense_date >= start_date)\
-         .group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
+        ).filter(
+            Expense.expense_date >= start_date,
+            Expense.expense_date <= end_date
+        ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
 
         daily_exp_map = {row.day_str: float(row.expenses or 0.0) for row in daily_exp_query}
 
-        # Assemble full daily timeline
+        # Assemble daily timeline
         daily_timeline = []
         for i in range(days_count):
             d = (start_date + timedelta(days=i)).date()
@@ -235,8 +251,15 @@ class AnalyticsService:
                 "net_profit": round(np, 2)
             })
 
-        # 4. 12-Month Macro Data (1 SQL Query)
-        twelve_months_ago = (now.replace(day=1) - timedelta(days=365)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # 4. Strictly 12-Month Macro Data (1 Full Year)
+        target_months = []
+        for i in range(11, -1, -1):
+            total_m = now.year * 12 + (now.month - 1) - i
+            yr = total_m // 12
+            mo = (total_m % 12) + 1
+            target_months.append(f"{yr:04d}-{mo:02d}")
+
+        twelve_months_ago = datetime.strptime(target_months[0], "%Y-%m").replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         monthly_inv_query = db.query(
             func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
             func.sum(Invoice.grand_total).label("revenue"),
@@ -261,13 +284,18 @@ class AnalyticsService:
             Invoice.is_held == False
         ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
 
+        monthly_inv_map = {row.month_str: row for row in monthly_inv_query}
         monthly_cogs_map = {row.month_str: (float(row.cogs or 0.0), int(row.units_sold or 0)) for row in monthly_cogs_query}
 
         monthly_growth = []
         prev_rev = 0.0
-        for m_row in sorted(monthly_inv_query, key=lambda r: r.month_str):
-            m_key = m_row.month_str
-            m_rev = float(m_row.revenue or 0.0)
+        for m_key in target_months:
+            inv_row = monthly_inv_map.get(m_key)
+            m_rev = float(inv_row.revenue or 0.0) if inv_row else 0.0
+            m_bills = int(inv_row.bills_count or 0) if inv_row else 0
+            m_cash = float(inv_row.cash or 0.0) if inv_row else 0.0
+            m_upi = float(inv_row.upi or 0.0) if inv_row else 0.0
+            m_credit = float(inv_row.credit or 0.0) if inv_row else 0.0
             m_cogs, m_units = monthly_cogs_map.get(m_key, (0.0, 0))
             m_gp = m_rev - m_cogs
             m_margin = round((m_gp / max(1.0, m_rev)) * 100, 1)
@@ -289,13 +317,13 @@ class AnalyticsService:
                 "revenue": round(m_rev, 2),
                 "cogs": round(m_cogs, 2),
                 "gross_profit": round(m_gp, 2),
-                "bills_count": int(m_row.bills_count or 0),
+                "bills_count": m_bills,
                 "units_sold": m_units,
                 "margin_percent": m_margin,
                 "mom_growth_percent": mom_pct,
-                "cash": round(float(m_row.cash or 0.0), 2),
-                "upi": round(float(m_row.upi or 0.0), 2),
-                "credit": round(float(m_row.credit or 0.0), 2)
+                "cash": round(m_cash, 2),
+                "upi": round(m_upi, 2),
+                "credit": round(m_credit, 2)
             })
             prev_rev = m_rev
 

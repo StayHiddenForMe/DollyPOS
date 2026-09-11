@@ -30,6 +30,7 @@ export const DefectiveStockPage: React.FC = () => {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [productQuery, setProductQuery] = useState('');
   const [productSearchResults, setProductSearchResults] = useState<Product[]>([]);
+  const [isProductSearchFocused, setIsProductSearchFocused] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [damageQty, setDamageQty] = useState(1);
   const [damageReason, setDamageReason] = useState('Stitching defect / Fabric tear');
@@ -90,6 +91,7 @@ export const DefectiveStockPage: React.FC = () => {
   const handleSelectProduct = (prod: Product) => {
     setSelectedProduct(prod);
     setProductSearchResults([]);
+    setIsProductSearchFocused(false);
     setProductQuery(`${prod.name} (${prod.barcode})`);
   };
 
@@ -533,19 +535,24 @@ export const DefectiveStockPage: React.FC = () => {
                     type="text"
                     value={productQuery}
                     onChange={(e) => handleProductSearch(e.target.value)}
+                    onFocus={() => setIsProductSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsProductSearchFocused(false), 200)}
                     placeholder="Type barcode or product name..."
                     className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-semibold"
                     autoFocus
                   />
                 </div>
 
-                {/* Dropdown Results */}
-                {productSearchResults.length > 0 && (
+                {/* Dropdown Results - Only shown when search input is in focus */}
+                {isProductSearchFocused && productSearchResults.length > 0 && (
                   <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-100">
                     {productSearchResults.map((prod) => (
                       <div
                         key={prod.id}
-                        onClick={() => handleSelectProduct(prod)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSelectProduct(prod);
+                        }}
                         className="p-2.5 hover:bg-rose-50 dark:hover:bg-slate-700 cursor-pointer flex justify-between items-center"
                       >
                         <div>

@@ -232,6 +232,7 @@ export interface StoreSettings {
   barcode_printer_name?: string;
   barcode_label_size: string;
   theme_mode: string;
+  sound_enabled?: boolean;
   auto_backup: boolean;
   backup_frequency: string;
   backup_path?: string;

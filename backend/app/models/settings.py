@@ -68,6 +68,7 @@ class StoreSettings(Base):
     
     # Preferences
     theme_mode = Column(String(10), default="light", nullable=False)
+    sound_enabled = Column(Boolean, default=True, nullable=False)
     auto_backup = Column(Boolean, default=True, nullable=False)
     backup_frequency = Column(String(20), default="DAILY", nullable=False)
     backup_path = Column(String(255), nullable=True)

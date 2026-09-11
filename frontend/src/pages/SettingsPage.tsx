@@ -29,7 +29,9 @@ import {
   Eye,
   EyeOff,
   FileKey,
-  Lock
+  Lock,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
@@ -62,7 +64,8 @@ export const SettingsPage: React.FC = () => {
     show_custom_social_on_bill: false,
     thermal_width: '80mm',
     barcode_label_size: '50x25mm',
-    theme_mode: 'light'
+    theme_mode: 'light',
+    sound_enabled: true
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -159,6 +162,9 @@ export const SettingsPage: React.FC = () => {
     try {
       const res = await api.get('/settings');
       setSettings(res.data);
+      if (res.data.sound_enabled !== undefined) {
+        localStorage.setItem('dolly_sound_enabled', String(res.data.sound_enabled));
+      }
       if (res.data.backup_path) {
         setBackupConfig(prev => ({
           ...prev,
@@ -865,6 +871,36 @@ export const SettingsPage: React.FC = () => {
                   </label>
                 </div>
               </div>
+            </div>
+
+            {/* POS Billing Audio & Beep Sound Feedback Toggle */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  {settings.sound_enabled !== false ? (
+                    <Volume2 className="w-4 h-4 text-pink-500" />
+                  ) : (
+                    <VolumeX className="w-4 h-4 text-slate-400" />
+                  )}
+                  POS Billing Sound & Audio Feedback
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Plays audio beep chime when barcode is scanned or products are added to the billing cart.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.sound_enabled !== false}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setSettings({ ...settings, sound_enabled: val });
+                    localStorage.setItem('dolly_sound_enabled', String(val));
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+              </label>
             </div>
 
             {/* Receipt Footers & Branding Configuration */}

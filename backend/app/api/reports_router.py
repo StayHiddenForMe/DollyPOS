@@ -33,20 +33,20 @@ def get_sales_report(
     now = datetime.utcnow()
     
     if period == "custom" and start_date:
-        start_dt = datetime.fromisoformat(start_date).replace(hour=0, minute=0, second=0)
-        end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59) if end_date else now
+        start_dt = datetime.fromisoformat(start_date).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59, microsecond=999999) if end_date else now.replace(hour=23, minute=59, second=59, microsecond=999999)
     elif period == "daily":
         start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now
+        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     elif period == "weekly":
-        start_dt = now - timedelta(days=7)
-        end_dt = now
+        start_dt = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     elif period == "yearly":
-        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0)
-        end_dt = now
+        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_dt = now.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
     else:  # monthly default
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0)
-        end_dt = now
+        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_dt = (start_dt + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
 
     invoices = db.query(Invoice).options(joinedload(Invoice.items)).filter(
         Invoice.created_at >= start_dt,

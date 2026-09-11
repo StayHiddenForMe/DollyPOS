@@ -39,6 +39,7 @@ export function formatISTDate(dateStr: string | Date | undefined | null): string
 }
 
 export function playBeepSuccess() {
+  if (typeof window !== 'undefined' && localStorage.getItem('dolly_sound_enabled') === 'false') return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -56,6 +57,7 @@ export function playBeepSuccess() {
 }
 
 export function playSuccessChime() {
+  if (typeof window !== 'undefined' && localStorage.getItem('dolly_sound_enabled') === 'false') return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const now = ctx.currentTime;
@@ -73,3 +75,4 @@ export function playSuccessChime() {
     });
   } catch (e) {}
 }
+

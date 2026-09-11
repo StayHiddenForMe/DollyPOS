@@ -515,11 +515,11 @@ export const WhatsAppMarketingPage: React.FC = () => {
       {/* Navigation Tabs */}
       <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit text-xs font-bold">
         {[
-          { id: 'CAMPAIGNS', label: '🎉 Festival & Collection Broadcasts', icon: Gift },
-          { id: 'KHATA_REMINDERS', label: '💳 Khata Due Reminders', icon: CreditCard },
-          { id: 'TEST_SENDER', label: '💬 Quick Direct Chat', icon: Send },
-          { id: 'SETTINGS', label: '⚙️ Settings & Meta API', icon: Settings },
-          { id: 'LOGS', label: '📜 Delivery History', icon: Clock },
+          { id: 'CAMPAIGNS', label: 'Festival & Collection Broadcasts', icon: Gift },
+          { id: 'KHATA_REMINDERS', label: 'Khata Due Reminders', icon: CreditCard },
+          { id: 'TEST_SENDER', label: 'Quick Direct Chat', icon: Send },
+          { id: 'SETTINGS', label: 'Settings & Meta API', icon: Settings },
+          { id: 'LOGS', label: 'Delivery History', icon: Clock },
         ].map((tab) => (
           <button
             key={tab.id}

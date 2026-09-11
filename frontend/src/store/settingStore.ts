@@ -17,6 +17,9 @@ export const useSettingStore = create<SettingState>((set) => ({
     set({ isLoading: true });
     try {
       const res = await api.get('/settings');
+      if (res.data?.sound_enabled !== undefined) {
+        localStorage.setItem('dolly_sound_enabled', String(res.data.sound_enabled));
+      }
       set({ settings: res.data, isLoading: false });
     } catch (e) {
       set({ isLoading: false });
@@ -26,6 +29,9 @@ export const useSettingStore = create<SettingState>((set) => ({
   updateSettings: async (newSettings: Partial<StoreSettings>) => {
     try {
       const res = await api.put('/settings', newSettings);
+      if (res.data?.sound_enabled !== undefined) {
+        localStorage.setItem('dolly_sound_enabled', String(res.data.sound_enabled));
+      }
       set({ settings: res.data });
     } catch (e) {
       console.error('Failed to update settings', e);

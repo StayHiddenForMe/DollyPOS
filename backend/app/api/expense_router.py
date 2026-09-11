@@ -31,13 +31,16 @@ def list_expenses(
 
     if period == "daily":
         start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "monthly":
         start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        end_dt = (start_dt + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "yearly":
         start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        end_dt = now.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "custom" or start_date or end_date:
         if start_date:
             try:

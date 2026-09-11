@@ -33,24 +33,49 @@ export const DashboardPage: React.FC = () => {
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedRange, setSelectedRange] = useState<7 | 30 | 90 | 365>(30);
-  const [chartMode, setChartMode] = useState<'TIMELINE' | '12M' | 'PROJECTION'>('TIMELINE');
+  const [selectedRange, setSelectedRange] = useState<'1M' | '6M' | '1Y' | '5Y' | 'CUSTOM'>('1M');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [chartMode, setChartMode] = useState<'TIMELINE' | '12M'>('TIMELINE');
   const [hoveredPoint, setHoveredPoint] = useState<any>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
-  const [projectionScenario, setProjectionScenario] = useState<'CONSERVATIVE' | 'TARGET' | 'FESTIVE'>('TARGET');
 
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    fetchDashboardMetrics(selectedRange);
-    const interval = setInterval(() => fetchDashboardMetrics(selectedRange), 30000);
+    if (selectedRange !== 'CUSTOM') {
+      fetchDashboardMetrics(selectedRange);
+    }
+    const interval = setInterval(() => {
+      if (selectedRange !== 'CUSTOM') {
+        fetchDashboardMetrics(selectedRange);
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [selectedRange]);
 
-  const fetchDashboardMetrics = async (rangeDays: number = 30) => {
+  const fetchDashboardMetrics = async (
+    rangeKey: '1M' | '6M' | '1Y' | '5Y' | 'CUSTOM' = selectedRange,
+    sDate: string = customStartDate,
+    eDate: string = customEndDate
+  ) => {
     setIsRefreshing(true);
     try {
-      const res = await api.get(`/dashboard/metrics?days=${rangeDays}`);
+      let url = '/dashboard/metrics';
+      if (rangeKey === 'CUSTOM') {
+        if (!sDate) return;
+        url += `?start_date=${sDate}&end_date=${eDate || ''}`;
+      } else {
+        const daysMap: Record<string, number> = {
+          '1M': 30,
+          '6M': 180,
+          '1Y': 365,
+          '5Y': 1825
+        };
+        const d = daysMap[rangeKey] || 30;
+        url += `?days=${d}`;
+      }
+      const res = await api.get(url);
       setMetrics(res.data);
     } catch (e) {
       console.error('Failed to load dashboard metrics', e);
@@ -63,7 +88,6 @@ export const DashboardPage: React.FC = () => {
   const charts = metrics?.charts;
   const dailyTimeline = charts?.daily_timeline || [];
   const monthlyGrowth = charts?.monthly_growth || [];
-  const futureProjections = charts?.future_projections;
   const financialRatios = charts?.financial_ratios;
   const cashFlow = charts?.cash_flow_summary;
 
@@ -82,39 +106,13 @@ export const DashboardPage: React.FC = () => {
   const polylineString = chartPoints.map((p: any) => `${p.x},${p.y}`).join(' ');
   const areaPolygonString = `${polylineString} ${chartWidth},${chartHeight} 0,${chartHeight}`;
 
-  // Projection points
-  const baseDailyRev = (futureProjections?.projected_next_30d_revenue || 100000) / 30.0;
-  const multiplier = projectionScenario === 'CONSERVATIVE' ? 1.0 : (projectionScenario === 'TARGET' ? 1.15 : 1.35);
-  const projDays = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i + 1);
-    const rev = Math.round(baseDailyRev * multiplier * (1 + (i * 0.006)));
-    const profit = Math.round(rev * 0.42);
-    return {
-      label: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      full_date: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }),
-      revenue: rev,
-      net_profit: profit,
-      cogs: rev - profit
-    };
-  });
-
-  const maxProjRev = Math.max(1, ...projDays.map(p => p.revenue));
-  const projPoints = projDays.map((p, idx) => {
-    const x = (idx / Math.max(1, projDays.length - 1)) * chartWidth;
-    const y = chartHeight - (p.revenue / maxProjRev) * (chartHeight - 40) - 20;
-    return { ...p, x, y };
-  });
-  const polylineProjString = projPoints.map(p => `${p.x},${p.y}`).join(' ');
-  const areaProjString = `${polylineProjString} ${chartWidth},${chartHeight} 0,${chartHeight}`;
-
   const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const relativeX = (mouseX / rect.width) * chartWidth;
 
-    const dataset = chartMode === 'PROJECTION' ? projPoints : chartPoints;
+    const dataset = chartPoints;
     if (dataset.length === 0) return;
 
     // Find closest point
@@ -317,25 +315,59 @@ export const DashboardPage: React.FC = () => {
           <div className="flex items-center space-x-3">
             {/* Range Selector */}
             {chartMode === 'TIMELINE' && (
-              <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
-                {[
-                  { days: 7, label: '7D' },
-                  { days: 30, label: '30D' },
-                  { days: 90, label: '90D' },
-                  { days: 365, label: '1 Year' }
-                ].map((item) => (
-                  <button
-                    key={item.days}
-                    onClick={() => setSelectedRange(item.days as any)}
-                    className={`px-3 py-1 rounded-lg transition-all ${
-                      selectedRange === item.days
-                        ? 'bg-white dark:bg-slate-700 text-pink-600 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="flex items-center space-x-2 flex-wrap">
+                <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                  {[
+                    { id: '1M', label: '1M' },
+                    { id: '6M', label: '6M' },
+                    { id: '1Y', label: '1Y' },
+                    { id: '5Y', label: '5Y' },
+                    { id: 'CUSTOM', label: '📅 Custom' }
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setSelectedRange(item.id as any);
+                        if (item.id !== 'CUSTOM') {
+                          fetchDashboardMetrics(item.id as any);
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        selectedRange === item.id
+                          ? 'bg-white dark:bg-slate-700 text-pink-600 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Date Inputs */}
+                {selectedRange === 'CUSTOM' && (
+                  <div className="flex items-center space-x-1.5 bg-pink-50/60 dark:bg-pink-950/20 p-1 px-2.5 rounded-xl border border-pink-200 dark:border-pink-800 text-xs animate-in fade-in duration-150">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="bg-white dark:bg-slate-800 border rounded-lg px-2 py-0.5 text-xs font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 font-bold">to</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="bg-white dark:bg-slate-800 border rounded-lg px-2 py-0.5 text-xs font-mono"
+                    />
+                    <button
+                      onClick={() => fetchDashboardMetrics('CUSTOM', customStartDate, customEndDate)}
+                      disabled={!customStartDate}
+                      className="px-2.5 py-1 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-lg text-xs shadow-xs disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -343,8 +375,7 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
               {[
                 { id: 'TIMELINE', label: '📈 Timeline Curve' },
-                { id: '12M', label: '📊 12-Month Macro' },
-                { id: 'PROJECTION', label: '🚀 30/90D Projection' }
+                { id: '12M', label: '📊 12-Month Macro' }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -484,10 +515,10 @@ export const DashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* 12-MONTH MACRO VIEW */}
+        {/* 12-MONTH MACRO VIEW (Strictly 12 boxes / 1 Year) */}
         {chartMode === '12M' && (
-          <div className="grid grid-cols-6 gap-2.5">
-            {monthlyGrowth.map((m: any, idx: number) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+            {monthlyGrowth.slice(0, 12).map((m: any, idx: number) => (
               <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-1.5">
                 <span className="text-[11px] font-bold text-slate-400 block uppercase">{m.label}</span>
                 <div className="text-base font-black font-mono text-slate-900 dark:text-white">
@@ -504,82 +535,6 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* 30/90D PROJECTION VIEW & EXPLANATION */}
-        {chartMode === 'PROJECTION' && (
-          <div className="space-y-4">
-            {/* Explanation Banner */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-emerald-500/10 border border-purple-200 dark:border-purple-900/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-xs text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-purple-500" />
-                  How 30 & 90-Day Predictive Forecasting Helps Your Business:
-                </h3>
-                <div className="flex items-center space-x-1 text-xs">
-                  <span className="text-slate-500 font-bold">Simulator:</span>
-                  {(['CONSERVATIVE', 'TARGET', 'FESTIVE'] as const).map((sc) => (
-                    <button
-                      key={sc}
-                      onClick={() => setProjectionScenario(sc)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${projectionScenario === sc ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}
-                    >
-                      {sc === 'CONSERVATIVE' ? 'Normal (0%)' : (sc === 'TARGET' ? 'Expansion (+15%)' : 'Festive (+35%)')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">1. Working Capital Planning</span>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
-                    Projects your upcoming cash collections so you know exactly how much budget you can safely invest in buying new inventory.
-                  </p>
-                </div>
-                <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">2. Expected 30-Day Inflow</span>
-                  <div className="text-lg font-black font-mono text-purple-600 mt-0.5">
-                    {formatINR(Math.round((futureProjections?.projected_next_30d_revenue || 100000) * multiplier))}
-                  </div>
-                  <span className="text-[10px] text-emerald-600 font-bold">Estimated Net Profit: ~{formatINR(Math.round((futureProjections?.projected_next_30d_revenue || 100000) * multiplier * 0.42))}</span>
-                </div>
-                <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">3. Expected 90-Day Quarterly Target</span>
-                  <div className="text-lg font-black font-mono text-pink-600 mt-0.5">
-                    {formatINR(Math.round((futureProjections?.projected_next_90d_revenue || 300000) * (multiplier ** 1.3)))}
-                  </div>
-                  <span className="text-[10px] text-slate-400">Quarterly Target Turnover</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Projection Curve */}
-            <div className="h-52 w-full relative">
-              <svg
-                ref={svgRef}
-                viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                preserveAspectRatio="none"
-                className="w-full h-full cursor-crosshair block"
-                onMouseMove={handleSvgMouseMove}
-                onMouseLeave={handleSvgMouseLeave}
-              >
-                <defs>
-                  <linearGradient id="projGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                <polygon points={areaProjString} fill="url(#projGradient)" />
-                <polyline fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeDasharray="4 2" points={polylineProjString} />
-
-                {projPoints.map((p, idx) => (
-                  <circle key={idx} cx={p.x} cy={p.y} r={3} fill="#8B5CF6" />
-                ))}
-              </svg>
-            </div>
           </div>
         )}
       </div>

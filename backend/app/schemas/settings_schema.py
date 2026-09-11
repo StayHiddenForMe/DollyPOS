@@ -54,6 +54,7 @@ class StoreSettingsBase(BaseModel):
     barcode_printer_name: Optional[str] = None
     barcode_label_size: str = "50x25mm"
     theme_mode: str = "light"
+    sound_enabled: bool = True
     auto_backup: bool = True
     backup_frequency: str = "DAILY"
     backup_path: Optional[str] = None
@@ -106,6 +107,7 @@ class StoreSettingsUpdate(BaseModel):
     barcode_printer_name: Optional[str] = None
     barcode_label_size: Optional[str] = None
     theme_mode: Optional[str] = None
+    sound_enabled: Optional[bool] = None
     auto_backup: Optional[bool] = None
     backup_frequency: Optional[str] = None
     backup_path: Optional[str] = None

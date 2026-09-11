@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -7,11 +8,11 @@ from app.services.analytics_service import analytics_service
 
 router = APIRouter(tags=["Dashboard Intelligence"])
 
-def _build_dashboard_payload(db: Session, days: int = 30):
+def _build_dashboard_payload(db: Session, days: int = 30, start_date: Optional[str] = None, end_date: Optional[str] = None):
     summary = analytics_service.get_dashboard_summary(db)
     top_products = analytics_service.get_top_selling_products(db, limit=5)
     dead_stock_preview = analytics_service.get_dead_stock(db, days=60)[:5]
-    charts = analytics_service.get_analytics_charts(db, days=days)
+    charts = analytics_service.get_analytics_charts(db, days=days, start_date_str=start_date, end_date_str=end_date)
     
     return {
         **summary,
@@ -24,19 +25,23 @@ def _build_dashboard_payload(db: Session, days: int = 30):
 @router.get("/dashboard")
 @router.get("/analytics/dashboard")
 def get_dashboard_metrics(
-    days: int = Query(30, description="Timeline range in days (7, 30, 90, 365)"),
+    days: int = Query(30, description="Timeline range in days (30, 180, 365, 1825)"),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD custom start"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD custom end"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Universal dashboard live metrics endpoint."""
-    return _build_dashboard_payload(db, days=days)
+    return _build_dashboard_payload(db, days=days, start_date=start_date, end_date=end_date)
 
 @router.get("/dashboard/analytics-charts")
 def get_dashboard_charts(
-    days: int = Query(30, description="Timeline range in days (7, 30, 90, 365)"),
+    days: int = Query(30, description="Timeline range in days (30, 180, 365, 1825)"),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD custom start"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD custom end"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Stock-market style financial charts, cash flow, and predictive growth projections."""
-    return analytics_service.get_analytics_charts(db, days=days)
+    return analytics_service.get_analytics_charts(db, days=days, start_date_str=start_date, end_date_str=end_date)
 
