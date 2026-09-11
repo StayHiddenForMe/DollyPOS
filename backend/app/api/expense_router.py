@@ -11,6 +11,13 @@ from app.models.user import User
 from app.models.expense import Expense, ExpenseCategory
 from app.schemas.expense_schema import ExpenseCreate, ExpenseUpdate, ExpenseOut, ExpenseSummary
 from app.core.audit import log_action
+from app.core.timezone import (
+    get_ist_now,
+    get_ist_today,
+    get_ist_day_bounds_in_utc,
+    get_ist_month_bounds_in_utc,
+    get_ist_year_bounds_in_utc
+)
 
 router = APIRouter(prefix="/expenses", tags=["Expense Management"])
 
@@ -27,30 +34,28 @@ def list_expenses(
     db: Session = Depends(get_db)
 ):
     query = db.query(Expense).options(joinedload(Expense.logged_by_user))
-    now = datetime.utcnow()
 
     if period == "daily":
-        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        start_dt, end_dt = get_ist_day_bounds_in_utc()
         query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "monthly":
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = (start_dt + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        start_dt, end_dt = get_ist_month_bounds_in_utc()
         query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "yearly":
-        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        start_dt, end_dt = get_ist_year_bounds_in_utc()
         query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "custom" or start_date or end_date:
         if start_date:
             try:
-                s_dt = datetime.strptime(start_date, "%Y-%m-%d") if len(start_date) == 10 else datetime.fromisoformat(start_date)
+                s_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date() if len(start_date.strip()) == 10 else datetime.fromisoformat(start_date).date()
+                s_dt, _ = get_ist_day_bounds_in_utc(s_date)
                 query = query.filter(Expense.expense_date >= s_dt)
             except Exception:
                 pass
         if end_date:
             try:
-                e_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59) if len(end_date) == 10 else datetime.fromisoformat(end_date)
+                e_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date() if len(end_date.strip()) == 10 else datetime.fromisoformat(end_date).date()
+                _, e_dt = get_ist_day_bounds_in_utc(e_date)
                 query = query.filter(Expense.expense_date <= e_dt)
             except Exception:
                 pass
@@ -121,18 +126,17 @@ def get_expense_summary(
     category: Optional[ExpenseCategory] = None,
     db: Session = Depends(get_db)
 ):
-    now = datetime.utcnow()
     query = db.query(Expense)
 
     if period == "daily":
-        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        start_dt, end_dt = get_ist_day_bounds_in_utc()
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "monthly":
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        start_dt, end_dt = get_ist_month_bounds_in_utc()
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
     elif period == "yearly":
-        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Expense.expense_date >= start_dt)
+        start_dt, end_dt = get_ist_year_bounds_in_utc()
+        query = query.filter(Expense.expense_date >= start_dt, Expense.expense_date <= end_dt)
 
     if category:
         query = query.filter(Expense.category == category)

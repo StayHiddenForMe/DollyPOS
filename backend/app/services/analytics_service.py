@@ -1,22 +1,29 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc, case
+from sqlalchemy import func, desc, case, text
 from typing import Dict, Any, List, Optional
 from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode, PaymentStatus
 from app.models.product import Product
 from app.models.expense import Expense
 from app.models.return_order import ReturnOrder, ReturnItem
 from app.models.category import Category
+from app.core.timezone import (
+    get_ist_now,
+    get_ist_today,
+    get_ist_day_bounds_in_utc,
+    get_ist_month_bounds_in_utc,
+    get_ist_year_bounds_in_utc,
+    convert_utc_to_ist,
+    get_ist_date_expr
+)
 
 class AnalyticsService:
     @staticmethod
     def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         """Calculates real-time daily, monthly, and overall metrics in sub-millisecond SQL queries."""
-        now = datetime.utcnow()
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-        month_start = today_start.replace(day=1)
-        month_end = (month_start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        today_start, today_end = get_ist_day_bounds_in_utc()
+        month_start, month_end = get_ist_month_bounds_in_utc()
+
 
         # 1. Today's Invoices SQL aggregation
         today_inv_stats = db.query(
@@ -102,8 +109,8 @@ class AnalyticsService:
     @staticmethod
     def get_dead_stock(db: Session, days: int = 60, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Finds items with no sales in the specified number of days."""
-        now = datetime.utcnow()
-        cutoff_date = now - timedelta(days=days)
+        ist_now = get_ist_now()
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
         query = db.query(Product).filter(
             Product.is_active == True,
             Product.stock_quantity > 0,
@@ -122,10 +129,12 @@ class AnalyticsService:
         results = []
         for p in products:
             capital_trapped = p.stock_quantity * p.purchase_price
-            if p.last_sold_at:
-                days_idle = (now - p.last_sold_at).days
-            elif p.created_at:
-                days_idle = (now - p.created_at).days
+            last_sold_ist = convert_utc_to_ist(p.last_sold_at)
+            created_ist = convert_utc_to_ist(p.created_at)
+            if last_sold_ist:
+                days_idle = (ist_now - last_sold_ist).days
+            elif created_ist:
+                days_idle = (ist_now - created_ist).days
             else:
                 days_idle = days
 
@@ -141,7 +150,7 @@ class AnalyticsService:
                 "selling_price": p.selling_price,
                 "capital_trapped": round(capital_trapped, 2),
                 "trapped_capital": round(capital_trapped, 2),
-                "last_sold_at": p.last_sold_at.strftime("%Y-%m-%d") if p.last_sold_at else f"Added {p.created_at.strftime('%Y-%m-%d') if p.created_at else 'Never Sold'}",
+                "last_sold_at": last_sold_ist.strftime("%Y-%m-%d") if last_sold_ist else f"Added {created_ist.strftime('%Y-%m-%d') if created_ist else 'Never Sold'}",
                 "days_idle": days_idle
             })
         return results
@@ -173,21 +182,32 @@ class AnalyticsService:
     @staticmethod
     def get_analytics_charts(db: Session, days: int = 30, start_date_str: Optional[str] = None, end_date_str: Optional[str] = None) -> Dict[str, Any]:
         """Generates detailed financial and stock-market style analytics charts and projections using ultra-fast SQL aggregation."""
-        now = datetime.utcnow()
+        ist_now = get_ist_now()
+        dialect = db.bind.dialect.name if (db.bind and hasattr(db.bind, 'dialect')) else "postgresql"
         
         if start_date_str:
             try:
-                start_date = datetime.fromisoformat(start_date_str).replace(hour=0, minute=0, second=0, microsecond=0)
-                end_date = datetime.fromisoformat(end_date_str).replace(hour=23, minute=59, second=59, microsecond=999999) if end_date_str else now.replace(hour=23, minute=59, second=59, microsecond=999999)
-                days_count = max(1, (end_date.date() - start_date.date()).days + 1)
+                s_date = datetime.strptime(start_date_str.strip(), "%Y-%m-%d").date() if len(start_date_str.strip()) == 10 else datetime.fromisoformat(start_date_str).date()
+                e_date = datetime.strptime(end_date_str.strip(), "%Y-%m-%d").date() if (end_date_str and len(end_date_str.strip()) == 10) else (datetime.fromisoformat(end_date_str).date() if end_date_str else get_ist_today())
+                start_date, _ = get_ist_day_bounds_in_utc(s_date)
+                _, end_date = get_ist_day_bounds_in_utc(e_date)
+                days_count = max(1, (e_date - s_date).days + 1)
+                start_ist_date = s_date
             except Exception:
                 days_count = max(1, min(3650, days))
-                start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+                start_ist_date = get_ist_today() - timedelta(days=days_count - 1)
+                start_date, _ = get_ist_day_bounds_in_utc(start_ist_date)
+                _, end_date = get_ist_day_bounds_in_utc(get_ist_today())
         else:
             days_count = max(1, min(3650, days))
-            start_date = (now - timedelta(days=days_count - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_ist_date = get_ist_today() - timedelta(days=days_count - 1)
+            start_date, _ = get_ist_day_bounds_in_utc(start_ist_date)
+            _, end_date = get_ist_day_bounds_in_utc(get_ist_today())
+
+        inv_day_expr = get_ist_date_expr(Invoice.created_at, dialect, "YYYY-MM-DD")
+        exp_day_expr = get_ist_date_expr(Expense.expense_date, dialect, "YYYY-MM-DD")
+        inv_month_expr = get_ist_date_expr(Invoice.created_at, dialect, "YYYY-MM")
+        exp_month_expr = get_ist_date_expr(Expense.expense_date, dialect, "YYYY-MM")
 
         # 1. Determine Smart Aggregation Granularity (Daily for <=45d, Weekly for 46-400d, Monthly for >400d/5Y)
         daily_timeline = []
@@ -195,7 +215,7 @@ class AnalyticsService:
         if days_count <= 45:
             # Daily granularity
             daily_inv_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("p_str"),
+                inv_day_expr.label("p_str"),
                 func.sum(Invoice.grand_total).label("revenue"),
                 func.count(Invoice.id).label("bills_count"),
                 func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
@@ -206,10 +226,10 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+            ).group_by(inv_day_expr).all()
 
             daily_cogs_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("p_str"),
+                inv_day_expr.label("p_str"),
                 func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
             ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
              .filter(
@@ -217,22 +237,22 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+            ).group_by(inv_day_expr).all()
 
             daily_exp_query = db.query(
-                func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("p_str"),
+                exp_day_expr.label("p_str"),
                 func.sum(Expense.amount).label("expenses")
             ).filter(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date
-            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
+            ).group_by(exp_day_expr).all()
 
             inv_map = {r.p_str: r for r in daily_inv_query}
             cogs_map = {r.p_str: float(r.cogs or 0.0) for r in daily_cogs_query}
             exp_map = {r.p_str: float(r.expenses or 0.0) for r in daily_exp_query}
 
             for i in range(days_count):
-                d = (start_date + timedelta(days=i)).date()
+                d = start_ist_date + timedelta(days=i)
                 d_str = d.strftime("%Y-%m-%d")
                 row = inv_map.get(d_str)
 
@@ -264,14 +284,15 @@ class AnalyticsService:
         elif days_count <= 400:
             # Weekly granularity (Clean 7-day rolling buckets)
             weekly_slots = []
-            curr = start_date
-            while curr <= end_date:
-                w_end = min(curr + timedelta(days=6, hours=23, minutes=59, seconds=59), end_date)
-                weekly_slots.append((curr, w_end))
-                curr = curr + timedelta(days=7)
+            curr_d = start_ist_date
+            end_ist_date = start_ist_date + timedelta(days=days_count - 1)
+            while curr_d <= end_ist_date:
+                w_end_d = min(curr_d + timedelta(days=6), end_ist_date)
+                weekly_slots.append((curr_d, w_end_d))
+                curr_d = curr_d + timedelta(days=7)
 
             daily_inv_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
+                inv_day_expr.label("day_str"),
                 func.sum(Invoice.grand_total).label("revenue"),
                 func.count(Invoice.id).label("bills_count"),
                 func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
@@ -282,10 +303,10 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+            ).group_by(inv_day_expr).all()
 
             daily_cogs_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM-DD').label("day_str"),
+                inv_day_expr.label("day_str"),
                 func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
             ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
              .filter(
@@ -293,15 +314,15 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM-DD')).all()
+            ).group_by(inv_day_expr).all()
 
             daily_exp_query = db.query(
-                func.to_char(Expense.expense_date, 'YYYY-MM-DD').label("day_str"),
+                exp_day_expr.label("day_str"),
                 func.sum(Expense.amount).label("expenses")
             ).filter(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date
-            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM-DD')).all()
+            ).group_by(exp_day_expr).all()
 
             inv_map = {r.day_str: r for r in daily_inv_query}
             cogs_map = {r.day_str: float(r.cogs or 0.0) for r in daily_cogs_query}
@@ -309,8 +330,8 @@ class AnalyticsService:
 
             for w_start, w_end in weekly_slots:
                 rev, bills, cash, upi, credit, cogs, exp = 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0
-                cur_d = w_start.date()
-                while cur_d <= w_end.date():
+                cur_d = w_start
+                while cur_d <= w_end:
                     ds = cur_d.strftime("%Y-%m-%d")
                     if ds in inv_map:
                         rev += float(inv_map[ds].revenue or 0.0)
@@ -345,7 +366,7 @@ class AnalyticsService:
         else:
             # Monthly granularity (Smooth ~60 monthly trend points for 5 Years)
             monthly_inv_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+                inv_month_expr.label("month_str"),
                 func.sum(Invoice.grand_total).label("revenue"),
                 func.count(Invoice.id).label("bills_count"),
                 func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
@@ -356,10 +377,10 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+            ).group_by(inv_month_expr).all()
 
             monthly_cogs_query = db.query(
-                func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+                inv_month_expr.label("month_str"),
                 func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs")
             ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
              .filter(
@@ -367,27 +388,33 @@ class AnalyticsService:
                 Invoice.created_at <= end_date,
                 Invoice.is_cancelled == False,
                 Invoice.is_held == False
-            ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+            ).group_by(inv_month_expr).all()
 
             monthly_exp_query = db.query(
-                func.to_char(Expense.expense_date, 'YYYY-MM').label("month_str"),
+                exp_month_expr.label("month_str"),
                 func.sum(Expense.amount).label("expenses")
             ).filter(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date
-            ).group_by(func.to_char(Expense.expense_date, 'YYYY-MM')).all()
+            ).group_by(exp_month_expr).all()
 
             inv_map = {r.month_str: r for r in monthly_inv_query}
             cogs_map = {r.month_str: float(r.cogs or 0.0) for r in monthly_cogs_query}
             exp_map = {r.month_str: float(r.expenses or 0.0) for r in monthly_exp_query}
 
-            cur_m = start_date.replace(day=1)
-            end_m = end_date.replace(day=1)
+            end_ist_date = start_ist_date + timedelta(days=days_count - 1)
+            cur_y = start_ist_date.year
+            cur_m = start_ist_date.month
+            end_y = end_ist_date.year
+            end_m = end_ist_date.month
             months_list = []
-            while cur_m <= end_m:
-                months_list.append(cur_m.strftime("%Y-%m"))
-                total_m = cur_m.year * 12 + (cur_m.month - 1) + 1
-                cur_m = datetime(total_m // 12, (total_m % 12) + 1, 1)
+            while (cur_y < end_y) or (cur_y == end_y and cur_m <= end_m):
+                months_list.append(f"{cur_y:04d}-{cur_m:02d}")
+                if cur_m == 12:
+                    cur_y += 1
+                    cur_m = 1
+                else:
+                    cur_m += 1
 
             for m_str in months_list:
                 row = inv_map.get(m_str)
@@ -424,18 +451,20 @@ class AnalyticsService:
                     "net_profit": round(np, 2)
                 })
 
-
         # 4. Strictly 12-Month Macro Data (1 Full Year)
         target_months = []
         for i in range(11, -1, -1):
-            total_m = now.year * 12 + (now.month - 1) - i
+            total_m = ist_now.year * 12 + (ist_now.month - 1) - i
             yr = total_m // 12
             mo = (total_m % 12) + 1
             target_months.append(f"{yr:04d}-{mo:02d}")
 
-        twelve_months_ago = datetime.strptime(target_months[0], "%Y-%m").replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        t_start_y = int(target_months[0][:4])
+        t_start_m = int(target_months[0][5:7])
+        twelve_months_ago, _ = get_ist_month_bounds_in_utc(t_start_y, t_start_m)
+
         monthly_inv_query = db.query(
-            func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+            inv_month_expr.label("month_str"),
             func.sum(Invoice.grand_total).label("revenue"),
             func.count(Invoice.id).label("bills_count"),
             func.sum(case((Invoice.payment_mode == PaymentMode.CASH, Invoice.paid_amount), else_=0.0)).label("cash"),
@@ -445,10 +474,10 @@ class AnalyticsService:
             Invoice.created_at >= twelve_months_ago,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
-        ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+        ).group_by(inv_month_expr).all()
 
         monthly_cogs_query = db.query(
-            func.to_char(Invoice.created_at, 'YYYY-MM').label("month_str"),
+            inv_month_expr.label("month_str"),
             func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity).label("cogs"),
             func.sum(InvoiceItem.quantity).label("units_sold")
         ).join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)\
@@ -456,7 +485,7 @@ class AnalyticsService:
             Invoice.created_at >= twelve_months_ago,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
-        ).group_by(func.to_char(Invoice.created_at, 'YYYY-MM')).all()
+        ).group_by(inv_month_expr).all()
 
         monthly_inv_map = {row.month_str: row for row in monthly_inv_query}
         monthly_cogs_map = {row.month_str: (float(row.cogs or 0.0), int(row.units_sold or 0)) for row in monthly_cogs_query}
@@ -605,7 +634,7 @@ class AnalyticsService:
         projected_next_90d_revenue = round(avg_daily_rev_recent * 90 * (growth_factor ** 1.5), 2)
         projected_daily_trend = []
         for i in range(1, 31):
-            f_date = (now + timedelta(days=i)).date()
+            f_date = (ist_now + timedelta(days=i)).date()
             projected_daily_trend.append({
                 "date": f_date.strftime("%Y-%m-%d"),
                 "label": f_date.strftime("%d %b"),

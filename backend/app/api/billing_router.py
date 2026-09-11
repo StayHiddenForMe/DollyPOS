@@ -26,7 +26,8 @@ class UpdatePaymentModeRequest(BaseModel):
     notes: Optional[str] = None
 
 def generate_bill_number(db: Session) -> str:
-    ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    from app.core.timezone import get_ist_now
+    ist_now = get_ist_now()
     today_str = ist_now.strftime("%Y%m%d")
     prefix = f"DLY-{today_str}-"
     last_invoice = db.query(Invoice).filter(Invoice.bill_number.like(f"{prefix}%")).order_by(desc(Invoice.id)).first()
@@ -404,8 +405,11 @@ def export_invoices_excel(
 
     if not all_time and start_date and end_date:
         try:
-            s_dt = datetime.strptime(start_date.strip(), "%Y-%m-%d")
-            e_dt = datetime.strptime(end_date.strip(), "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            from app.core.timezone import get_ist_day_bounds_in_utc
+            s_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date()
+            e_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date()
+            s_dt, _ = get_ist_day_bounds_in_utc(s_date)
+            _, e_dt = get_ist_day_bounds_in_utc(e_date)
             query = query.filter(Invoice.created_at >= s_dt, Invoice.created_at <= e_dt)
         except Exception:
             pass

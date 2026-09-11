@@ -99,7 +99,8 @@ def make_vendor_payment(
 # --- Purchase Inward Engine ---
 
 def generate_purchase_number(db: Session) -> str:
-    today_str = datetime.utcnow().strftime("%Y%m%d")
+    from app.core.timezone import get_ist_today
+    today_str = get_ist_today().strftime("%Y%m%d")
     prefix = f"PO-{today_str}-"
     last_po = db.query(Purchase).filter(Purchase.purchase_number.like(f"{prefix}%")).order_by(desc(Purchase.id)).first()
     seq = (int(last_po.purchase_number.split("-")[-1]) + 1) if last_po else 1

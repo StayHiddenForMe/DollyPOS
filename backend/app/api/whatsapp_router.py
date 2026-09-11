@@ -317,12 +317,14 @@ def send_bill_whatsapp(
 
     items_text = "\n".join([f"• {item.item_name} ({item.quantity}x) - ₹{item.total_price:.2f}" for item in inv.items])
 
+    from app.core.timezone import convert_utc_to_ist
+    ist_inv_date = convert_utc_to_ist(inv.created_at) if inv.created_at else None
     receipt_message = (
         f"🧾 *Digital Receipt - Dolly Toys and Kids Wear*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Invoice: *#{inv.invoice_number}*\n"
         f"Customer: *{cust_name}*\n"
-        f"Date: {inv.created_at.strftime('%d-%b-%Y %I:%M %p')}\n"
+        f"Date: {ist_inv_date.strftime('%d-%b-%Y %I:%M %p') if ist_inv_date else ''}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{items_text}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -356,6 +358,7 @@ def get_whatsapp_logs(
     db: Session = Depends(get_db)
 ):
     """Returns recent WhatsApp automated message delivery logs."""
+    from app.core.timezone import convert_utc_to_ist
     logs = db.query(WhatsAppLog).order_by(desc(WhatsAppLog.sent_at)).limit(limit).all()
     return [
         {
@@ -365,7 +368,7 @@ def get_whatsapp_logs(
             "message_type": l.message_type.value,
             "message_text": l.message_text,
             "status": l.status.value,
-            "sent_at": l.sent_at.strftime("%d-%b-%Y %I:%M %p")
+            "sent_at": convert_utc_to_ist(l.sent_at).strftime("%d-%b-%Y %I:%M %p") if l.sent_at else ""
         }
         for l in logs
     ]

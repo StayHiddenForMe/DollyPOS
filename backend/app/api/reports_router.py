@@ -19,6 +19,14 @@ from app.models.customer import Customer
 from app.models.vendor import Vendor
 from app.models.return_order import ReturnOrder
 from app.services.analytics_service import analytics_service
+from app.core.timezone import (
+    get_ist_now,
+    get_ist_today,
+    get_ist_day_bounds_in_utc,
+    get_ist_month_bounds_in_utc,
+    get_ist_year_bounds_in_utc,
+    convert_utc_to_ist
+)
 
 router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
 
@@ -30,23 +38,20 @@ def get_sales_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    now = datetime.utcnow()
-    
     if period == "custom" and start_date:
-        start_dt = datetime.fromisoformat(start_date).replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59, microsecond=999999) if end_date else now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        s_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date() if len(start_date.strip()) == 10 else datetime.fromisoformat(start_date).date()
+        e_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date() if (end_date and len(end_date.strip()) == 10) else (datetime.fromisoformat(end_date).date() if end_date else get_ist_today())
+        start_dt, _ = get_ist_day_bounds_in_utc(s_date)
+        _, end_dt = get_ist_day_bounds_in_utc(e_date)
     elif period == "daily":
-        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        start_dt, end_dt = get_ist_day_bounds_in_utc()
     elif period == "weekly":
-        start_dt = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        _, end_dt = get_ist_day_bounds_in_utc()
+        start_dt = end_dt - timedelta(days=7)
     elif period == "yearly":
-        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        start_dt, end_dt = get_ist_year_bounds_in_utc()
     else:  # monthly default
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = (start_dt + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        start_dt, end_dt = get_ist_month_bounds_in_utc()
 
     invoices = db.query(Invoice).options(joinedload(Invoice.items)).filter(
         Invoice.created_at >= start_dt,
@@ -115,7 +120,7 @@ def get_sales_report(
     fast_moving = sorted(product_sales_map.values(), key=lambda x: x["quantity_sold"], reverse=True)[:8]
 
     # Dead stock & Slow moving (unsold in 365+ days / >1 Year)
-    cutoff_dead = now - timedelta(days=365)
+    cutoff_dead = datetime.utcnow() - timedelta(days=365)
     dead_stock_totals = db.query(
         func.sum(Product.stock_quantity * Product.purchase_price).label("trapped_capital"),
         func.count(Product.id).label("total_count")
@@ -173,8 +178,8 @@ def get_yoy_comparison(
     Compares sales volume & revenue for any product keyword or seasonal category across 2026, 2025, 2024, etc.
     """
     clean_q = query.strip()
-    now = datetime.utcnow()
-    current_year = now.year
+    ist_now = get_ist_now()
+    current_year = ist_now.year
 
     # Get all invoice items matching query
     items = db.query(InvoiceItem, Invoice.created_at)\
@@ -186,8 +191,11 @@ def get_yoy_comparison(
     monthly_trend = defaultdict(lambda: {"units": 0, "revenue": 0.0})
 
     for item, created_at in items:
-        yr = created_at.year
-        month_str = created_at.strftime("%Y-%m")
+        ist_created = convert_utc_to_ist(created_at) if created_at else None
+        if not ist_created:
+            continue
+        yr = ist_created.year
+        month_str = ist_created.strftime("%Y-%m")
         yearly_data[yr]["units_sold"] += item.quantity
         yearly_data[yr]["revenue"] += item.total_price
         yearly_data[yr]["bill_count"] += 1
@@ -365,10 +373,11 @@ def get_category_boom_analysis(current_user: User = Depends(get_current_user), d
     Category Boom & Growth Radar:
     Compares category revenue and unit momentum for This Month vs Last Month and This Year vs Last Year.
     """
-    now = datetime.utcnow()
-    this_month_start = now.replace(day=1, hour=0, minute=0, second=0)
-    last_month_end = this_month_start - timedelta(seconds=1)
-    last_month_start = last_month_end.replace(day=1, hour=0, minute=0, second=0)
+    this_month_start, this_month_end = get_ist_month_bounds_in_utc()
+    ist_today = get_ist_today()
+    last_m_year = ist_today.year if ist_today.month > 1 else ist_today.year - 1
+    last_m_month = ist_today.month - 1 if ist_today.month > 1 else 12
+    last_month_start, last_month_end = get_ist_month_bounds_in_utc(last_m_year, last_m_month)
 
     categories = db.query(Category).all()
     results = []
@@ -378,7 +387,7 @@ def get_category_boom_analysis(current_user: User = Depends(get_current_user), d
         this_month_items = db.query(func.sum(InvoiceItem.total_price).label("rev"), func.sum(InvoiceItem.quantity).label("qty"))\
                              .join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
                              .join(Product, Product.id == InvoiceItem.product_id)\
-                             .filter(Invoice.created_at >= this_month_start, Invoice.is_cancelled == False)\
+                             .filter(Invoice.created_at >= this_month_start, Invoice.created_at <= this_month_end, Invoice.is_cancelled == False)\
                              .filter(Product.category_id == cat.id).first()
 
         # Last Month Sales
@@ -501,8 +510,8 @@ def get_seasonal_festival_calendar(
     Perpetual Indian Festival & Retail Peak Season Calendar.
     Perpetually calculates festival dates, countdowns, stocking advice, and today's active festival alert for ANY year (2024 to 2075+).
     """
-    target_year = year or datetime.utcnow().year
-    today_dt = date.today()
+    target_year = year or get_ist_today().year
+    today_dt = get_ist_today()
 
     festivals_db = [
         {
@@ -723,39 +732,43 @@ def export_sales_excel(
     db: Session = Depends(get_db)
 ):
     query = db.query(Invoice).filter(Invoice.is_cancelled == False, Invoice.is_held == False)
-    now = datetime.utcnow()
 
     if period == "all":
         pass
     elif period in ["daily", "today", "day"]:
-        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Invoice.created_at >= start_dt)
+        start_dt, end_dt = get_ist_day_bounds_in_utc()
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
     elif period in ["weekly", "week", "7days"]:
-        start_dt = now - timedelta(days=7)
-        query = query.filter(Invoice.created_at >= start_dt)
+        _, end_dt = get_ist_day_bounds_in_utc()
+        start_dt = end_dt - timedelta(days=7)
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
     elif period in ["monthly", "month", "30days"]:
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Invoice.created_at >= start_dt)
+        start_dt, end_dt = get_ist_month_bounds_in_utc()
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
     elif period in ["yearly", "year", "1year"]:
-        start_dt = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        query = query.filter(Invoice.created_at >= start_dt)
+        start_dt, end_dt = get_ist_year_bounds_in_utc()
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
     elif period == "custom" and start_date:
-        query = query.filter(Invoice.created_at >= datetime.fromisoformat(start_date))
-        if end_date:
-            query = query.filter(Invoice.created_at <= datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59))
+        s_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date() if len(start_date.strip()) == 10 else datetime.fromisoformat(start_date).date()
+        e_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date() if (end_date and len(end_date.strip()) == 10) else (datetime.fromisoformat(end_date).date() if end_date else get_ist_today())
+        start_dt, _ = get_ist_day_bounds_in_utc(s_date)
+        _, end_dt = get_ist_day_bounds_in_utc(e_date)
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
     elif start_date:
-        query = query.filter(Invoice.created_at >= datetime.fromisoformat(start_date))
-        if end_date:
-            query = query.filter(Invoice.created_at <= datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59))
+        s_date = datetime.strptime(start_date.strip(), "%Y-%m-%d").date() if len(start_date.strip()) == 10 else datetime.fromisoformat(start_date).date()
+        e_date = datetime.strptime(end_date.strip(), "%Y-%m-%d").date() if (end_date and len(end_date.strip()) == 10) else (datetime.fromisoformat(end_date).date() if end_date else get_ist_today())
+        start_dt, _ = get_ist_day_bounds_in_utc(s_date)
+        _, end_dt = get_ist_day_bounds_in_utc(e_date)
+        query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
 
     invoices = query.order_by(desc(Invoice.created_at)).all()
 
     data = []
     for inv in invoices:
-        ist_dt = inv.created_at + timedelta(hours=5, minutes=30)
+        ist_dt = convert_utc_to_ist(inv.created_at)
         data.append({
             "Bill Number": inv.bill_number,
-            "Date & Time (IST)": ist_dt.strftime("%d-%m-%Y %I:%M %p"),
+            "Date & Time (IST)": ist_dt.strftime("%d-%m-%Y %I:%M %p") if ist_dt else "-",
             "Customer Name": inv.customer_name or "Walk-in Customer",
             "Customer Phone": inv.customer_phone or "-",
             "Subtotal (₹)": inv.subtotal,

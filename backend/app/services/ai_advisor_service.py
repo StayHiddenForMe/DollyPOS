@@ -13,6 +13,12 @@ from app.models.vendor import Vendor
 from app.models.customer import Customer
 from app.models.expense import Expense
 from app.models.return_order import ReturnOrder
+from app.core.timezone import (
+    get_ist_now,
+    get_ist_today,
+    get_ist_month_bounds_in_utc,
+    convert_utc_to_ist
+)
 
 class AIAdvisorService:
     @staticmethod
@@ -143,7 +149,7 @@ class AIAdvisorService:
         Divides customer base into VIP Champions, Loyal Shoppers, At Risk, and Khata Dues.
         """
         customers = db.query(Customer).filter(Customer.is_active == True).all()
-        now = datetime.utcnow()
+        ist_now = get_ist_now()
 
         champions = []
         loyal = []
@@ -151,7 +157,8 @@ class AIAdvisorService:
         khata_due = []
 
         for c in customers:
-            days_since = (now - c.last_visit_at).days if c.last_visit_at else 999
+            last_v_ist = convert_utc_to_ist(c.last_visit_at) if c.last_visit_at else None
+            days_since = (ist_now - last_v_ist).days if last_v_ist else 999
             
             c_dict = {
                 "id": c.id,
@@ -521,8 +528,8 @@ class AIAdvisorService:
         Answers any natural language business query by executing analytics against the live database.
         """
         q = query_text.lower().strip()
-        now = datetime.utcnow()
-        month_start = now.replace(day=1, hour=0, minute=0, second=0)
+        ist_now = get_ist_now()
+        month_start, month_end = get_ist_month_bounds_in_utc()
 
         # 1. Total stock / inventory value query
         if any(w in q for w in ["stock value", "inventory value", "total stock", "worth of stock", "valuation"]):
@@ -557,16 +564,16 @@ class AIAdvisorService:
                 kw = q.replace("compare", "").replace("how much", "").replace("i sold", "").replace("last year", "").replace("this year", "").strip()
             if not kw: kw = "Wear"
 
-            current_yr = now.year
+            current_yr = ist_now.year
             items_q = db.query(InvoiceItem, Invoice.created_at)\
                         .join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
                         .filter(Invoice.is_cancelled == False)\
                         .filter(InvoiceItem.item_name.ilike(f"%{kw}%")).all()
 
-            this_yr_rev = sum(item.total_price for item, dt in items_q if dt.year == current_yr)
-            this_yr_qty = sum(item.quantity for item, dt in items_q if dt.year == current_yr)
-            last_yr_rev = sum(item.total_price for item, dt in items_q if dt.year == current_yr - 1)
-            last_yr_qty = sum(item.quantity for item, dt in items_q if dt.year == current_yr - 1)
+            this_yr_rev = sum(item.total_price for item, dt in items_q if (convert_utc_to_ist(dt).year if dt else 0) == current_yr)
+            this_yr_qty = sum(item.quantity for item, dt in items_q if (convert_utc_to_ist(dt).year if dt else 0) == current_yr)
+            last_yr_rev = sum(item.total_price for item, dt in items_q if (convert_utc_to_ist(dt).year if dt else 0) == current_yr - 1)
+            last_yr_qty = sum(item.quantity for item, dt in items_q if (convert_utc_to_ist(dt).year if dt else 0) == current_yr - 1)
 
             growth = round(((this_yr_rev - last_yr_rev) / max(1.0, last_yr_rev)) * 100, 1) if last_yr_rev > 0 else (100.0 if this_yr_rev > 0 else 0.0)
 
@@ -580,7 +587,6 @@ class AIAdvisorService:
 
         # 3. Category Boom & Momentum query
         if any(w in q for w in ["category boom", "boom", "growth", "which category", "trending category", "surge"]):
-            this_m_start = now.replace(day=1, hour=0, minute=0, second=0)
             cats = db.query(Category).all()
             cat_rankings = []
 
@@ -588,7 +594,7 @@ class AIAdvisorService:
                 rev = db.query(func.sum(InvoiceItem.total_price))\
                         .join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
                         .join(Product, Product.id == InvoiceItem.product_id)\
-                        .filter(Invoice.created_at >= this_m_start, Invoice.is_cancelled == False)\
+                        .filter(Invoice.created_at >= month_start, Invoice.created_at <= month_end, Invoice.is_cancelled == False)\
                         .filter(Product.category_id == c.id).scalar() or 0.0
                 cat_rankings.append((c.name, rev))
 
@@ -603,10 +609,10 @@ class AIAdvisorService:
 
         # 4. Sales / Profit / Performance query
         if any(w in q for w in ["profit", "sales", "revenue", "turnover", "how much we earned", "income"]):
-            invoices_month = db.query(Invoice).filter(Invoice.created_at >= month_start, Invoice.is_cancelled == False).all()
+            invoices_month = db.query(Invoice).filter(Invoice.created_at >= month_start, Invoice.created_at <= month_end, Invoice.is_cancelled == False).all()
             sales_month = sum(i.grand_total for i in invoices_month)
             cogs_month = sum(item.cost_price * item.quantity for i in invoices_month for item in i.items)
-            expenses_month = db.query(func.sum(Expense.amount)).filter(Expense.expense_date >= month_start).scalar() or 0.0
+            expenses_month = db.query(func.sum(Expense.amount)).filter(Expense.expense_date >= month_start, Expense.expense_date <= month_end).scalar() or 0.0
             gross_profit = sales_month - cogs_month
             net_profit = gross_profit - expenses_month
             margin_pct = round((gross_profit / max(1, sales_month)) * 100, 1)
@@ -700,7 +706,7 @@ class AIAdvisorService:
     @staticmethod
     def get_seasonal_advisory() -> Dict[str, Any]:
         """Festival & Seasonal inventory stocking advisory."""
-        current_month = datetime.utcnow().month
+        current_month = get_ist_today().month
         
         if current_month in [8, 9, 10, 11]:
             return {

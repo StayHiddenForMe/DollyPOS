@@ -37,7 +37,8 @@ class ExchangeProcessRequest(BaseModel):
     reason: Optional[str] = "Exchange / Return"
 
 def generate_return_number(db: Session) -> str:
-    ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    from app.core.timezone import get_ist_now
+    ist_now = get_ist_now()
     today_str = ist_now.strftime("%Y%m%d")
     prefix = f"RET-{today_str}-"
     last_ret = db.query(ReturnOrder).filter(ReturnOrder.return_number.like(f"{prefix}%")).order_by(desc(ReturnOrder.id)).first()

@@ -1,0 +1,206 @@
+================================================================================
+  DOLLY POS - COMPLETE PROJECT FILES & FOLDERS AUDIT & INVENTORY
+  Dolly Toys & Kids Wear, Dhule
+  Generated: September 2026
+================================================================================
+
+This document provides an exhaustive, item-by-item breakdown of every single file
+and directory inside the "Antigravity DollyPos" project, explaining:
+1. What each file/folder does.
+2. Its exact classification (Essential / Installer / Utility / Temporary / Legacy).
+3. Which files MUST be preserved and which files CAN be safely cleaned up.
+
+
+================================================================================
+[GROUP 1] 🔴 ESSENTIAL CORE PRODUCTION (MUST KEEP - DO NOT DELETE)
+================================================================================
+These files and directories form the complete core of Dolly POS (source code,
+FastAPI API server, React frontend, desktop launcher, and official manuals).
+
+1. backend/app/
+   - Purpose: The entire backend core source code.
+   - Contains:
+     * backend/app/main.py             : FastAPI entrypoint, middleware, health check.
+     * backend/app/config.py           : Core system settings, database URLs, JWT keys.
+     * backend/app/core/database.py    : Database engine with multi-host connection & SQLite fallback.
+     * backend/app/core/security.py    : Password hashing (Bcrypt) & JWT token generation.
+     * backend/app/models/             : SQLAlchemy database tables (Product, Bill, User, Khata, etc.).
+     * backend/app/schemas/            : Pydantic request/response validation schemas.
+     * backend/app/api/                : All 18 API routers (billing, barcode, inventory, etc.).
+     * backend/app/services/           : Thermal receipt rendering, barcode generation, AI advisor.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+2. backend/desktop_app.py
+   - Purpose: Native desktop runner. Boots the FastAPI backend server, mounts
+     the React production build, and automatically launches Chrome/Edge in
+     maximized App Mode.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+3. backend/build_standalone_exe.py
+   - Purpose: PyInstaller compilation script that bundles Python, FastAPI, and
+     the frontend into dist_app/DollyPOS/DollyPOS.exe.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+4. backend/package_single_setup_exe.py
+   - Purpose: Packaging engine that compiles the single-click setup wizard
+     (DollyPOS_Setup_v1.0.0.exe).
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+5. backend/requirements.txt
+   - Purpose: Complete list of Python libraries and versions needed to run the app.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+6. backend/venv/
+   - Purpose: Python Virtual Environment containing all installed Python packages.
+   - Status : CRITICAL RUNTIME (DO NOT DELETE)
+
+7. frontend/src/
+   - Purpose: Complete modern React 18 + TypeScript POS frontend user interface.
+   - Contains:
+     * frontend/src/pages/             : Billing, Inventory, Reports, Khata, Settings, etc.
+     * frontend/src/components/        : Layout, Statusbar, Thermal Print modals, Cart.
+     * frontend/src/store/             : Zustand state stores (cart, auth, settings).
+     * frontend/src/utils/api.ts       : Axios HTTP client with JWT interceptors.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+8. frontend/package.json, vite.config.ts, tailwind.config.js, tsconfig.json
+   - Purpose: Frontend dependency definitions, Vite compiler, and Tailwind CSS styles.
+   - Status : CRITICAL CORE (DO NOT DELETE)
+
+9. frontend/node_modules/
+   - Purpose: Installed JavaScript/TypeScript libraries for React and Vite.
+   - Status : CRITICAL RUNTIME (DO NOT DELETE)
+
+10. docs/
+    - Purpose: Official customer and technical handoff manuals:
+      * docs/Dolly_POS_User_Manual.pdf                     : Complete user manual.
+      * docs/Dolly_POS_Technical_Handoff.pdf               : Full developer & database schema doc.
+      * docs/Dolly_POS_Disaster_Recovery_and_New_Laptop_Guide.pdf : Disaster recovery guide.
+    - Status : CRITICAL DOCUMENTATION (DO NOT DELETE)
+
+11. Setup_PostgreSQL_Database.bat & setup_database.ps1
+    - Purpose: 1-click installer and database creation scripts for PostgreSQL 16.
+    - Status : CRITICAL SETUP (DO NOT DELETE)
+
+12. NEW_LAPTOP_SETUP_README.md & README.md
+    - Purpose: Detailed Markdown guides for deployment, disaster recovery, and architecture.
+    - Status : CRITICAL DOCUMENTATION (DO NOT DELETE)
+
+13. .gitignore & LICENSE
+    - Purpose: Git version control exclusion rules and software license.
+    - Status : CRITICAL SYSTEM (DO NOT DELETE)
+
+
+================================================================================
+[GROUP 2] 🟢 DISTRIBUTION & NEW LAPTOP BUNDLE (FOR DEPLOYMENT)
+================================================================================
+These are the compiled setup packages ready to copy and run on new laptops.
+
+1. dist_installer/
+   - Purpose: The complete standalone installer folder to distribute.
+   - Contains:
+     * DollyPOS_Setup_v1.0.0.exe       : 1-Click POS application installer wizard.
+     * Setup_PostgreSQL_Database.bat   : 1-Click PostgreSQL 16 installer launcher.
+     * setup_database.ps1              : Digitally signed setup engine script.
+     * DollyToys_Publisher.cer         : Official digital security certificate.
+     * NEW_LAPTOP_SETUP_README.md      : Formatted setup guide.
+     * newLaptopSetup_Readme.txt       : Notepad-friendly setup guide.
+   - Status : READY-TO-USE PRODUCTION INSTALLER BUNDLE (KEEP)
+
+2. dist_app/
+   - Purpose: The extracted standalone executable folder (dist_app/DollyPOS/DollyPOS.exe).
+   - Status : STANDALONE EXECUTABLE BUILD (KEEP)
+
+
+================================================================================
+[GROUP 3] 🟡 USEFUL DATABASE & MAINTENANCE UTILITIES (GOOD TO KEEP)
+================================================================================
+Helpful scripts and starter backups for database maintenance.
+
+1. database/dolly_pos_full_backup.sql
+   - Purpose: Production starter SQL database backup (categories, store settings, schema).
+   - Status : BACKUP SNAPSHOT (KEEP)
+
+2. scripts/backup_db.ps1
+   - Purpose: PowerShell utility for taking manual or scheduled PostgreSQL backups.
+   - Status : UTILITY (KEEP)
+
+3. scripts/database_optimizer_and_vacuum.ps1
+   - Purpose: Maintenance script to run PostgreSQL VACUUM ANALYZE and reindex.
+   - Status : UTILITY (KEEP)
+
+4. dolly_pos_master_security_key.txt
+   - Purpose: Master keys reference file.
+   - Status : REFERENCE (KEEP)
+
+
+================================================================================
+[GROUP 4] ⚪ TEMPORARY BUILD CACHES, TEST SCRIPTS & LEGACY FILES
+          (CAN BE SAFELY CLEANED UP OR ARCHIVED)
+================================================================================
+These files were created during intermediate feature testing, development benchmarks,
+or as compilation caches. They are NOT required for the application to function.
+
+A. PyInstaller Build Caches & Temp Artifacts (Safe to delete):
+   - backend/build/                     : PyInstaller intermediate build cache directory.
+   - backend/build_installer/           : Setup wizard intermediate build cache directory.
+   - backend/app_payload.zip            : Temp zip archive created during installer build.
+   - backend/setup_wizard_script.py     : Temp script generated during installer build.
+   - backend/dollypos_local.db          : Local SQLite test database from dev testing.
+   - backend/dolly_pos.db               : Local SQLite test database from dev testing.
+   - backend/test_backups_dir/          : Temp folder from unit testing auto-backups.
+
+B. Development Test & Benchmark Scripts in backend/ (Safe to delete or move to a tests/ folder):
+   - backend/benchmark_10_lakh_scale.py
+   - backend/generate_massive_data.py
+   - backend/test_12_latest_features.py
+   - backend/test_13_enhancements.py
+   - backend/test_ai_copilot_enhanced.py
+   - backend/test_ai_longevity.py
+   - backend/test_all_22_features.py
+   - backend/test_all_6_points.py
+   - backend/test_auto_backup.py
+   - backend/test_batch_enhancements.py
+   - backend/test_checkout_fix.py
+   - backend/test_customer_dropdown_and_exact_details.py
+   - backend/test_dashboard_endpoint.py
+   - backend/test_e2e_suite.py
+   - backend/test_khata_customer_sync.py
+   - backend/test_login_universal.py
+   - backend/test_massive_data_performance.py
+   - backend/test_perpetual_years.py
+   - backend/test_redesign_modules.py
+   - backend/test_single_product_save.py
+   - backend/test_speed_dial_and_singles.py
+   - backend/test_whatsapp_bulk_campaign.py
+   - backend/test_yoy_calendar_enhanced.py
+   - backend/test_yoy_size_breakdown.py
+
+C. Legacy Batch Files & Superseded Installers (Safe to delete):
+   - installer/ folder                  : Old InnoSetup experiment superseded by native .exe.
+   - DollyPOS_Launcher.bat              : Old CMD launcher superseded by native DollyPOS.exe.
+   - DollyPOS_Setup_Installer.bat       : Old manual batch installer superseded by single .exe.
+   - start_pos.bat                      : Old dev runner superseded by desktop_app.py.
+   - backup_db.bat                      : Old batch file superseded by in-app backups.
+
+D. Duplicate Root PDF Files (Already consolidated inside docs/ folder):
+   - Dolly_POS_Master_Handbook_and_Troubleshooting_Guide.pdf (Merged in docs/Dolly_POS_Technical_Handoff.pdf)
+   - TSC_TE244_Thermal_Printer_Setup_Guide.pdf (Merged in documentation)
+
+
+================================================================================
+SUMMARY: WHAT YOU ACTUALLY NEED IN PRACTICE
+================================================================================
+
+1. TO INSTALL ON ANY NEW LAPTOP:
+   --> You only need the "dist_installer" folder. That's it!
+
+2. TO MODIFY CODE OR DEVELOP IN THE FUTURE:
+   --> You only need "backend/app/", "backend/desktop_app.py", "frontend/src/",
+       "requirements.txt", and the build scripts.
+
+3. CLEANUP RESULT:
+   --> Deleting Group 4 files frees up hundreds of megabytes without breaking
+       a single feature of Dolly POS!
+
+================================================================================

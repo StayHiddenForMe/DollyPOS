@@ -241,7 +241,8 @@ async def import_customers_excel(
 
 @router.get("/reminders/birthdays")
 def get_upcoming_birthdays(db: Session = Depends(get_db)):
-    today_month_day = datetime.utcnow().strftime("%m-%d")
+    from app.core.timezone import get_ist_today
+    today_month_day = get_ist_today().strftime("%m-%d")
     customers = db.query(Customer).filter(
         Customer.is_active == True,
         Customer.date_of_birth != None

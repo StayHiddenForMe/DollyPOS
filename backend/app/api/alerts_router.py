@@ -34,8 +34,7 @@ def get_alerts_summary(current_user: User = Depends(get_current_user), db: Sessi
     total_vendor_dues = sum(v.outstanding_due for v in pending_vendors)
 
     # 3. Dead stock & trapped capital (>1 Year / 365+ days stagnation matching Smart Advisor)
-    ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    cutoff_dead = ist_now - timedelta(days=365)
+    cutoff_dead = datetime.utcnow() - timedelta(days=365)
     dead_stock_totals = db.query(
         func.sum(Product.stock_quantity * Product.purchase_price).label("trapped_capital"),
         func.count(Product.id).label("total_count")
