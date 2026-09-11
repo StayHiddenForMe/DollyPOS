@@ -12,8 +12,11 @@ class AnalyticsService:
     @staticmethod
     def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         """Calculates real-time daily, monthly, and overall metrics in sub-millisecond SQL queries."""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
         month_start = today_start.replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
 
         # 1. Today's Invoices SQL aggregation
         today_inv_stats = db.query(
@@ -24,6 +27,7 @@ class AnalyticsService:
             func.sum(Invoice.due_amount).label("credit")
         ).filter(
             Invoice.created_at >= today_start,
+            Invoice.created_at <= today_end,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).first()
@@ -35,15 +39,19 @@ class AnalyticsService:
         today_upi = float(today_inv_stats.upi or 0.0) if today_inv_stats else 0.0
         today_credit = float(today_inv_stats.credit or 0.0) if today_inv_stats else 0.0
 
-        # 2. Today's Expenses (1 SQL query)
-        today_expenses = db.query(func.sum(Expense.amount)).filter(Expense.expense_date >= today_start).scalar() or 0.0
+        # 2. Today's Expenses (1 SQL query bounded to today)
+        today_expenses = db.query(func.sum(Expense.amount)).filter(
+            Expense.expense_date >= today_start,
+            Expense.expense_date <= today_end
+        ).scalar() or 0.0
 
-        # 3. Today's COGS (1 SQL query)
+        # 3. Today's COGS (1 SQL query bounded to today)
         today_cogs = db.query(
             func.sum((InvoiceItem.cost_price or 0.0) * InvoiceItem.quantity)
         ).join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
          .filter(
             Invoice.created_at >= today_start,
+            Invoice.created_at <= today_end,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).scalar() or 0.0
@@ -57,14 +65,18 @@ class AnalyticsService:
             Product.stock_quantity <= Product.min_stock_alert
         ).scalar() or 0
 
-        # 5. Month Sales & Expenses
+        # 5. Month Sales & Expenses (bounded to current month)
         month_sales = db.query(func.sum(Invoice.grand_total)).filter(
             Invoice.created_at >= month_start,
+            Invoice.created_at <= month_end,
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).scalar() or 0.0
 
-        month_expenses = db.query(func.sum(Expense.amount)).filter(Expense.expense_date >= month_start).scalar() or 0.0
+        month_expenses = db.query(func.sum(Expense.amount)).filter(
+            Expense.expense_date >= month_start,
+            Expense.expense_date <= month_end
+        ).scalar() or 0.0
 
         # 6. Total Inventory Valuation
         inventory_valuation = db.query(

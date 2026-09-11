@@ -480,8 +480,8 @@ export const DashboardPage: React.FC = () => {
                   points={polylineString}
                 />
 
-                {/* Data Points */}
-                {chartPoints.map((p: any, idx: number) => (
+                {/* Data Points (Only displayed for 31 days or less to maintain ultra-clean line chart visuals on 1Y/5Y) */}
+                {chartPoints.length <= 31 && chartPoints.map((p: any, idx: number) => (
                   <circle
                     key={idx}
                     cx={p.x}
@@ -490,6 +490,16 @@ export const DashboardPage: React.FC = () => {
                     className={`transition-all ${hoveredPoint?.date === p.date ? 'fill-pink-500 stroke-white stroke-2' : 'fill-pink-600'}`}
                   />
                 ))}
+
+                {/* Active Hover Point Circle (Always displayed on hover for 6M, 1Y, 5Y, and Custom) */}
+                {hoveredPoint && chartPoints.length > 31 && (
+                  <circle
+                    cx={hoveredPoint.x}
+                    cy={hoveredPoint.y}
+                    r={5}
+                    className="fill-pink-500 stroke-white stroke-2"
+                  />
+                )}
 
                 {/* Hover Vertical Guide Line */}
                 {hoveredPoint && (
