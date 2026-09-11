@@ -69,7 +69,7 @@ def find_browser_exe():
     return None
 
 def open_browser():
-    """Wait for backend health endpoint, then open Chrome / default browser in maximized window."""
+    """Wait for backend health endpoint, then open Chrome / default browser in true full-screen mode."""
     for _ in range(30):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
@@ -81,7 +81,7 @@ def open_browser():
     browser_exe = find_browser_exe()
     if browser_exe:
         try:
-            subprocess.Popen([browser_exe, "--start-maximized", "http://127.0.0.1:8000"])
+            subprocess.Popen([browser_exe, "--start-fullscreen", "http://127.0.0.1:8000"])
             return
         except Exception:
             pass
