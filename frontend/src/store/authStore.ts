@@ -12,8 +12,14 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
-  const storedUser = localStorage.getItem('dolly_user');
-  const storedToken = localStorage.getItem('dolly_token');
+  // Clean up any persistent legacy tokens from localStorage for store security
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('dolly_user');
+    localStorage.removeItem('dolly_token');
+  }
+
+  const storedUser = typeof window !== 'undefined' ? sessionStorage.getItem('dolly_user') : null;
+  const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem('dolly_token') : null;
 
   return {
     user: storedUser ? JSON.parse(storedUser) : null,
@@ -21,14 +27,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
     isAuthenticated: !!storedToken,
 
     login: (user: User, token: string) => {
-      localStorage.setItem('dolly_user', JSON.stringify(user));
-      localStorage.setItem('dolly_token', token);
+      sessionStorage.setItem('dolly_user', JSON.stringify(user));
+      sessionStorage.setItem('dolly_token', token);
       set({ user, token, isAuthenticated: true });
     },
 
     logout: () => {
-      localStorage.removeItem('dolly_user');
-      localStorage.removeItem('dolly_token');
+      sessionStorage.removeItem('dolly_user');
+      sessionStorage.removeItem('dolly_token');
       set({ user: null, token: null, isAuthenticated: false });
     },
 

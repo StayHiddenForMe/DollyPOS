@@ -53,8 +53,23 @@ if os.path.exists(FRONTEND_DIST_DIR):
             return FileResponse(file_path)
         return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
 
+import subprocess
+
+def find_browser_exe():
+    candidates = [
+        os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
 def open_browser():
-    """Wait for backend health endpoint, then open Chrome / default browser."""
+    """Wait for backend health endpoint, then open Chrome / default browser in maximized window."""
     for _ in range(30):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
@@ -62,6 +77,14 @@ def open_browser():
                     break
         except Exception:
             time.sleep(0.2)
+
+    browser_exe = find_browser_exe()
+    if browser_exe:
+        try:
+            subprocess.Popen([browser_exe, "--start-maximized", "http://127.0.0.1:8000"])
+            return
+        except Exception:
+            pass
     webbrowser.open("http://127.0.0.1:8000")
 
 def main():

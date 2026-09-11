@@ -12,7 +12,7 @@ const api = axios.create({
 
 // Attach JWT token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('dolly_token');
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('dolly_token') : null;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -24,8 +24,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('dolly_token');
-      localStorage.removeItem('dolly_user');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('dolly_token');
+        sessionStorage.removeItem('dolly_user');
+      }
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
