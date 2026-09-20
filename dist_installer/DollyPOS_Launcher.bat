@@ -5,15 +5,28 @@ cd /d "%~dp0"
 echo ======================================================================
 echo           Dolly Toys and Kids Wear - POS ^& Retail Management
 echo ======================================================================
-echo Starting Dolly POS Standalone Server...
+echo Starting Dolly POS Desktop App...
 echo.
 
-if not exist "%~dp0backend\venv\Scripts\python.exe" (
-    echo Error: Python virtual environment not found in backend\venv.
-    echo Please run Install-DollyPOS.bat to setup environment.
-    pause
-    exit /b 1
+if exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
+    start "" "%~dp0dist_app\DollyPOS\DollyPOS.exe"
+    exit /b 0
+)
+if exist "%~dp0..\dist_app\DollyPOS\DollyPOS.exe" (
+    start "" "%~dp0..\dist_app\DollyPOS\DollyPOS.exe"
+    exit /b 0
+)
+if exist "%~dp0backend\venv\Scripts\python.exe" (
+    start "" "%~dp0backend\venv\Scripts\python.exe" "%~dp0backend\desktop_app.py"
+    exit /b 0
+)
+if exist "%~dp0..\backend\venv\Scripts\python.exe" (
+    start "" "%~dp0..\backend\venv\Scripts\python.exe" "%~dp0..\backend\desktop_app.py"
+    exit /b 0
 )
 
-start "" "%~dp0backend\venv\Scripts\python.exe" "%~dp0backend\desktop_app.py"
-exit
+echo Error: Standalone DollyPOS.exe or Python environment not found.
+echo Please ensure dist_app\DollyPOS or backend\venv exists.
+pause
+exit /b 1
+

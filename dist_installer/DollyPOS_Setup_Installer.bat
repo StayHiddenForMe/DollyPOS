@@ -12,6 +12,18 @@ echo This wizard will install Dolly POS on your computer and create a
 echo Desktop shortcut icon for 1-click launching.
 echo.
 
+:: Detect root project folder whether run from root or dist_installer subfolder
+set "ROOT_DIR=%~dp0"
+if exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
+    set "ROOT_DIR=%~dp0"
+) else if exist "%~dp0..\dist_app\DollyPOS\DollyPOS.exe" (
+    set "ROOT_DIR=%~dp0..\"
+) else if exist "%~dp0backend\desktop_app.py" (
+    set "ROOT_DIR=%~dp0"
+) else if exist "%~dp0..\backend\desktop_app.py" (
+    set "ROOT_DIR=%~dp0..\"
+)
+
 :: 1. System Requirements Scan
 echo [1/4] Scanning System Requirements...
 echo  - Operating System: Windows 64-bit... [OK]
@@ -20,11 +32,11 @@ echo  - Thermal and Barcode Printer Ports... [OK]
 echo.
 
 :: 2. Check if Standalone DollyPOS.exe is built
-if not exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
+if not exist "%ROOT_DIR%dist_app\DollyPOS\DollyPOS.exe" (
     echo.
     echo [2/4] Compiling Standalone Executable Binary...
-    if exist "%~dp0backend\venv\Scripts\python.exe" (
-        call "%~dp0backend\venv\Scripts\python.exe" "%~dp0backend\build_standalone_exe.py"
+    if exist "%ROOT_DIR%backend\venv\Scripts\python.exe" (
+        call "%ROOT_DIR%backend\venv\Scripts\python.exe" "%ROOT_DIR%backend\build_standalone_exe.py"
     ) else (
         echo Error: Python environment not found. Please ensure backend files are present.
         pause
@@ -36,8 +48,8 @@ if not exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
 
 :: 3. Setup Desktop and Start Menu Shortcuts
 echo [3/4] Creating Desktop and Start Menu Shortcuts...
-set "EXE_PATH=%~dp0dist_app\DollyPOS\DollyPOS.exe"
-set "WORKING_DIR=%~dp0dist_app\DollyPOS"
+set "EXE_PATH=%ROOT_DIR%dist_app\DollyPOS\DollyPOS.exe"
+set "WORKING_DIR=%ROOT_DIR%dist_app\DollyPOS"
 set "DESKTOP_SHORTCUT=%USERPROFILE%\Desktop\Dolly POS.lnk"
 set "START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Dolly POS"
 
@@ -52,12 +64,12 @@ powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateS
 :: Create Start Menu Shortcuts
 powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%START_MENU_SHORTCUT%'); $s.TargetPath = '%EXE_PATH%'; $s.WorkingDirectory = '%WORKING_DIR%'; $s.Description = 'Dolly Toys and Kids Wear POS System'; $s.Save()"
 
-if exist "%~dp0docs\Dolly_POS_User_Manual.pdf" (
-    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%MANUAL_SHORTCUT%'); $s.TargetPath = '%~dp0docs\Dolly_POS_User_Manual.pdf'; $s.Description = 'Dolly POS User Manual'; $s.Save()"
+if exist "%ROOT_DIR%docs\Dolly_POS_User_Manual.pdf" (
+    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%MANUAL_SHORTCUT%'); $s.TargetPath = '%ROOT_DIR%docs\Dolly_POS_User_Manual.pdf'; $s.Description = 'Dolly POS User Manual'; $s.Save()"
 )
 
-if exist "%~dp0installer\Uninstall-DollyPOS.bat" (
-    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%UNINSTALL_SHORTCUT%'); $s.TargetPath = '%~dp0installer\Uninstall-DollyPOS.bat'; $s.Description = 'Uninstall Dolly POS'; $s.Save()"
+if exist "%ROOT_DIR%installer\Uninstall-DollyPOS.bat" (
+    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%UNINSTALL_SHORTCUT%'); $s.TargetPath = '%ROOT_DIR%installer\Uninstall-DollyPOS.bat'; $s.Description = 'Uninstall Dolly POS'; $s.Save()"
 )
 
 echo.
@@ -75,3 +87,4 @@ if /i "%LAUNCH%"=="Y" (
 )
 
 exit
+
