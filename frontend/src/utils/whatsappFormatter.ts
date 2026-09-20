@@ -135,7 +135,7 @@ export function renderWhatsAppBillMessage(template: string, receiptData: any): s
     .replace(/{tax_line}/g, taxLine)
     .replace(/{tax}/g, taxAmount)
     .replace(/{extra_charges_line}/g, extraChargesLine)
-    .replace(/{extra_charges}/g, extraChargesAmount)
+    .replace(/{extra_charges}/g, Number(extraChargesAmount) > 0 ? `+₹${extraChargesAmount}` : '')
     .replace(/{grand_total}/g, grandTotal)
     .replace(/{total}/g, grandTotal)
     .replace(/{paid_line}/g, paidLine)

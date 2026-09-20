@@ -165,7 +165,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
             </div>
 
             {/* Items Table */}
-            <div className={`py-1.5 ${(receiptData.discount_amount > 0 || receiptData.tax_amount > 0) ? 'border-b border-dashed border-black' : ''}`}>
+            <div className={`py-1.5 ${(Number(receiptData.discount_amount || 0) > 0 || Number(receiptData.tax_amount || 0) > 0 || Number(receiptData.extra_charges_amount || 0) > 0) ? 'border-b border-dashed border-black' : ''}`}>
               <div className="flex justify-between font-black pb-1 text-[10.5px] uppercase text-black">
                 <span className="flex-1 min-w-0 pr-1 text-left">Item</span>
                 <span className="w-7 text-center shrink-0">Qty</span>
@@ -196,20 +196,20 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
 
             {/* Financial Summary */}
             <div className="py-2 border-b border-dashed border-black space-y-1 text-[11px] text-black font-semibold">
-              {/* Conditional Subtotal: Show when discount, tax, or extra charges are present */}
-              {(receiptData.discount_amount > 0 || receiptData.tax_amount > 0 || (receiptData.extra_charges_amount && receiptData.extra_charges_amount > 0)) && (
+              {/* Conditional Subtotal: Show ONLY when discount, tax, or extra charges are actually > 0 */}
+              {(Number(receiptData.discount_amount || 0) > 0 || Number(receiptData.tax_amount || 0) > 0 || Number(receiptData.extra_charges_amount || 0) > 0) ? (
                 <div className="space-y-1 pb-1">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
                     <span>₹{receiptData.subtotal}</span>
                   </div>
-                  {receiptData.discount_amount > 0 && (
+                  {Number(receiptData.discount_amount || 0) > 0 && (
                     <div className="flex justify-between font-bold">
                       <span>Discount:</span>
                       <span>-₹{receiptData.discount_amount}</span>
                     </div>
                   )}
-                  {receiptData.tax_amount > 0 && (
+                  {Number(receiptData.tax_amount || 0) > 0 && (
                     <>
                       <div className="flex justify-between text-[10.5px]">
                         <span>CGST:</span>
@@ -225,7 +225,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                       </div>
                     </>
                   )}
-                  {receiptData.extra_charges_amount > 0 && (
+                  {Number(receiptData.extra_charges_amount || 0) > 0 && (
                     <div className="space-y-0.5 pt-0.5 border-t border-dotted border-black">
                       {(() => {
                         let parsed: any[] = [];
@@ -258,20 +258,20 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                     </div>
                   )}
                 </div>
-              )}
+              ) : null}
               {/* Exactly ONE solid line before GRAND TOTAL */}
               <div className="flex justify-between font-black text-[15px] pt-1 border-t border-black text-black">
                 <span>GRAND TOTAL:</span>
                 <span>₹{receiptData.grand_total}</span>
               </div>
               
-              {/* Change / Due (Paid line removed to save thermal vertical space) */}
-              {(receiptData.change_amount > 0 || receiptData.due_amount > 0) && (
+              {/* Change / Due */}
+              {(Number(receiptData.change_amount || 0) > 0 || Number(receiptData.due_amount || 0) > 0) ? (
                 <div className="flex justify-between text-[10.5px] font-bold text-black">
-                  {receiptData.change_amount > 0 && <span>Change: ₹{receiptData.change_amount}</span>}
-                  {receiptData.due_amount > 0 && <span>Khata Due: ₹{receiptData.due_amount}</span>}
+                  {Number(receiptData.change_amount || 0) > 0 ? <span>Change: ₹{receiptData.change_amount}</span> : null}
+                  {Number(receiptData.due_amount || 0) > 0 ? <span>Khata Due: ₹{receiptData.due_amount}</span> : null}
                 </div>
-              )}
+              ) : null}
 
               {/* No of items & Total Quantity */}
               <div className="border-t border-dotted border-black pt-1.5 mt-1 text-[11px] font-bold text-black flex justify-between">
