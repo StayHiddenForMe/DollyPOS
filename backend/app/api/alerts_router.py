@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from app.core.database import get_db
+from app.core.timezone import get_ist_now
 from app.api.auth_router import get_current_user
 from app.models.user import User
 from app.models.product import Product
 from app.models.vendor import Vendor
 from app.services.analytics_service import analytics_service
-
 from app.models.settings import StoreSettings
 
 router = APIRouter(prefix="/alerts", tags=["Live System Alerts"])
@@ -52,6 +52,7 @@ def get_alerts_summary(current_user: User = Depends(get_current_user), db: Sessi
     dead_stock_count = int(dead_stock_totals.total_count or 0) if dead_stock_totals else 0
 
     # 4. Check Shop Foundation Anniversary based on StoreSettings.opening_date
+    ist_now = get_ist_now()
     st = db.query(StoreSettings).first()
     shop_name = st.shop_name if st and st.shop_name else "Dolly Toys & Kids Wear"
     opening_date_str = st.opening_date if st and st.opening_date else "2002-01-01"

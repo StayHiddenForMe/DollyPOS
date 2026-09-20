@@ -112,6 +112,8 @@ def create_invoice(
         discount_amount=invoice_in.discount_amount,
         discount_type=invoice_in.discount_type,
         tax_amount=invoice_in.tax_amount,
+        extra_charges_amount=invoice_in.extra_charges_amount,
+        extra_charges_breakdown=invoice_in.extra_charges_breakdown,
         round_off=invoice_in.round_off,
         grand_total=invoice_in.grand_total,
         paid_amount=invoice_in.paid_amount,

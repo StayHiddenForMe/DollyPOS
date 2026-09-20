@@ -127,6 +127,8 @@ class ReceiptService:
             "subtotal": invoice.subtotal if not is_gift_receipt else 0.0,
             "discount_amount": invoice.discount_amount if not is_gift_receipt else 0.0,
             "tax_amount": invoice.tax_amount if not is_gift_receipt else 0.0,
+            "extra_charges_amount": getattr(invoice, 'extra_charges_amount', 0.0) if not is_gift_receipt else 0.0,
+            "extra_charges_breakdown": getattr(invoice, 'extra_charges_breakdown', None) if not is_gift_receipt else None,
             "round_off": invoice.round_off if not is_gift_receipt else 0.0,
             "grand_total": invoice.grand_total if not is_gift_receipt else 0.0,
             "paid_amount": invoice.paid_amount if not is_gift_receipt else 0.0,
@@ -134,7 +136,8 @@ class ReceiptService:
             "due_amount": invoice.due_amount if not is_gift_receipt else 0.0,
             "payment_mode": invoice.payment_mode.value if hasattr(invoice.payment_mode, 'value') else str(invoice.payment_mode),
             "upi_qr_base64": qr_info["qr_image_base64"] if qr_info else None,
-            "thermal_width": store_settings.thermal_width if store_settings else "80mm"
+            "thermal_width": store_settings.thermal_width if store_settings else "80mm",
+            "whatsapp_bill_template": getattr(store_settings, 'whatsapp_bill_template', None) if store_settings else None
         }
 
 receipt_service = ReceiptService()

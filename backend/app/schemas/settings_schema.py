@@ -22,6 +22,7 @@ class StoreSettingsBase(BaseModel):
     is_power_footer_bold: bool = False
     terms_and_conditions: Optional[str] = "1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund."
     show_terms_on_bill: bool = True
+    whatsapp_bill_template: Optional[str] = None
     
     # Social Media
     instagram_handle: Optional[str] = "@dollytoys_dhule"
@@ -59,6 +60,47 @@ class StoreSettingsBase(BaseModel):
     backup_frequency: str = "DAILY"
     backup_path: Optional[str] = None
 
+    # Extra Charges & Surcharges (5 Templates)
+    extra_charge_enabled_1: bool = False
+    extra_charge_name_1: Optional[str] = "Online / MDR Surcharge"
+    extra_charge_condition_1: Optional[str] = "GREATER_THAN"
+    extra_charge_threshold_1: Optional[float] = 2000.0
+    extra_charge_type_1: Optional[str] = "PERCENT"
+    extra_charge_value_1: Optional[float] = 0.04
+    extra_charge_payment_mode_1: Optional[str] = "ONLINE"
+
+    extra_charge_enabled_2: bool = False
+    extra_charge_name_2: Optional[str] = "Fixed Convenience Fee"
+    extra_charge_condition_2: Optional[str] = "ALWAYS"
+    extra_charge_threshold_2: Optional[float] = 0.0
+    extra_charge_type_2: Optional[str] = "FLAT"
+    extra_charge_value_2: Optional[float] = 10.0
+    extra_charge_payment_mode_2: Optional[str] = "ALL"
+
+    extra_charge_enabled_3: bool = False
+    extra_charge_name_3: Optional[str] = "Packaging / Handling Charge"
+    extra_charge_condition_3: Optional[str] = "ALWAYS"
+    extra_charge_threshold_3: Optional[float] = 0.0
+    extra_charge_type_3: Optional[str] = "FLAT"
+    extra_charge_value_3: Optional[float] = 5.0
+    extra_charge_payment_mode_3: Optional[str] = "ALL"
+
+    extra_charge_enabled_4: bool = False
+    extra_charge_name_4: Optional[str] = "Special Processing Fee"
+    extra_charge_condition_4: Optional[str] = "GREATER_EQUAL"
+    extra_charge_threshold_4: Optional[float] = 1000.0
+    extra_charge_type_4: Optional[str] = "PERCENT"
+    extra_charge_value_4: Optional[float] = 1.0
+    extra_charge_payment_mode_4: Optional[str] = "ALL"
+
+    extra_charge_enabled_5: bool = False
+    extra_charge_name_5: Optional[str] = "Custom Service Surcharge"
+    extra_charge_condition_5: Optional[str] = "ALWAYS"
+    extra_charge_threshold_5: Optional[float] = 0.0
+    extra_charge_type_5: Optional[str] = "FLAT"
+    extra_charge_value_5: Optional[float] = 0.0
+    extra_charge_payment_mode_5: Optional[str] = "ALL"
+
 class StoreSettingsUpdate(BaseModel):
     shop_name: Optional[str] = None
     tag_line: Optional[str] = None
@@ -79,6 +121,7 @@ class StoreSettingsUpdate(BaseModel):
     is_power_footer_bold: Optional[bool] = None
     terms_and_conditions: Optional[str] = None
     show_terms_on_bill: Optional[bool] = None
+    whatsapp_bill_template: Optional[str] = None
     instagram_handle: Optional[str] = None
     show_instagram_on_bill: Optional[bool] = None
     facebook_handle: Optional[str] = None
@@ -111,6 +154,47 @@ class StoreSettingsUpdate(BaseModel):
     auto_backup: Optional[bool] = None
     backup_frequency: Optional[str] = None
     backup_path: Optional[str] = None
+
+    # Extra Charges & Surcharges (5 Templates)
+    extra_charge_enabled_1: Optional[bool] = None
+    extra_charge_name_1: Optional[str] = None
+    extra_charge_condition_1: Optional[str] = None
+    extra_charge_threshold_1: Optional[float] = None
+    extra_charge_type_1: Optional[str] = None
+    extra_charge_value_1: Optional[float] = None
+    extra_charge_payment_mode_1: Optional[str] = None
+
+    extra_charge_enabled_2: Optional[bool] = None
+    extra_charge_name_2: Optional[str] = None
+    extra_charge_condition_2: Optional[str] = None
+    extra_charge_threshold_2: Optional[float] = None
+    extra_charge_type_2: Optional[str] = None
+    extra_charge_value_2: Optional[float] = None
+    extra_charge_payment_mode_2: Optional[str] = None
+
+    extra_charge_enabled_3: Optional[bool] = None
+    extra_charge_name_3: Optional[str] = None
+    extra_charge_condition_3: Optional[str] = None
+    extra_charge_threshold_3: Optional[float] = None
+    extra_charge_type_3: Optional[str] = None
+    extra_charge_value_3: Optional[float] = None
+    extra_charge_payment_mode_3: Optional[str] = None
+
+    extra_charge_enabled_4: Optional[bool] = None
+    extra_charge_name_4: Optional[str] = None
+    extra_charge_condition_4: Optional[str] = None
+    extra_charge_threshold_4: Optional[float] = None
+    extra_charge_type_4: Optional[str] = None
+    extra_charge_value_4: Optional[float] = None
+    extra_charge_payment_mode_4: Optional[str] = None
+
+    extra_charge_enabled_5: Optional[bool] = None
+    extra_charge_name_5: Optional[str] = None
+    extra_charge_condition_5: Optional[str] = None
+    extra_charge_threshold_5: Optional[float] = None
+    extra_charge_type_5: Optional[str] = None
+    extra_charge_value_5: Optional[float] = None
+    extra_charge_payment_mode_5: Optional[str] = None
 
 class StoreSettingsOut(StoreSettingsBase):
     id: int

@@ -12,7 +12,7 @@ from app.models.expense import Expense, ExpenseCategory
 from app.models.settings import StoreSettings
 from app.models.audit_log import AuditLog
 from app.models.whatsapp import WhatsAppLog, WhatsAppStatus, WhatsAppMessageType
-from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency
+from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency, ProcurementNote
 
 __all__ = [
     "Base",
@@ -29,5 +29,6 @@ __all__ = [
     "StoreSettings",
     "AuditLog",
     "WhatsAppLog", "WhatsAppStatus", "WhatsAppMessageType",
-    "LostDemand", "LostDemandStatus", "LostDemandUrgency"
+    "LostDemand", "LostDemandStatus", "LostDemandUrgency",
+    "ProcurementNote"
 ]

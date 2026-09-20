@@ -32,6 +32,8 @@ class Invoice(Base):
     discount_amount = Column(Float, default=0.0, nullable=False)
     discount_type = Column(String(20), default="FLAT", nullable=False)  # 'FLAT' or 'PERCENT'
     tax_amount = Column(Float, default=0.0, nullable=False)
+    extra_charges_amount = Column(Float, default=0.0, nullable=False)
+    extra_charges_breakdown = Column(Text, nullable=True)
     round_off = Column(Float, default=0.0, nullable=False)
     grand_total = Column(Float, default=0.0, nullable=False)
     

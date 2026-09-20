@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { Printer, X, Share2 } from 'lucide-react';
 import { formatINR } from '../../utils/formatters';
+import { useSettingStore } from '../../store/settingStore';
+import { renderWhatsAppBillMessage, buildWhatsAppUrl, DEFAULT_WHATSAPP_BILL_TEMPLATE } from '../../utils/whatsappFormatter';
 
 interface ThermalReceiptViewProps {
   receiptData: any;
@@ -9,6 +11,7 @@ interface ThermalReceiptViewProps {
 
 export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptData, onClose }) => {
   const receiptRef = useRef<HTMLDivElement>(null);
+  const { settings } = useSettingStore();
 
   const handlePrint = () => {
     window.print();
@@ -43,47 +46,9 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
 
   const handleShareWhatsApp = () => {
     const phone = receiptData.customer_phone ? receiptData.customer_phone.replace(/\D/g, '') : '';
-    
-    const itemsLines = receiptData.items
-      .map((item: any) => `▫️ *${item.item_name}* ${item.size ? `(Sz: ${item.size})` : ''}\n    ${item.quantity} x ₹${item.unit_price} = *₹${item.total_price}*`)
-      .join('\n');
-
-    let socialText = '';
-    if (receiptData.show_instagram_on_bill && receiptData.instagram_handle) {
-      socialText += `\nInstagram: instagram.com/${receiptData.instagram_handle.replace('@', '')}`;
-    }
-    if (receiptData.show_website_on_bill && receiptData.website_url) {
-      socialText += `\nWebsite: ${receiptData.website_url}`;
-    }
-
-    const messageLines = [
-      `🛍️ *${formattedShopName.toUpperCase()}*`,
-      receiptData.tag_line ? `_${receiptData.tag_line}_` : '',
-      `📍 ${receiptData.address}`,
-      receiptData.mobile ? `📞 Contact: ${receiptData.mobile}` : '',
-      receiptData.gstin ? `🏛️ GSTIN: ${receiptData.gstin}` : '',
-      `━━━━━━━━━━━━━━━━━━━━`,
-      `🧾 *INVOICE:* #${receiptData.bill_number}`,
-      `📅 *Date:* ${receiptData.bill_date}`,
-      `━━━━━━━━━━━━━━━━━━━━`,
-      `*PURCHASED ITEMS:*`,
-      itemsLines,
-      `━━━━━━━━━━━━━━━━━━━━`,
-      (receiptData.discount_amount > 0 || receiptData.tax_amount > 0) ? `*Subtotal:* ₹${receiptData.subtotal}` : '',
-      receiptData.discount_amount > 0 ? `🏷️ *Discount:* -₹${receiptData.discount_amount}` : '',
-      receiptData.tax_amount > 0 ? `🏛️ *GST:* ₹${receiptData.tax_amount}` : '',
-      `💰 *GRAND TOTAL: ₹${receiptData.grand_total}*`,
-      receiptData.due_amount > 0 ? `⚠️ *Khata Due:* ₹${receiptData.due_amount}` : '',
-      `📦 *No of items:* ${itemCount} | *Total Qty:* ${totalQty}`,
-      `━━━━━━━━━━━━━━━━━━━━`,
-      receiptData.bill_footer ? `✨ ${receiptData.bill_footer}` : '',
-      socialText.trim(),
-      `_Software powered by Dolly POS© | Since 2002_`
-    ].filter(Boolean).join('\n');
-
-    const url = phone 
-      ? `https://wa.me/91${phone}?text=${encodeURIComponent(messageLines)}` 
-      : `https://wa.me/?text=${encodeURIComponent(messageLines)}`;
+    const template = settings?.whatsapp_bill_template || receiptData.whatsapp_bill_template || DEFAULT_WHATSAPP_BILL_TEMPLATE;
+    const message = renderWhatsAppBillMessage(template, receiptData);
+    const url = buildWhatsAppUrl(phone, message);
     window.open(url, '_blank');
   };
 
@@ -231,8 +196,8 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
 
             {/* Financial Summary */}
             <div className="py-2 border-b border-dashed border-black space-y-1 text-[11px] text-black font-semibold">
-              {/* Conditional Subtotal: Only show when discount or tax is present */}
-              {(receiptData.discount_amount > 0 || receiptData.tax_amount > 0) && (
+              {/* Conditional Subtotal: Show when discount, tax, or extra charges are present */}
+              {(receiptData.discount_amount > 0 || receiptData.tax_amount > 0 || (receiptData.extra_charges_amount && receiptData.extra_charges_amount > 0)) && (
                 <div className="space-y-1 pb-1">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
@@ -259,6 +224,38 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                         <span>₹{receiptData.tax_amount}</span>
                       </div>
                     </>
+                  )}
+                  {receiptData.extra_charges_amount > 0 && (
+                    <div className="space-y-0.5 pt-0.5 border-t border-dotted border-black">
+                      {(() => {
+                        let parsed: any[] = [];
+                        if (receiptData.extra_charges_breakdown) {
+                          try {
+                            if (typeof receiptData.extra_charges_breakdown === 'string') {
+                              parsed = JSON.parse(receiptData.extra_charges_breakdown);
+                            } else if (Array.isArray(receiptData.extra_charges_breakdown)) {
+                              parsed = receiptData.extra_charges_breakdown;
+                            }
+                          } catch (e) {
+                            parsed = [];
+                          }
+                        }
+                        if (parsed.length > 0) {
+                          return parsed.map((bc: any, idx: number) => (
+                            <div key={idx} className="flex justify-between font-bold text-[10.5px]">
+                              <span>{bc.name} {bc.type === 'PERCENT' ? `(${bc.value}%)` : ''}:</span>
+                              <span>+₹{Number(bc.amount).toFixed(2)}</span>
+                            </div>
+                          ));
+                        }
+                        return (
+                          <div className="flex justify-between font-bold text-[10.5px]">
+                            <span>Extra Charges / Surcharge:</span>
+                            <span>+₹{Number(receiptData.extra_charges_amount).toFixed(2)}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
                 </div>
               )}

@@ -12,20 +12,24 @@ import {
   CheckCircle2, 
   X, 
   IndianRupee,
-  Share2
+  Share2,
+  Zap
 } from 'lucide-react';
 import { formatINR, playSuccessChime } from '../../utils/formatters';
+import { computeExtraCharges } from '../../utils/extraCharges';
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPaymentSuccess: (invoice: any) => void;
+  initialMode?: PaymentMode;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
-  onPaymentSuccess
+  onPaymentSuccess,
+  initialMode = 'CASH'
 }) => {
   const { 
     activeItems, 
@@ -41,10 +45,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   
   const { settings } = useSettingStore();
 
-  const total = grandTotal();
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
+
+  // Dynamically evaluate extra charges based on the selected payment mode
+  const extraCharges = computeExtraCharges(subtotal(), discountVal(), paymentMode, settings);
+  const total = Math.max(0, Math.round(subtotal() - discountVal() + taxAmount() + extraCharges.totalCharges));
+
   const currentTab = tabs.find(t => t.id === activeTabId);
 
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [tenderAmount, setTenderAmount] = useState<number>(total);
   const [creditCustomerName, setCreditCustomerName] = useState<string>(currentTab?.customerName || '');
   const [creditCustomerPhone, setCreditCustomerPhone] = useState<string>(currentTab?.customerPhone || '');
@@ -70,23 +78,28 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Set initial tender amount and customer info when modal opens
   useEffect(() => {
     if (isOpen) {
-      setTenderAmount(total);
+      const mode = initialMode || 'CASH';
+      setPaymentMode(mode);
+      const initialCharges = computeExtraCharges(subtotal(), discountVal(), mode, settings);
+      const initialTotal = Math.max(0, Math.round(subtotal() - discountVal() + taxAmount() + initialCharges.totalCharges));
+
+      setTenderAmount(initialTotal);
       setCreditPaidNow(0);
       setCreditCustomerName(currentTab?.customerName || '');
       setCreditCustomerPhone(currentTab?.customerPhone || '');
       setShowSuggestions(false);
       
       // Default split preset: 50% Cash + 50% UPI or full cash
-      setSplitCash(total);
+      setSplitCash(initialTotal);
       setSplitUpi(0);
       setSplitCard(0);
       setSplitDue(0);
 
-      if (paymentMode === 'UPI') {
-        loadUpiQr(total);
+      if (mode === 'UPI') {
+        loadUpiQr(initialTotal);
       }
     }
-  }, [isOpen, total, currentTab]);
+  }, [isOpen, initialMode, currentTab]);
 
   // Close modal on Escape
   useEffect(() => {
@@ -167,13 +180,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const handleModeChange = (mode: PaymentMode) => {
     setPaymentMode(mode);
+    const newCharges = computeExtraCharges(subtotal(), discountVal(), mode, settings);
+    const newTotal = Math.max(0, Math.round(subtotal() - discountVal() + taxAmount() + newCharges.totalCharges));
+    setTenderAmount(newTotal);
     if (mode === 'UPI') {
-      loadUpiQr(total);
+      loadUpiQr(newTotal);
     } else if (mode === 'SPLIT') {
-      if (splitCash === 0 && splitUpi === 0) {
-        setSplitCash(tenderAmount < total ? tenderAmount : Math.round(total / 2));
-        setSplitUpi(tenderAmount < total ? total - tenderAmount : total - Math.round(total / 2));
-      }
+      setSplitCash(Math.round(newTotal / 2));
+      setSplitUpi(newTotal - Math.round(newTotal / 2));
+      setSplitCard(0);
+      setSplitDue(0);
     }
   };
 
@@ -256,6 +272,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         discount_amount: discountVal(),
         discount_type: currentTab?.discountType || 'FLAT',
         tax_amount: taxAmount(),
+        extra_charges_amount: extraCharges.totalCharges,
+        extra_charges_breakdown: extraCharges.breakdownJson,
         round_off: 0,
         grand_total: total,
         paid_amount: finalPaidAmount,
@@ -314,9 +332,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-5 text-white flex items-center justify-between shrink-0">
           <div>
-            <span className="text-xs uppercase tracking-wider font-bold text-pink-400">
-              Settle Payment & Print
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs uppercase tracking-wider font-bold text-pink-400">
+                Settle Payment &amp; Print
+              </span>
+              {extraCharges.appliedCharges.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  +{formatINR(extraCharges.totalCharges)} Surcharge Applied
+                </span>
+              )}
+            </div>
             <h2 className="text-2xl font-black font-mono mt-0.5">
               {formatINR(total)}
             </h2>
@@ -330,57 +356,78 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </button>
         </div>
 
-        {/* Quick Discount in Pay & Print */}
+        {/* Quick Discount & Surcharge summary */}
         {(() => {
           const currentDisc = discountVal();
           return (
-            <div className="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs shrink-0">
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Bill Discount:</span>
-                <div className="flex items-center space-x-1">
-                  <span className="text-slate-400 font-bold">₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={currentDisc || ''}
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                    onChange={(e) => setBillDiscount(Math.max(0, parseFloat(e.target.value) || 0), 'FLAT')}
-                    className="w-20 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg font-mono font-bold text-xs text-rose-600 focus:outline-none focus:border-pink-500 text-right"
-                  />
+            <div className="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-800 space-y-2 text-xs shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Bill Discount:</span>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-slate-400 font-bold">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={currentDisc || ''}
+                      placeholder="0"
+                      onFocus={(e) => e.target.select()}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                      onChange={(e) => setBillDiscount(Math.max(0, parseFloat(e.target.value) || 0), 'FLAT')}
+                      className="w-20 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg font-mono font-bold text-xs text-rose-600 focus:outline-none focus:border-pink-500 text-right"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    {[20, 50, 100, 200].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setBillDiscount(d, 'FLAT')}
+                        className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold border transition-colors ${
+                          currentDisc === d 
+                            ? 'bg-rose-50 border-rose-400 text-rose-700 dark:bg-rose-950 dark:text-rose-300 shadow-xs' 
+                            : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        -₹{d}
+                      </button>
+                    ))}
+                    {currentDisc > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBillDiscount(0, 'FLAT')}
+                        className="px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-rose-600 font-bold"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center space-x-1">
-                  {[20, 50, 100, 200].map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setBillDiscount(d, 'FLAT')}
-                      className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold border transition-colors ${
-                        currentDisc === d 
-                          ? 'bg-rose-50 border-rose-400 text-rose-700 dark:bg-rose-950 dark:text-rose-300 shadow-xs' 
-                          : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      -₹{d}
-                    </button>
-                  ))}
-                  {currentDisc > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setBillDiscount(0, 'FLAT')}
-                      className="px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-rose-600 font-bold"
-                    >
-                      Clear
-                    </button>
-                  )}
+
+                <div className="text-right">
+                  <span className="text-[11px] text-slate-400">Base: {formatINR(subtotal())}</span>
+                  {currentDisc > 0 && <span className="text-[11px] text-rose-600 ml-2 font-bold">-₹{currentDisc}</span>}
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-[11px] text-slate-400">Subtotal: {formatINR(subtotal())}</span>
-                {currentDisc > 0 && <span className="text-[11px] text-rose-600 ml-2 font-bold">-₹{currentDisc}</span>}
-              </div>
+              {/* Itemized Extra Charges Pill Bar */}
+              {extraCharges.appliedCharges.length > 0 && (
+                <div className="pt-1.5 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-amber-500" />
+                    Applied Surcharges ({paymentMode}):
+                  </span>
+                  {extraCharges.appliedCharges.map((ac, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 border border-amber-300/80 dark:border-amber-800 text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1 font-mono"
+                    >
+                      <span>{ac.name} ({ac.formattedRate})</span>
+                      <strong className="font-black">+₹{ac.chargeAmount.toFixed(2)}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}

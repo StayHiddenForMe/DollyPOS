@@ -157,6 +157,8 @@ export interface Invoice {
   discount_amount: number;
   discount_type: string;
   tax_amount: number;
+  extra_charges_amount?: number;
+  extra_charges_breakdown?: string;
   round_off: number;
   grand_total: number;
   paid_amount: number;
@@ -204,6 +206,7 @@ export interface StoreSettings {
   is_power_footer_bold?: boolean;
   terms_and_conditions?: string;
   show_terms_on_bill?: boolean;
+  whatsapp_bill_template?: string;
   instagram_handle?: string;
   show_instagram_on_bill?: boolean;
   facebook_handle?: string;
@@ -236,6 +239,47 @@ export interface StoreSettings {
   auto_backup: boolean;
   backup_frequency: string;
   backup_path?: string;
+
+  // Extra Charges & Surcharges (5 Configurable Templates)
+  extra_charge_enabled_1?: boolean;
+  extra_charge_name_1?: string;
+  extra_charge_condition_1?: string;
+  extra_charge_threshold_1?: number;
+  extra_charge_type_1?: 'PERCENT' | 'FLAT';
+  extra_charge_value_1?: number;
+  extra_charge_payment_mode_1?: string;
+
+  extra_charge_enabled_2?: boolean;
+  extra_charge_name_2?: string;
+  extra_charge_condition_2?: string;
+  extra_charge_threshold_2?: number;
+  extra_charge_type_2?: 'PERCENT' | 'FLAT';
+  extra_charge_value_2?: number;
+  extra_charge_payment_mode_2?: string;
+
+  extra_charge_enabled_3?: boolean;
+  extra_charge_name_3?: string;
+  extra_charge_condition_3?: string;
+  extra_charge_threshold_3?: number;
+  extra_charge_type_3?: 'PERCENT' | 'FLAT';
+  extra_charge_value_3?: number;
+  extra_charge_payment_mode_3?: string;
+
+  extra_charge_enabled_4?: boolean;
+  extra_charge_name_4?: string;
+  extra_charge_condition_4?: string;
+  extra_charge_threshold_4?: number;
+  extra_charge_type_4?: 'PERCENT' | 'FLAT';
+  extra_charge_value_4?: number;
+  extra_charge_payment_mode_4?: string;
+
+  extra_charge_enabled_5?: boolean;
+  extra_charge_name_5?: string;
+  extra_charge_condition_5?: string;
+  extra_charge_threshold_5?: number;
+  extra_charge_type_5?: 'PERCENT' | 'FLAT';
+  extra_charge_value_5?: number;
+  extra_charge_payment_mode_5?: string;
 }
 
 export interface Vendor {
@@ -297,3 +341,18 @@ export interface DashboardMetrics {
   }>;
   dead_stock_preview: Array<any>;
 }
+
+export interface ProcurementNote {
+  id: number;
+  item_name: string;
+  quantity: number;
+  description?: string;
+  vendor_name?: string;
+  estimated_price?: number;
+  total_estimated_cost?: number;
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  status: 'PENDING' | 'ORDERED' | 'COMPLETED' | 'CANCELLED';
+  created_at: string;
+  updated_at: string;
+}
+

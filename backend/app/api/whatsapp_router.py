@@ -12,8 +12,34 @@ from app.models.user import User
 from app.models.whatsapp import WhatsAppLog, WhatsAppStatus, WhatsAppMessageType, WhatsAppConfig, WhatsAppProvider
 from app.models.invoice import Invoice
 from app.models.customer import Customer
+from app.models.settings import StoreSettings
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Marketing & Automation"])
+
+DEFAULT_BILL_RECEIPT_TEMPLATE = """🛍️ *{shop_name}*
+_{tag_line}_
+📍 {shop_address} | 📞 {shop_mobile}
+{gstin_line}
+------------------------------------
+🧾 *INVOICE:* #{bill_number}
+👤 *Customer:* {customer_name}
+📅 *Date:* {bill_date}
+------------------------------------
+*PURCHASED ITEMS:*
+{items_list}
+------------------------------------
+{subtotal_line}
+{discount_line}
+{tax_line}
+{extra_charges_line}
+💰 *GRAND TOTAL: ₹{grand_total}*
+{paid_line}
+{due_line}
+📦 *Items:* {total_items} | *Qty:* {total_qty}
+------------------------------------
+✨ {bill_footer}
+{social_links}
+_Software powered by Dolly POS | Since 2002_"""
 
 class WhatsAppConfigRequest(BaseModel):
     store_phone: str
@@ -22,6 +48,9 @@ class WhatsAppConfigRequest(BaseModel):
     meta_api_token: Optional[str] = None
     meta_phone_number_id: Optional[str] = None
     meta_business_account_id: Optional[str] = None
+
+class BillTemplateUpdateRequest(BaseModel):
+    template: str
 
 class SendSingleMessageRequest(BaseModel):
     recipient_phone: str
@@ -38,6 +67,36 @@ class SendBulkMessageRequest(BaseModel):
     recipients: List[BulkMessageRecipient]
     message_template: str
     template_type: Optional[WhatsAppMessageType] = WhatsAppMessageType.FESTIVAL_GREETING
+
+@router.get("/bill-template")
+def get_bill_template(db: Session = Depends(get_db)):
+    """Returns the active customized WhatsApp bill receipt template and factory default template."""
+    settings = db.query(StoreSettings).first()
+    active_template = settings.whatsapp_bill_template if settings and settings.whatsapp_bill_template else DEFAULT_BILL_RECEIPT_TEMPLATE
+    return {
+        "template": active_template,
+        "default_template": DEFAULT_BILL_RECEIPT_TEMPLATE
+    }
+
+@router.post("/bill-template")
+def save_bill_template(
+    req: BillTemplateUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Saves customized WhatsApp bill template to store settings."""
+    settings = db.query(StoreSettings).first()
+    if not settings:
+        settings = StoreSettings()
+        db.add(settings)
+    settings.whatsapp_bill_template = req.template.strip()
+    db.commit()
+    db.refresh(settings)
+    return {
+        "success": True,
+        "message": "WhatsApp bill template saved successfully!",
+        "template": settings.whatsapp_bill_template
+    }
 
 @router.get("/config")
 def get_whatsapp_config(db: Session = Depends(get_db)):

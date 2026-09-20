@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Enum as SQLEnum
 from app.core.database import Base
 import enum
 
@@ -28,3 +28,18 @@ class LostDemand(Base):
     status = Column(SQLEnum(LostDemandStatus), default=LostDemandStatus.PENDING_PROCUREMENT, nullable=False)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class ProcurementNote(Base):
+    __tablename__ = "procurement_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), nullable=False, index=True)
+    quantity = Column(Integer, default=1, nullable=False)
+    description = Column(Text, nullable=True)
+    vendor_name = Column(String(255), nullable=True, index=True)
+    estimated_price = Column(Float, nullable=True, default=0.0)
+    priority = Column(String(50), default="NORMAL", nullable=False)  # LOW, NORMAL, HIGH, URGENT
+    status = Column(String(50), default="PENDING", nullable=False)    # PENDING, ORDERED, COMPLETED, CANCELLED
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+

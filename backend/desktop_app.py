@@ -54,6 +54,7 @@ if os.path.exists(FRONTEND_DIST_DIR):
         return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
 
 import subprocess
+import tempfile
 
 def find_browser_exe():
     candidates = [
@@ -68,9 +69,9 @@ def find_browser_exe():
             return p
     return None
 
-def open_browser():
-    """Wait for backend health endpoint, then open Chrome in maximized app mode."""
-    for _ in range(30):
+def open_and_monitor_browser(server):
+    """Wait for backend health endpoint, then open Chrome/Edge in app mode and monitor its lifecycle."""
+    for _ in range(40):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
                 if resp.status == 200:
@@ -81,17 +82,29 @@ def open_browser():
     browser_exe = find_browser_exe()
     if browser_exe:
         try:
-            subprocess.Popen([browser_exe, "--start-maximized", "--app=http://127.0.0.1:8000"])
+            profile_dir = os.path.join(tempfile.gettempdir(), "DollyPOS_BrowserProfile")
+            os.makedirs(profile_dir, exist_ok=True)
+            proc = subprocess.Popen([
+                browser_exe,
+                f"--user-data-dir={profile_dir}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--start-maximized",
+                "--app=http://127.0.0.1:8000"
+            ])
+            # Wait for user to close the app window
+            proc.wait()
+            # Once window is closed, cleanly shut down the backend server and exit
+            server.should_exit = True
+            time.sleep(0.5)
+            os._exit(0)
             return
         except Exception:
             pass
     webbrowser.open("http://127.0.0.1:8000")
 
 def main():
-    # 1. Start browser opener thread
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    # 2. Configure and run Uvicorn server on main thread
+    # 1. Configure Uvicorn server
     log_config = uvicorn.config.LOGGING_CONFIG.copy()
     if "formatters" in log_config:
         if "default" in log_config["formatters"]:
@@ -107,6 +120,11 @@ def main():
         log_config=log_config
     )
     server = uvicorn.Server(config)
+
+    # 2. Start browser opener and process monitor thread
+    threading.Thread(target=open_and_monitor_browser, args=(server,), daemon=True).start()
+
+    # 3. Run Uvicorn server on main thread
     server.run()
 
 if __name__ == "__main__":

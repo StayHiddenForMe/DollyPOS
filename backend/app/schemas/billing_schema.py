@@ -61,6 +61,8 @@ class InvoiceCreate(BaseModel):
     discount_amount: float = 0.0
     discount_type: str = "FLAT"
     tax_amount: float = 0.0
+    extra_charges_amount: float = 0.0
+    extra_charges_breakdown: Optional[str] = None
     round_off: float = 0.0
     grand_total: float
     paid_amount: float
@@ -85,6 +87,8 @@ class InvoiceOut(BaseModel):
     discount_amount: float
     discount_type: str
     tax_amount: float
+    extra_charges_amount: float = 0.0
+    extra_charges_breakdown: Optional[str] = None
     round_off: float
     grand_total: float
     paid_amount: float

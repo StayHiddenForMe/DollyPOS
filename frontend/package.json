@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"electron .\"",
-    "electron:build": "vite build && electron-builder"
+    "electron:dev": "npm run build:electron && concurrently \"vite\" \"electron .\"",
+    "electron:build": "npm run build:electron && vite build && electron-builder"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.28.9",

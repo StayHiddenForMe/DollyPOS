@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, or_, func
+from sqlalchemy import desc, or_, func, case
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ from app.models.user import User
 from app.models.product import Product
 from app.models.category import Category
 from app.models.vendor import Vendor
-from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency
+from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency, ProcurementNote
 
 router = APIRouter(prefix="/procurement", tags=["Procurement & Smart Buying Planner"])
 
@@ -28,6 +28,27 @@ class CreateLostDemandRequest(BaseModel):
 
 class UpdateLostDemandStatusRequest(BaseModel):
     status: LostDemandStatus
+
+class CreateProcurementNoteRequest(BaseModel):
+    item_name: str
+    quantity: Optional[int] = 1
+    description: Optional[str] = None
+    vendor_name: Optional[str] = None
+    estimated_price: Optional[float] = 0.0
+    priority: Optional[str] = "NORMAL" # LOW, NORMAL, HIGH, URGENT
+    status: Optional[str] = "PENDING"  # PENDING, ORDERED, COMPLETED, CANCELLED
+
+class UpdateProcurementNoteRequest(BaseModel):
+    item_name: Optional[str] = None
+    quantity: Optional[int] = None
+    description: Optional[str] = None
+    vendor_name: Optional[str] = None
+    estimated_price: Optional[float] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+
+class UpdateProcurementNoteStatusRequest(BaseModel):
+    status: str
 
 @router.get("/low-stock-sheet")
 def get_low_stock_procurement_sheet(
@@ -287,3 +308,201 @@ def get_upcoming_seasonal_buying_checklist(
         "timestamp": now.isoformat(),
         "seasonal_events": checklist
     }
+
+# =======================================================================
+# BUYING NOTES & PURCHASE WISHLIST ENDPOINTS (HOTKEY: F10)
+# =======================================================================
+
+@router.get("/notes")
+def get_procurement_notes(
+    status: Optional[str] = None,
+    vendor: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns all buying notes & purchase wishlists with real-time summary calculations.
+    """
+    query = db.query(ProcurementNote)
+    if status and status != 'ALL':
+        query = query.filter(ProcurementNote.status == status)
+    if vendor and vendor != 'ALL':
+        query = query.filter(ProcurementNote.vendor_name == vendor)
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        query = query.filter(or_(
+            ProcurementNote.item_name.ilike(s),
+            ProcurementNote.description.ilike(s),
+            ProcurementNote.vendor_name.ilike(s)
+        ))
+
+    # Priority sorting: PENDING first, ORDERED second, COMPLETED third, CANCELLED last
+    notes = query.order_by(
+        case(
+            (ProcurementNote.status == 'PENDING', 1),
+            (ProcurementNote.status == 'ORDERED', 2),
+            (ProcurementNote.status == 'COMPLETED', 3),
+            else_=4
+        ),
+        case(
+            (ProcurementNote.priority == 'URGENT', 1),
+            (ProcurementNote.priority == 'HIGH', 2),
+            (ProcurementNote.priority == 'NORMAL', 3),
+            else_=4
+        ),
+        ProcurementNote.created_at.desc()
+    ).all()
+
+    total_notes = len(notes)
+    pending_notes = sum(1 for n in notes if n.status == 'PENDING')
+    ordered_notes = sum(1 for n in notes if n.status == 'ORDERED')
+    completed_notes = sum(1 for n in notes if n.status == 'COMPLETED')
+    total_units = sum(n.quantity for n in notes if n.status != 'CANCELLED')
+    total_est_budget = sum((n.quantity * (n.estimated_price or 0.0)) for n in notes if n.status != 'CANCELLED')
+
+    # Get distinct vendor list for filtering
+    all_vendors = db.query(ProcurementNote.vendor_name).filter(ProcurementNote.vendor_name != None).distinct().all()
+    vendor_list = sorted([v[0] for v in all_vendors if v[0]])
+
+    return {
+        "notes": [
+            {
+                "id": n.id,
+                "item_name": n.item_name,
+                "quantity": n.quantity,
+                "description": n.description or "",
+                "vendor_name": n.vendor_name or "",
+                "estimated_price": n.estimated_price or 0.0,
+                "total_estimated_cost": round(n.quantity * (n.estimated_price or 0.0), 2),
+                "priority": n.priority,
+                "status": n.status,
+                "created_at": n.created_at.strftime("%d-%m-%Y %I:%M %p") if n.created_at else "",
+                "updated_at": n.updated_at.strftime("%d-%m-%Y %I:%M %p") if n.updated_at else ""
+            }
+            for n in notes
+        ],
+        "vendor_options": vendor_list,
+        "summary": {
+            "total_count": total_notes,
+            "pending_count": pending_notes,
+            "ordered_count": ordered_notes,
+            "completed_count": completed_notes,
+            "total_units": total_units,
+            "total_estimated_budget": round(total_est_budget, 2)
+        }
+    }
+
+@router.post("/notes")
+def create_procurement_note(
+    req: CreateProcurementNoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Creates a new buying note or custom product purchase item.
+    """
+    if not req.item_name or not req.item_name.strip():
+        raise HTTPException(status_code=400, detail="Item name is required")
+
+    note = ProcurementNote(
+        item_name=req.item_name.strip(),
+        quantity=max(1, req.quantity or 1),
+        description=req.description.strip() if req.description else None,
+        vendor_name=req.vendor_name.strip() if req.vendor_name else None,
+        estimated_price=max(0.0, req.estimated_price or 0.0),
+        priority=(req.priority or "NORMAL").upper(),
+        status=(req.status or "PENDING").upper()
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {
+        "success": True,
+        "message": f"Added '{note.item_name}' (Qty: {note.quantity}) to Buying Notes",
+        "note_id": note.id
+    }
+
+@router.put("/notes/{note_id}")
+def update_procurement_note(
+    note_id: int,
+    req: UpdateProcurementNoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Updates an existing buying note.
+    """
+    note = db.query(ProcurementNote).filter(ProcurementNote.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Buying note not found")
+
+    if req.item_name is not None and req.item_name.strip():
+        note.item_name = req.item_name.strip()
+    if req.quantity is not None:
+        note.quantity = max(1, req.quantity)
+    if req.description is not None:
+        note.description = req.description.strip() if req.description else None
+    if req.vendor_name is not None:
+        note.vendor_name = req.vendor_name.strip() if req.vendor_name else None
+    if req.estimated_price is not None:
+        note.estimated_price = max(0.0, req.estimated_price)
+    if req.priority is not None:
+        note.priority = req.priority.upper()
+    if req.status is not None:
+        note.status = req.status.upper()
+
+    note.updated_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": "Buying note updated successfully", "note_id": note.id}
+
+@router.patch("/notes/{note_id}/status")
+def update_procurement_note_status(
+    note_id: int,
+    req: UpdateProcurementNoteStatusRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Quick status toggle (PENDING <-> ORDERED <-> COMPLETED <-> CANCELLED).
+    """
+    note = db.query(ProcurementNote).filter(ProcurementNote.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Buying note not found")
+
+    note.status = req.status.upper()
+    note.updated_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": f"Updated status to {note.status}", "note_id": note.id}
+
+@router.delete("/notes/{note_id}")
+def delete_procurement_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Deletes a buying note entry.
+    """
+    note = db.query(ProcurementNote).filter(ProcurementNote.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Buying note not found")
+
+    db.delete(note)
+    db.commit()
+    return {"success": True, "message": "Buying note deleted successfully"}
+
+@router.delete("/notes/clear/completed")
+def clear_completed_procurement_notes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Clears all completed and cancelled buying notes.
+    """
+    deleted_count = db.query(ProcurementNote).filter(
+        ProcurementNote.status.in_(["COMPLETED", "CANCELLED"])
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"success": True, "deleted_count": deleted_count, "message": f"Cleared {deleted_count} completed buying notes"}
+

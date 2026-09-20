@@ -31,9 +31,15 @@ import {
   FileKey,
   Lock,
   Volume2,
-  VolumeX
+  VolumeX,
+  Calculator,
+  Sliders,
+  Sparkles,
+  Percent,
+  IndianRupee
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
+import { computeExtraCharges, getReadableRuleSummary, evaluateRuleDiagnostics } from '../utils/extraCharges';
 import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
 import { printBarcodeStickers, PrintStickerItem } from '../utils/printBarcode';
 
@@ -41,7 +47,7 @@ export const SettingsPage: React.FC = () => {
   const { isOwner } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'STORE' | 'STAFF' | 'CATEGORIES' | 'PRINTERS' | 'DATABASE' | 'BACKUP' | 'CLEANUP'>('STORE');
+  const [activeTab, setActiveTab] = useState<'STORE' | 'CHARGES' | 'STAFF' | 'CATEGORIES' | 'PRINTERS' | 'DATABASE' | 'BACKUP' | 'CLEANUP'>('STORE');
 
   const [settings, setSettings] = useState<Partial<StoreSettings>>({
     shop_name: 'Dolly Toys and Kids Wear',
@@ -65,8 +71,53 @@ export const SettingsPage: React.FC = () => {
     thermal_width: '80mm',
     barcode_label_size: '50x25mm',
     theme_mode: 'light',
-    sound_enabled: true
+    sound_enabled: true,
+
+    // Extra Charges (5 Templates)
+    extra_charge_enabled_1: false,
+    extra_charge_name_1: 'Online / MDR Surcharge',
+    extra_charge_condition_1: 'GREATER_THAN',
+    extra_charge_threshold_1: 2000,
+    extra_charge_type_1: 'PERCENT',
+    extra_charge_value_1: 0.04,
+    extra_charge_payment_mode_1: 'ONLINE',
+
+    extra_charge_enabled_2: false,
+    extra_charge_name_2: 'Fixed Convenience Fee',
+    extra_charge_condition_2: 'ALWAYS',
+    extra_charge_threshold_2: 0,
+    extra_charge_type_2: 'FLAT',
+    extra_charge_value_2: 10,
+    extra_charge_payment_mode_2: 'ALL',
+
+    extra_charge_enabled_3: false,
+    extra_charge_name_3: 'Packaging / Handling Charge',
+    extra_charge_condition_3: 'ALWAYS',
+    extra_charge_threshold_3: 0,
+    extra_charge_type_3: 'FLAT',
+    extra_charge_value_3: 5,
+    extra_charge_payment_mode_3: 'ALL',
+
+    extra_charge_enabled_4: false,
+    extra_charge_name_4: 'Special Processing Fee',
+    extra_charge_condition_4: 'GREATER_EQUAL',
+    extra_charge_threshold_4: 1000,
+    extra_charge_type_4: 'PERCENT',
+    extra_charge_value_4: 1.0,
+    extra_charge_payment_mode_4: 'ALL',
+
+    extra_charge_enabled_5: false,
+    extra_charge_name_5: 'Custom Service Surcharge',
+    extra_charge_condition_5: 'ALWAYS',
+    extra_charge_threshold_5: 0,
+    extra_charge_type_5: 'FLAT',
+    extra_charge_value_5: 0,
+    extra_charge_payment_mode_5: 'ALL'
   });
+
+  // Interactive Live Rule Simulator State
+  const [simAmount, setSimAmount] = useState<number>(2500);
+  const [simMode, setSimMode] = useState<string>('ONLINE');
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -689,12 +740,19 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold flex-wrap gap-1">
           <button
             onClick={() => setActiveTab('STORE')}
             className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'STORE' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' : 'text-slate-500'}`}
           >
             Store Identity
+          </button>
+          <button
+            onClick={() => setActiveTab('CHARGES')}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${activeTab === 'CHARGES' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 font-black shadow-xs' : 'text-slate-500'}`}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <span>Charges</span>
           </button>
           <button
             onClick={() => setActiveTab('STAFF')}
@@ -1353,6 +1411,443 @@ export const SettingsPage: React.FC = () => {
                 {isSaving ? 'Saving...' : 'Save Store Profile & Settings'}
               </button>
             </div>
+          </div>
+        </form>
+      )}
+
+      {/* TAB 2: SURCHARGES & MDR RULES (5 TEMPLATES) */}
+      {activeTab === 'CHARGES' && (
+        <form onSubmit={handleSaveSettings} className="space-y-4 animate-in fade-in duration-200">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 p-5 rounded-2xl text-white shadow-md flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-[11px] font-black tracking-wider uppercase">
+                  5 Dynamic Rule Templates
+                </span>
+                <span className="text-xs font-semibold text-amber-100">
+                  • Instant Auto-Calculated at POS Billing
+                </span>
+              </div>
+              <h2 className="text-xl font-black tracking-tight">
+                Store Extra Charges & Surcharges
+              </h2>
+              <p className="text-xs text-amber-100 max-w-2xl leading-relaxed">
+                Configure up to 5 flexible charge rules (e.g. MDR 0.04% on bills &gt; ₹2,000, flat convenience fee, packaging charges, or custom service surcharge). Each template can be independently toggled ON/OFF with customized conditions, formulas, and payment mode filters.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-6 py-3 rounded-xl bg-white text-slate-900 font-black text-xs hover:bg-amber-50 shadow-lg transition-all active:scale-95 shrink-0 flex items-center space-x-2"
+            >
+              <Save className="w-4 h-4 text-amber-600" />
+              <span>{isSaving ? 'Saving Rules...' : 'Save All 5 Templates'}</span>
+            </button>
+          </div>
+
+          {/* Interactive Live Simulator */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-600">
+                  <Calculator className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider">
+                    Interactive Live Rule Simulator
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Live calculation test simulator — test any bill amount &amp; payment mode instantly in real-time.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status counter */}
+              {(() => {
+                const activeCount = [1, 2, 3, 4, 5].filter(i => Boolean((settings as any)[`extra_charge_enabled_${i}`])).length;
+                return (
+                  <div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <span className={`w-2 h-2 rounded-full ${activeCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                    <span>{activeCount} of 5 Templates Active</span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Simulator Input: Bill Amount */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Test Bill Amount (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={simAmount || ''}
+                    onChange={(e) => setSimAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-white focus:outline-none focus:border-amber-500"
+                    placeholder="2500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 pt-1">
+                  {[500, 1000, 2000, 2500, 5000].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setSimAmount(amt)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                        simAmount === amt
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      ₹{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Simulator Input: Payment Mode */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Test Payment Mode
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'ONLINE', label: 'Online (UPI/Card)' },
+                    { id: 'UPI', label: 'UPI' },
+                    { id: 'CARD', label: 'Card' },
+                    { id: 'CASH', label: 'Cash' },
+                    { id: 'CREDIT_KHATA', label: 'Khata Due' },
+                    { id: 'ALL', label: 'Any Mode' }
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSimMode(m.id)}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        simMode === m.id
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Simulator Output: Live Summary Card */}
+              {(() => {
+                const simResult = computeExtraCharges(simAmount, 0, simMode, settings);
+                const finalSimTotal = Math.round((simAmount + simResult.totalCharges) * 100) / 100;
+                return (
+                  <div className="p-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl border border-slate-700 space-y-2 flex flex-col justify-between shadow-xs">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] text-slate-400">
+                        <span>Test Cart Subtotal:</span>
+                        <span className="font-mono font-bold text-slate-200">₹{simAmount.toFixed(2)}</span>
+                      </div>
+                      
+                      {simResult.appliedCharges.length === 0 ? (
+                        <div className="text-[11px] text-amber-300/80 italic py-1">
+                          No charges triggered for ₹{simAmount} via {simMode}.
+                        </div>
+                      ) : (
+                        <div className="space-y-1 pt-1 border-t border-slate-700/60">
+                          {simResult.appliedCharges.map((ac, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-[11px]">
+                              <span className="text-amber-300 font-semibold truncate max-w-[150px]">
+                                + {ac.name} ({ac.formattedRate}):
+                              </span>
+                              <span className="font-mono font-bold text-amber-400">
+                                +₹{ac.chargeAmount.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-700 flex justify-between items-baseline">
+                      <span className="text-xs font-bold text-slate-300 uppercase">Simulated Grand Total:</span>
+                      <span className="text-base font-black font-mono text-emerald-400">
+                        ₹{finalSimTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Diagnostic Breakdown of All 5 Rules */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/70 space-y-2">
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                <span>Real-Time Evaluation Status of all 5 Rules:</span>
+                <span className="text-[10px] text-slate-400 font-mono">Evaluated against ₹{simAmount} via {simMode}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                {evaluateRuleDiagnostics(simAmount, 0, simMode, settings).map((diag) => (
+                  <div
+                    key={diag.templateIndex}
+                    className={`p-2.5 rounded-xl border text-xs flex flex-col justify-between space-y-1.5 transition-all ${
+                      diag.isTriggered
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-900 dark:text-emerald-200'
+                        : diag.isEnabled
+                        ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-200'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-400 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="truncate pr-1 font-bold text-[11px]">#{diag.templateIndex} {diag.name}</span>
+                      {diag.isTriggered ? (
+                        <span className="px-1.5 py-0.2 rounded-md bg-emerald-600 text-white font-black text-[9px]">APPLIED</span>
+                      ) : diag.isEnabled ? (
+                        <span className="px-1.5 py-0.2 rounded-md bg-amber-500 text-white font-black text-[9px]">NOT MET</span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 rounded-md bg-slate-400 text-white font-bold text-[9px]">OFF</span>
+                      )}
+                    </div>
+                    
+                    <div className="text-[10px] leading-tight">
+                      {diag.isTriggered ? (
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                          +₹{diag.calculatedCharge.toFixed(2)} ({diag.type === 'PERCENT' ? `${diag.value}%` : `₹${diag.value}`})
+                        </span>
+                      ) : (
+                        <span className="italic">{diag.reason}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 5 Configurable Template Cards */}
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map((num) => {
+              const isEnabled = Boolean((settings as any)[`extra_charge_enabled_${num}`]);
+              const name = (settings as any)[`extra_charge_name_${num}`] || '';
+              const condition = (settings as any)[`extra_charge_condition_${num}`] || 'ALWAYS';
+              const threshold = (settings as any)[`extra_charge_threshold_${num}`] ?? 0;
+              const type = (settings as any)[`extra_charge_type_${num}`] || 'PERCENT';
+              const value = (settings as any)[`extra_charge_value_${num}`] ?? 0;
+              const paymentMode = (settings as any)[`extra_charge_payment_mode_${num}`] || 'ALL';
+
+              const ruleDesc = getReadableRuleSummary(condition, Number(threshold) || 0, type as any, Number(value) || 0, paymentMode);
+
+              return (
+                <div
+                  key={num}
+                  className={`bg-white dark:bg-slate-900 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs ${
+                    isEnabled
+                      ? 'border-amber-400/80 dark:border-amber-500/50 ring-2 ring-amber-500/10'
+                      : 'border-slate-200 dark:border-slate-800 opacity-90'
+                  }`}
+                >
+                  {/* Card Header */}
+                  <div className={`p-4 border-b flex items-center justify-between transition-colors ${
+                    isEnabled
+                      ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
+                      : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'
+                  }`}>
+                    <div className="flex items-center space-x-3 flex-1 min-w-0 pr-4">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                        isEnabled
+                          ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}>
+                        #{num}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setSettings({ ...settings, [`extra_charge_name_${num}`]: e.target.value })}
+                            placeholder={`Template ${num} Name (e.g. Online / MDR Charges)`}
+                            className={`w-full max-w-sm px-2.5 py-1 bg-white dark:bg-slate-800 border rounded-lg font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-amber-500 ${
+                              isEnabled ? 'border-amber-300 dark:border-amber-700' : 'border-slate-200 dark:border-slate-700'
+                            }`}
+                          />
+                          {num === 1 && (
+                            <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider shrink-0">
+                              Govt / MDR Preset
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Toggle Switch */}
+                    <div className="flex items-center space-x-2.5 shrink-0">
+                      <span className={`text-xs font-black uppercase tracking-wider ${
+                        isEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                      }`}>
+                        {isEnabled ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSettings({ ...settings, [`extra_charge_enabled_${num}`]: !isEnabled })}
+                        className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 focus:outline-none ${
+                          isEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                        }`}
+                      >
+                        <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition-transform duration-200" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Configuration Form */}
+                  <div className="p-4 space-y-3.5">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                      {/* 1. Condition Operator */}
+                      <div className="space-y-1">
+                        <label className="block font-bold text-slate-700 dark:text-slate-300">
+                          1. Trigger Condition
+                        </label>
+                        <select
+                          value={condition}
+                          onChange={(e) => setSettings({ ...settings, [`extra_charge_condition_${num}`]: e.target.value })}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="ALWAYS">Always Apply (Any Bill)</option>
+                          <option value="GREATER_THAN">Bill Amount &gt; ₹ (More than Amount)</option>
+                          <option value="GREATER_EQUAL">Bill Amount ≥ ₹ (Greater or Equal)</option>
+                          <option value="LESS_THAN">Bill Amount &lt; ₹ (Less than Amount)</option>
+                          <option value="LESS_EQUAL">Bill Amount ≤ ₹ (Less or Equal)</option>
+                        </select>
+                      </div>
+
+                      {/* 2. Condition Threshold Amount */}
+                      <div className="space-y-1">
+                        <label className="block font-bold text-slate-700 dark:text-slate-300">
+                          2. Threshold Limit (₹)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2 text-slate-400 font-bold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            disabled={condition === 'ALWAYS'}
+                            value={condition === 'ALWAYS' ? '' : threshold}
+                            onChange={(e) => setSettings({ ...settings, [`extra_charge_threshold_${num}`]: e.target.value })}
+                            placeholder={condition === 'ALWAYS' ? 'N/A (Always)' : '2000'}
+                            className={`w-full pl-7 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-amber-500 ${
+                              condition === 'ALWAYS' ? 'opacity-50 cursor-not-allowed border-slate-200 dark:border-slate-800' : 'border-slate-200 dark:border-slate-700'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3. Formula Type & Value */}
+                      <div className="space-y-1">
+                        <label className="block font-bold text-slate-700 dark:text-slate-300">
+                          3. Charge Type &amp; Value
+                        </label>
+                        <div className="flex space-x-1.5">
+                          <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setSettings({ ...settings, [`extra_charge_type_${num}`]: 'PERCENT' })}
+                              className={`px-2 py-1 rounded-lg text-[11px] font-black transition-all ${
+                                type === 'PERCENT' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                              title="Percentage of bill (e.g. 0.04% for MDR)"
+                            >
+                              %
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSettings({ ...settings, [`extra_charge_type_${num}`]: 'FLAT' })}
+                              className={`px-2 py-1 rounded-lg text-[11px] font-black transition-all ${
+                                type === 'FLAT' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                              title="Fixed direct rupee amount (e.g. ₹10)"
+                            >
+                              ₹
+                            </button>
+                          </div>
+
+                          <div className="relative flex-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={value}
+                              onChange={(e) => setSettings({ ...settings, [`extra_charge_value_${num}`]: e.target.value })}
+                              placeholder={type === 'PERCENT' ? '0.04' : '10'}
+                              className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono font-bold text-xs text-amber-600 dark:text-amber-400 focus:outline-none focus:border-amber-500"
+                            />
+                            <span className="absolute right-2.5 top-2 text-[10px] font-bold text-slate-400 uppercase">
+                              {type === 'PERCENT' ? '%' : '₹'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. Payment Mode Restriction */}
+                      <div className="space-y-1">
+                        <label className="block font-bold text-slate-700 dark:text-slate-300">
+                          4. Applicable Payment Mode
+                        </label>
+                        <select
+                          value={paymentMode}
+                          onChange={(e) => setSettings({ ...settings, [`extra_charge_payment_mode_${num}`]: e.target.value })}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="ALL">All Modes (Cash, UPI, Card, Khata)</option>
+                          <option value="ONLINE">Online Only (UPI &amp; Card)</option>
+                          <option value="UPI">UPI Only</option>
+                          <option value="CARD">Card Only</option>
+                          <option value="CASH">Cash Only</option>
+                          <option value="CREDIT_KHATA">Credit / Khata Only</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Rule Live Summary Banner */}
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-2">
+                        <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          {ruleDesc}
+                        </span>
+                      </div>
+
+                      <div className="text-[10px] font-mono text-slate-400 shrink-0">
+                        {type === 'PERCENT' ? `Formula: Bill × ${value}%` : `Formula: Flat ₹${value}`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom Save Bar */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+            <div className="text-xs text-slate-500 flex items-center space-x-2">
+              <Check className="w-4 h-4 text-emerald-500" />
+              <span>Rules will be automatically calculated on POS billing &amp; thermal receipts when enabled.</span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-8 py-3 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-lg shadow-pink-600/30 transition-all active:scale-95 flex items-center space-x-2"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'Saving...' : 'Save Surcharge Configuration'}</span>
+            </button>
           </div>
         </form>
       )}

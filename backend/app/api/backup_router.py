@@ -494,6 +494,8 @@ async def import_database_json(
             discount_amount=float(inv_data.get("discount_amount") or 0.0),
             discount_type=inv_data.get("discount_type") or "FIXED",
             tax_amount=float(inv_data.get("tax_amount") or 0.0),
+            extra_charges_amount=float(inv_data.get("extra_charges_amount") or 0.0),
+            extra_charges_breakdown=inv_data.get("extra_charges_breakdown"),
             round_off=float(inv_data.get("round_off") or 0.0),
             grand_total=float(inv_data.get("grand_total") or 0.0),
             paid_amount=float(inv_data.get("paid_amount") or 0.0),

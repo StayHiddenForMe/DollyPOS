@@ -35,9 +35,23 @@ import {
   Eye,
   Download,
   IndianRupee,
-  Calendar
+  Calendar,
+  FileText,
+  Receipt,
+  Type,
+  List,
+  Minus,
+  Smile,
+  RefreshCcw
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
+import { 
+  DEFAULT_WHATSAPP_BILL_TEMPLATE, 
+  SAMPLE_TEST_RECEIPT_DATA, 
+  renderWhatsAppBillMessage, 
+  buildWhatsAppUrl as generateCleanWhatsAppUrl 
+} from '../utils/whatsappFormatter';
+import { useSettingStore } from '../store/settingStore';
 
 export const WhatsAppMarketingPage: React.FC = () => {
   const [status, setStatus] = useState<any>(null);
@@ -58,7 +72,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configFeedback, setConfigFeedback] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'CAMPAIGNS' | 'KHATA_REMINDERS' | 'TEST_SENDER' | 'SETTINGS' | 'LOGS'>('CAMPAIGNS');
+  const [activeTab, setActiveTab] = useState<'CAMPAIGNS' | 'BILL_TEMPLATE' | 'KHATA_REMINDERS' | 'TEST_SENDER' | 'SETTINGS' | 'LOGS'>('CAMPAIGNS');
 
   // Broadcast Studio State
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -68,6 +82,13 @@ export const WhatsAppMarketingPage: React.FC = () => {
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([]);
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
+
+  // Bill Template Designer State
+  const [billTemplateText, setBillTemplateText] = useState<string>(DEFAULT_WHATSAPP_BILL_TEMPLATE);
+  const [testBillPhone, setTestBillPhone] = useState<string>('7972558842');
+  const [savingBillTemplate, setSavingBillTemplate] = useState<boolean>(false);
+  const [billTemplateFeedback, setBillTemplateFeedback] = useState<string | null>(null);
+  const billTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Advanced Target Audience Filters
   const [spendTier, setSpendTier] = useState<'ALL' | '1K' | '2K' | '3K' | '5K' | '10K' | 'CUSTOM'>('ALL');
@@ -109,12 +130,13 @@ export const WhatsAppMarketingPage: React.FC = () => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [statusRes, configRes, tmplRes, logsRes, custRes] = await Promise.all([
+      const [statusRes, configRes, tmplRes, logsRes, custRes, billTmplRes] = await Promise.all([
         api.get('/whatsapp/status').catch(() => ({ data: null })),
         api.get('/whatsapp/config').catch(() => ({ data: null })),
         api.get('/whatsapp/templates').catch(() => ({ data: [] })),
         api.get('/whatsapp/logs').catch(() => ({ data: [] })),
-        api.get('/customers').catch(() => ({ data: [] }))
+        api.get('/customers').catch(() => ({ data: [] })),
+        api.get('/whatsapp/bill-template').catch(() => ({ data: { template: DEFAULT_WHATSAPP_BILL_TEMPLATE } }))
       ]);
 
       if (statusRes.data) setStatus(statusRes.data);
@@ -133,6 +155,9 @@ export const WhatsAppMarketingPage: React.FC = () => {
       if (custRes.data) {
         setCustomers(custRes.data);
         setSelectedCustomerIds(custRes.data.map((c: any) => c.id));
+      }
+      if (billTmplRes.data?.template) {
+        setBillTemplateText(billTmplRes.data.template);
       }
     } catch (e) {
       console.error('Failed to load WhatsApp data', e);
@@ -282,6 +307,94 @@ export const WhatsAppMarketingPage: React.FC = () => {
     } finally {
       setSavingConfig(false);
     }
+  };
+
+  // Insert Dynamic Tag at Cursor Position in Bill Template Designer
+  const handleInsertBillTag = (tag: string) => {
+    const tagText = `{${tag}}`;
+    if (!billTextareaRef.current) {
+      setBillTemplateText(prev => prev + ` ${tagText} `);
+      return;
+    }
+    const textarea = billTextareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = billTemplateText;
+    const newVal = currentVal.substring(0, start) + tagText + currentVal.substring(end);
+    setBillTemplateText(newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tagText.length, start + tagText.length);
+    }, 0);
+  };
+
+  // Insert Formatting (*bold*, _italic_, ~strikethrough~, `code`, etc.)
+  const handleInsertBillFormatting = (prefix: string, suffix: string = prefix) => {
+    if (!billTextareaRef.current) {
+      setBillTemplateText(prev => prev + prefix + 'text' + suffix);
+      return;
+    }
+    const textarea = billTextareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = billTemplateText;
+    const selected = currentVal.substring(start, end) || 'text';
+    const newVal = currentVal.substring(0, start) + prefix + selected + suffix + currentVal.substring(end);
+    setBillTemplateText(newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+    }, 0);
+  };
+
+  // Insert Emoji at Cursor Position
+  const handleInsertBillEmoji = (emoji: string) => {
+    if (!billTextareaRef.current) {
+      setBillTemplateText(prev => prev + emoji);
+      return;
+    }
+    const textarea = billTextareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = billTemplateText;
+    const newVal = currentVal.substring(0, start) + emoji + currentVal.substring(end);
+    setBillTemplateText(newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + emoji.length, start + emoji.length);
+    }, 0);
+  };
+
+  // Save Bill Template to Database & Global Store
+  const handleSaveBillTemplate = async () => {
+    setSavingBillTemplate(true);
+    setBillTemplateFeedback(null);
+    try {
+      await api.post('/whatsapp/bill-template', { template: billTemplateText });
+      setBillTemplateFeedback('✓ WhatsApp Bill Template saved successfully! It will now be used across all POS bills.');
+      // Also update settings in Zustand store for instant live sync
+      const { updateSettings } = useSettingStore.getState();
+      await updateSettings({ whatsapp_bill_template: billTemplateText });
+    } catch (e: any) {
+      setBillTemplateFeedback(`❌ Error: ${e.response?.data?.detail || 'Failed to save bill template'}`);
+    } finally {
+      setSavingBillTemplate(false);
+    }
+  };
+
+  // Factory Reset Bill Template to Standard Default
+  const handleResetBillTemplate = () => {
+    if (window.confirm('Reset WhatsApp Bill Template to standard factory default?')) {
+      setBillTemplateText(DEFAULT_WHATSAPP_BILL_TEMPLATE);
+      setBillTemplateFeedback('✓ Template reset to standard default. Click "Save Template" to apply permanently.');
+    }
+  };
+
+  // Send Test Bill to WhatsApp
+  const handleSendTestBill = () => {
+    const renderedMsg = renderWhatsAppBillMessage(billTemplateText, SAMPLE_TEST_RECEIPT_DATA);
+    const url = generateCleanWhatsAppUrl(testBillPhone, renderedMsg);
+    window.open(url, '_blank');
   };
 
   /**
@@ -516,6 +629,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
       <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit text-xs font-bold">
         {[
           { id: 'CAMPAIGNS', label: 'Festival & Collection Broadcasts', icon: Gift },
+          { id: 'BILL_TEMPLATE', label: 'Bill / Receipt Template', icon: FileText },
           { id: 'KHATA_REMINDERS', label: 'Khata Due Reminders', icon: CreditCard },
           { id: 'TEST_SENDER', label: 'Quick Direct Chat', icon: Send },
           { id: 'SETTINGS', label: 'Settings & Meta API', icon: Settings },
@@ -892,6 +1006,315 @@ export const WhatsAppMarketingPage: React.FC = () => {
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: WHATSAPP BILL & DIGITAL RECEIPT TEMPLATE DESIGNER */}
+        {activeTab === 'BILL_TEMPLATE' && (
+          <div className="h-full flex gap-4 overflow-hidden">
+            {/* Left Column: Editor, Formatting, Emojis & Dynamic Tags */}
+            <div className="w-7/12 flex flex-col space-y-2.5 overflow-y-auto pr-2">
+              <div>
+                <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                  WhatsApp Digital Bill Template Designer
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Customize the exact invoice message your customers receive on WhatsApp when clicking <strong>"Send Bill on WhatsApp"</strong> at POS billing checkout.
+                </p>
+              </div>
+
+              {/* Formatting & Emoji Toolbar */}
+              <div className="p-2 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                {/* 1. WhatsApp Text Formatting */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1 mr-0.5">Style:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillFormatting('*')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 font-black text-[10.5px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Bold (*text*)"
+                  >
+                    *Bold*
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillFormatting('_')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 italic text-[10.5px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Italic (_text_)"
+                  >
+                    _Italic_
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillFormatting('~')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 line-through text-[10.5px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Strikethrough (~text~)"
+                  >
+                    ~Strike~
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillFormatting('```')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 font-mono text-[10px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Monospace (```code```)"
+                  >
+                    ```Code```
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillEmoji('\n------------------------------------\n')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 font-mono text-[10px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Insert Divider Line"
+                  >
+                    --- Divider Line ---
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertBillEmoji('• ')}
+                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-[10.5px] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-2xs transition-all"
+                    title="Insert Bullet Point"
+                  >
+                    • Bullet
+                  </button>
+                </div>
+
+                {/* 2. Emoji Quick Bar */}
+                <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1 mr-0.5">Emojis:</span>
+                  {['🧾', '🛍️', '🎁', '✨', '🙏', '🛒', '💳', '🏷️', '📦', '💰', '📱', '🏪', '📍', '📞', '🌟', '🇮🇳', '💯', '✅', '👗', '🧸', '⚡', '🏛️'].map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => handleInsertBillEmoji(emoji)}
+                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 hover:bg-emerald-100 dark:hover:bg-emerald-900 flex items-center justify-center text-xs border border-slate-200 dark:border-slate-600 shadow-2xs active:scale-95 transition-all"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Invoice Tags Bar */}
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Click to Insert Dynamic Bill Tags into Template:
+                </span>
+                
+                <div className="flex flex-wrap gap-1 text-[10px]">
+                  {/* Customer Group */}
+                  {[
+                    { tag: 'customer_name', label: '👤 {customer_name}' },
+                    { tag: 'name', label: '👤 {name}' },
+                    { tag: 'customer_phone', label: '📞 {customer_phone}' },
+                    { tag: 'number', label: '📞 {number}' },
+                  ].map(it => (
+                    <button
+                      key={it.tag}
+                      type="button"
+                      onClick={() => handleInsertBillTag(it.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 font-mono font-semibold"
+                    >
+                      {it.label}
+                    </button>
+                  ))}
+
+                  {/* Invoice Group */}
+                  {[
+                    { tag: 'bill_number', label: '🧾 {bill_number}' },
+                    { tag: 'bill_date', label: '📅 {bill_date}' },
+                    { tag: 'items_list', label: '📋 {items_list}' },
+                    { tag: 'total_items', label: '📦 {total_items}' },
+                    { tag: 'total_qty', label: '🔢 {total_qty}' },
+                  ].map(it => (
+                    <button
+                      key={it.tag}
+                      type="button"
+                      onClick={() => handleInsertBillTag(it.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 font-mono font-semibold"
+                    >
+                      {it.label}
+                    </button>
+                  ))}
+
+                  {/* Financial Group */}
+                  {[
+                    { tag: 'grand_total', label: '💰 {grand_total}' },
+                    { tag: 'subtotal_line', label: '💵 {subtotal_line}' },
+                    { tag: 'discount_line', label: '🏷️ {discount_line}' },
+                    { tag: 'tax_line', label: '🏛️ {tax_line}' },
+                    { tag: 'extra_charges_line', label: '⚡ {extra_charges_line}' },
+                    { tag: 'paid_line', label: '✅ {paid_line}' },
+                    { tag: 'due_line', label: '⚠️ {due_line}' },
+                    { tag: 'payment_mode', label: '💳 {payment_mode}' },
+                  ].map(it => (
+                    <button
+                      key={it.tag}
+                      type="button"
+                      onClick={() => handleInsertBillTag(it.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100 border border-amber-200 dark:border-amber-800 font-mono font-semibold"
+                    >
+                      {it.label}
+                    </button>
+                  ))}
+
+                  {/* Shop Info Group */}
+                  {[
+                    { tag: 'shop_name', label: '🏪 {shop_name}' },
+                    { tag: 'tag_line', label: '✨ {tag_line}' },
+                    { tag: 'shop_address', label: '📍 {shop_address}' },
+                    { tag: 'shop_mobile', label: '📞 {shop_mobile}' },
+                    { tag: 'upi_id', label: '📲 {upi_id}' },
+                    { tag: 'gstin_line', label: '🏛️ {gstin_line}' },
+                    { tag: 'bill_footer', label: '💬 {bill_footer}' },
+                    { tag: 'social_links', label: '🌐 {social_links}' },
+                  ].map(it => (
+                    <button
+                      key={it.tag}
+                      type="button"
+                      onClick={() => handleInsertBillTag(it.tag)}
+                      className="px-2 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-100 border border-purple-200 dark:border-purple-800 font-mono font-semibold"
+                    >
+                      {it.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Template Textarea */}
+              <div className="flex-1 flex flex-col min-h-[220px]">
+                <textarea
+                  ref={billTextareaRef}
+                  rows={11}
+                  value={billTemplateText}
+                  onChange={(e) => setBillTemplateText(e.target.value)}
+                  placeholder="Design your WhatsApp Bill / Receipt Template here..."
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 resize-none leading-relaxed flex-1"
+                />
+                
+                <div className="flex justify-between items-center text-[10.5px] text-slate-400 pt-1">
+                  <span>Chars: {billTemplateText.length} | Lines: {billTemplateText.split('\n').length}</span>
+                  <span className="italic">All emojis and formatting characters are verified and safe against encoding errors ()</span>
+                </div>
+              </div>
+
+              {/* Feedback Banner */}
+              {billTemplateFeedback && (
+                <div className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+                  billTemplateFeedback.startsWith('✓') 
+                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{billTemplateFeedback}</span>
+                </div>
+              )}
+
+              {/* Action Buttons: Save & Reset */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSaveBillTemplate}
+                  disabled={savingBillTemplate}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{savingBillTemplate ? 'Saving Template...' : 'Save Bill Template'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetBillTemplate}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 active:scale-95 transition-all"
+                  title="Reset to factory default"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Reset to Default</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right Column: Live Interactive WhatsApp Simulator & Test Sender */}
+            <div className="w-5/12 flex flex-col border-l border-slate-200 dark:border-slate-800 pl-4 space-y-3 overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                    Live WhatsApp Customer Preview
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Real-time visual preview of how the customer sees their bill
+                  </p>
+                </div>
+              </div>
+
+              {/* WhatsApp Mock Chat Bubble Container */}
+              <div className="flex-1 overflow-y-auto bg-[#EFEAE2] dark:bg-[#0b141a] rounded-2xl border border-slate-300 dark:border-slate-800 p-3.5 flex flex-col space-y-2 shadow-inner">
+                {/* Chat Header inside mock */}
+                <div className="flex items-center justify-between bg-white dark:bg-[#202c33] p-2 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-[11px] flex items-center justify-center">
+                      D
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800 dark:text-white block text-[11px] leading-tight">
+                        Dolly Toys & Kids Wear
+                      </span>
+                      <span className="text-[9.5px] text-emerald-600 font-medium">Online • Verified Business</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">Today</span>
+                </div>
+
+                {/* WhatsApp Chat Message Bubble */}
+                <div className="flex justify-end">
+                  <div className="max-w-[95%] bg-[#DCF8C6] dark:bg-[#005c4b] text-slate-900 dark:text-[#e9edef] rounded-2xl rounded-tr-xs p-3.5 shadow-md border border-emerald-300/60 dark:border-emerald-800/40 text-[11.5px] font-sans leading-relaxed whitespace-pre-wrap select-text">
+                    {renderWhatsAppBillMessage(billTemplateText, SAMPLE_TEST_RECEIPT_DATA)}
+                    
+                    {/* WhatsApp Timestamp and Blue Ticks */}
+                    <div className="flex items-center justify-end space-x-1 pt-1.5 text-[9.5px] text-slate-500 dark:text-emerald-200/70 font-mono">
+                      <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-blue-500 font-bold">✓✓</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct Test Sender Box (prefilled with 7972558842) */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <span className="font-bold text-[11px] text-slate-700 dark:text-slate-200 uppercase tracking-wider block flex items-center gap-1">
+                  <Send className="w-3 h-3 text-emerald-600" />
+                  Test Send Live Bill on WhatsApp
+                </span>
+                
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center flex-1">
+                    <span className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-l-xl border border-r-0 text-xs">
+                      +91
+                    </span>
+                    <input
+                      type="text"
+                      value={testBillPhone}
+                      onChange={(e) => setTestBillPhone(e.target.value)}
+                      placeholder="7972558842"
+                      className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded-r-xl font-mono text-xs font-bold focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSendTestBill}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Send Test Bill</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 italic">
+                  Opens WhatsApp Web / Desktop with this exact live sample invoice formatted and ready to send.
+                </p>
               </div>
             </div>
           </div>
