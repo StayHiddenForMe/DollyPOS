@@ -100,6 +100,7 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_type_5 VARCHAR(20) DEFAULT 'FLAT'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_value_5 FLOAT DEFAULT 0.0",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_payment_mode_5 VARCHAR(50) DEFAULT 'ALL'",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS custom_festival_items TEXT",
             "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS extra_charges_amount FLOAT DEFAULT 0.0",
             "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS extra_charges_breakdown TEXT",
             "ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_product_id_fkey, ADD CONSTRAINT purchase_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;",

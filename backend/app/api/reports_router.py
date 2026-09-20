@@ -1,6 +1,9 @@
 import io
+import json
+import uuid
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, or_, extract
 from datetime import datetime, timedelta, date
@@ -11,6 +14,7 @@ from collections import defaultdict
 from app.core.database import get_db
 from app.api.auth_router import get_current_user, require_owner
 from app.models.user import User
+from app.models.settings import StoreSettings
 from app.models.invoice import Invoice, InvoiceItem, PaymentMode
 from app.models.expense import Expense
 from app.models.product import Product
@@ -501,10 +505,17 @@ def get_festival_date_for_year(fest_key: str, year: int) -> str:
 
     return f"{year}-10-25"
 
+class CustomFestivalItemCreate(BaseModel):
+    festival_name: str
+    item_name: str
+    scope: str = "ALL_YEARS"  # "ALL_YEARS" or "THIS_YEAR"
+    year: Optional[int] = None
+
 @router.get("/seasonal-calendar")
 def get_seasonal_festival_calendar(
     year: Optional[int] = Query(None, description="Year to calculate (e.g. 2025, 2026, 2030, 2035, 2050...)"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Perpetual Indian Festival & Retail Peak Season Calendar.
@@ -512,6 +523,17 @@ def get_seasonal_festival_calendar(
     """
     target_year = year or get_ist_today().year
     today_dt = get_ist_today()
+
+    # Load custom items from store settings
+    st = db.query(StoreSettings).first()
+    custom_items_list = []
+    if st and st.custom_festival_items:
+        try:
+            custom_items_list = json.loads(st.custom_festival_items)
+            if not isinstance(custom_items_list, list):
+                custom_items_list = []
+        except Exception:
+            custom_items_list = []
 
     festivals_db = [
         {
@@ -704,8 +726,16 @@ def get_seasonal_festival_calendar(
         if is_today:
             active_today_festivals.append(f)
 
+        # Match custom items for this festival and year
+        f_custom = [
+            it for it in custom_items_list
+            if it.get("festival_name", "").strip().lower() == f["name"].strip().lower()
+            and (it.get("scope") == "ALL_YEARS" or int(it.get("year", target_year)) == target_year)
+        ]
+
         calculated.append({
             **f,
+            "custom_stock": f_custom,
             "days_remaining": days_diff,
             "is_past": days_diff < 0,
             "is_today": is_today,
@@ -722,6 +752,64 @@ def get_seasonal_festival_calendar(
         "today_festivals": active_today_festivals,
         "festivals": calculated
     }
+
+@router.post("/festival-custom-item")
+def add_custom_festival_item(
+    payload: CustomFestivalItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Adds a custom stock lead item to a festival (e.g. Colourful Dhoti kurta) for this year or all years."""
+    st = db.query(StoreSettings).first()
+    if not st:
+        st = StoreSettings(shop_name="Dolly Toys and Kids Wear")
+        db.add(st)
+        db.commit()
+        db.refresh(st)
+
+    items = []
+    if st.custom_festival_items:
+        try:
+            items = json.loads(st.custom_festival_items)
+            if not isinstance(items, list):
+                items = []
+        except Exception:
+            items = []
+
+    new_item = {
+        "id": f"cst_{uuid.uuid4().hex[:10]}",
+        "festival_name": payload.festival_name.strip(),
+        "item_name": payload.item_name.strip(),
+        "scope": payload.scope,
+        "year": payload.year or get_ist_today().year,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    items.append(new_item)
+    st.custom_festival_items = json.dumps(items)
+    db.commit()
+    return {"success": True, "item": new_item}
+
+@router.delete("/festival-custom-item/{item_id}")
+def delete_custom_festival_item(
+    item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Deletes a custom festival stock lead item."""
+    st = db.query(StoreSettings).first()
+    if not st or not st.custom_festival_items:
+        return {"success": True, "message": "Item deleted"}
+
+    try:
+        items = json.loads(st.custom_festival_items)
+        if isinstance(items, list):
+            items = [it for it in items if str(it.get("id")) != str(item_id)]
+            st.custom_festival_items = json.dumps(items)
+            db.commit()
+    except Exception:
+        pass
+
+    return {"success": True, "message": "Item deleted"}
 
 @router.get("/export/sales-excel")
 def export_sales_excel(

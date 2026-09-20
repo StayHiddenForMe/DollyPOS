@@ -39,10 +39,9 @@ import { ProcurementNote } from '../types';
 import { buildWhatsAppUrl } from '../utils/whatsappFormatter';
 
 export const ProcurementPlannerPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'LOW_STOCK' | 'BUYING_NOTES' | 'LOST_DEMAND' | 'SEASONAL'>('LOW_STOCK');
+  const [activeTab, setActiveTab] = useState<'LOW_STOCK' | 'BUYING_NOTES' | 'LOST_DEMAND'>('LOW_STOCK');
   const [lowStockData, setLowStockData] = useState<any>(null);
   const [lostDemandList, setLostDemandList] = useState<any[]>([]);
-  const [seasonalChecklist, setSeasonalChecklist] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Filter & Sorting for Low Stock Sheet
@@ -147,9 +146,6 @@ export const ProcurementPlannerPage: React.FC = () => {
       } else if (activeTab === 'LOST_DEMAND') {
         const res = await api.get('/procurement/lost-demand');
         setLostDemandList(res.data);
-      } else if (activeTab === 'SEASONAL') {
-        const res = await api.get('/procurement/seasonal-checklist');
-        setSeasonalChecklist(res.data.seasonal_events || []);
       }
     } catch (e) {
       console.error('Failed to load procurement data', e);
@@ -643,10 +639,9 @@ export const ProcurementPlannerPage: React.FC = () => {
       {/* Tabs */}
       <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit text-xs font-bold">
         {[
-          { id: 'LOW_STOCK', label: '📦 Low Stock Buying Sheet', icon: Truck },
-          { id: 'BUYING_NOTES', label: '📝 Buying Notes & Wishlist', icon: FileText, hotkey: 'F10', count: notesSummary.pending_count },
-          { id: 'LOST_DEMAND', label: '👥 Customer Lost Demand Log', icon: UserX },
-          { id: 'SEASONAL', label: '🎉 Upcoming Festival Checklist', icon: Calendar },
+          { id: 'LOW_STOCK', label: 'Low Stock Buying Sheet', icon: Truck },
+          { id: 'BUYING_NOTES', label: 'Buying Notes & Wishlist', icon: FileText, hotkey: 'F10', count: notesSummary.pending_count },
+          { id: 'LOST_DEMAND', label: 'Customer Lost Demand Log', icon: UserX },
         ].map((tab: any) => (
           <button
             key={tab.id}
@@ -1301,47 +1296,6 @@ export const ProcurementPlannerPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: UPCOMING FESTIVAL CHECKLIST */}
-        {activeTab === 'SEASONAL' && (
-          <div className="h-full flex flex-col space-y-4 overflow-y-auto">
-            <div className="grid grid-cols-2 gap-3">
-              {seasonalChecklist.map((ev, idx) => (
-                <div key={idx} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
-                        <span>🎉 {ev.event_name}</span>
-                      </h3>
-                      <p className="text-[11px] text-pink-600 font-semibold">{ev.focus_products}</p>
-                    </div>
-
-                    <span className="px-2.5 py-1 rounded-xl bg-pink-100 dark:bg-pink-950/80 text-pink-700 dark:text-pink-300 font-mono font-black text-xs">
-                      in ~{ev.approx_days_left} Days
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-xs font-mono">
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border">
-                      <span className="text-[10px] text-slate-400 block">Catalog SKUs</span>
-                      <span className="font-bold text-slate-800 dark:text-white">{ev.matched_catalog_skus} items</span>
-                    </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border">
-                      <span className="text-[10px] text-slate-400 block">In-Stock Pieces</span>
-                      <span className="font-bold text-emerald-600">{ev.total_units_in_stock} pcs</span>
-                    </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border">
-                      <span className="text-[10px] text-slate-400 block">Readiness</span>
-                      <span className={`text-[10px] font-bold block truncate ${ev.readiness_status.includes('Ready') ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {ev.readiness_status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         )}

@@ -292,7 +292,7 @@ export const VendorPage: React.FC = () => {
           className="px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-pink-600/20 transition-all active:scale-95"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add Supplier / Vendor</span>
+          <span>Add Supplier / Vendor</span>
         </button>
       </div>
 
@@ -466,7 +466,7 @@ export const VendorPage: React.FC = () => {
               <form onSubmit={handleRecordQuickBill} className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
                   <Plus className="w-4 h-4 text-pink-500" />
-                  <span>+ Record New Purchase Invoice / Bill Note</span>
+                  <span>Record New Purchase Invoice / Bill Note</span>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3">

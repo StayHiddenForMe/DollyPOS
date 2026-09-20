@@ -183,7 +183,7 @@ export const BarcodeScannerInput: React.FC<BarcodeScannerInputProps> = ({
           title="Add Custom Item (F3)"
         >
           <Plus className="w-4 h-4 text-pink-400" />
-          <span>+ Custom (F3)</span>
+          <span>Custom (F3)</span>
         </button>
       </div>
 

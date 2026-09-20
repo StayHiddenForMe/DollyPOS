@@ -20,6 +20,7 @@ from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode, Payme
 from app.models.purchase import Purchase, PurchaseItem, PurchaseStatus
 from app.models.return_order import ReturnOrder, ReturnItem, ReturnType
 from app.models.expense import Expense, ExpenseCategory
+from app.models.lost_demand import LostDemand, ProcurementNote, ProcurementPriority, ProcurementStatus, DemandUrgency, DemandStatus
 from app.services.backup_service import backup_service
 from app.config import settings as app_settings
 
@@ -615,6 +616,60 @@ async def import_database_json(
         db.add(exp)
         imported_expenses += 1
 
+    # 10. Restore Procurement Notes
+    imported_notes = 0
+    for n_data in data.get("procurement_notes", []):
+        try:
+            prio = ProcurementPriority(n_data.get("priority", "NORMAL"))
+        except Exception:
+            prio = ProcurementPriority.NORMAL
+        try:
+            stat = ProcurementStatus(n_data.get("status", "PENDING"))
+        except Exception:
+            stat = ProcurementStatus.PENDING
+
+        note = ProcurementNote(
+            item_name=n_data.get("item_name") or "Item",
+            quantity=int(n_data.get("quantity") or 1),
+            description=n_data.get("description"),
+            vendor_name=n_data.get("vendor_name"),
+            estimated_price=float(n_data.get("estimated_price") or 0.0) if n_data.get("estimated_price") is not None else None,
+            priority=prio,
+            status=stat,
+            notes=n_data.get("notes"),
+            created_at=parse_iso_datetime(n_data.get("created_at")) or datetime.utcnow()
+        )
+        db.add(note)
+        imported_notes += 1
+
+    # 11. Restore Lost Demand
+    imported_lost_demands = 0
+    for ld_data in data.get("lost_demands", []):
+        try:
+            urg = DemandUrgency(ld_data.get("urgency", "NORMAL"))
+        except Exception:
+            urg = DemandUrgency.NORMAL
+        try:
+            d_stat = DemandStatus(ld_data.get("status", "PENDING_PROCUREMENT"))
+        except Exception:
+            d_stat = DemandStatus.PENDING_PROCUREMENT
+
+        ld = LostDemand(
+            item_description=ld_data.get("item_description") or "Item",
+            category_name=ld_data.get("category_name") or "General",
+            preferred_size=ld_data.get("preferred_size") or "Standard",
+            preferred_color=ld_data.get("preferred_color") or "Any",
+            customer_name=ld_data.get("customer_name") or "Walk-in Customer",
+            customer_phone=ld_data.get("customer_phone") or "N/A",
+            urgency=urg,
+            request_count=int(ld_data.get("request_count") or 1),
+            status=d_stat,
+            notes=ld_data.get("notes"),
+            created_at=parse_iso_datetime(ld_data.get("created_at")) or datetime.utcnow()
+        )
+        db.add(ld)
+        imported_lost_demands += 1
+
     db.commit()
 
     return {
@@ -627,6 +682,8 @@ async def import_database_json(
             "returns": imported_returns,
             "expenses": imported_expenses,
             "customers": imported_customers,
-            "vendors": imported_vendors
+            "vendors": imported_vendors,
+            "procurement_notes": imported_notes,
+            "lost_demands": imported_lost_demands
         }
     }

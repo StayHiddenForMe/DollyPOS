@@ -136,6 +136,7 @@ def get_longevity_audit(
     db: Session = Depends(get_db)
 ):
     """Audits database scalability, current catalog size, and 50-year projection."""
+    barcode_count = db.execute(text("SELECT COUNT(DISTINCT barcode) FROM products WHERE barcode IS NOT NULL AND barcode != '';")).scalar() or 0
     product_count = db.query(Product).count()
     invoice_count = db.query(Invoice).count()
     customer_count = db.query(Customer).count()
@@ -145,6 +146,7 @@ def get_longevity_audit(
     estimated_size_gb = round((projected_bills_50yr * 4.5 * 1024) / (1024 * 1024 * 1024), 2) + 0.5
 
     return {
+        "total_barcodes_generated": barcode_count,
         "current_product_count": product_count,
         "current_invoice_count": invoice_count,
         "current_customer_count": customer_count,

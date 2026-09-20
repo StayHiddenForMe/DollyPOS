@@ -23,7 +23,9 @@ import {
   Share2,
   CalendarDays,
   Activity,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Tag
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 
@@ -62,6 +64,13 @@ export const ReportsPage: React.FC = () => {
   const [selectedCalendarYear, setSelectedCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarData, setCalendarData] = useState<any | null>(null);
   const [loadingCalendar, setLoadingCalendar] = useState<boolean>(false);
+
+  // Custom Festival Stock Lead Items State
+  const [isAddFestivalItemModalOpen, setIsAddFestivalItemModalOpen] = useState(false);
+  const [targetFestivalName, setTargetFestivalName] = useState<string>('');
+  const [newFestItemName, setNewFestItemName] = useState<string>('');
+  const [newFestItemScope, setNewFestItemScope] = useState<'THIS_YEAR' | 'ALL_YEARS'>('ALL_YEARS');
+  const [isSubmittingFestItem, setIsSubmittingFestItem] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -138,6 +147,46 @@ export const ReportsPage: React.FC = () => {
       console.error('Failed to fetch festival calendar data', e);
     } finally {
       setLoadingCalendar(false);
+    }
+  };
+
+  const handleOpenAddFestItem = (festivalName: string) => {
+    setTargetFestivalName(festivalName);
+    setNewFestItemName('');
+    setNewFestItemScope('ALL_YEARS');
+    setIsAddFestivalItemModalOpen(true);
+  };
+
+  const handleSaveCustomFestItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFestItemName.trim() || !targetFestivalName) return;
+    setIsSubmittingFestItem(true);
+    try {
+      await api.post('/reports/festival-custom-item', {
+        festival_name: targetFestivalName,
+        item_name: newFestItemName.trim(),
+        scope: newFestItemScope,
+        year: selectedCalendarYear
+      });
+      setIsAddFestivalItemModalOpen(false);
+      setNewFestItemName('');
+      fetchCalendarData(selectedCalendarYear);
+    } catch (err) {
+      console.error('Failed to add custom festival item', err);
+      alert('Failed to save festival item.');
+    } finally {
+      setIsSubmittingFestItem(false);
+    }
+  };
+
+  const handleDeleteCustomFestItem = async (itemId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.delete(`/reports/festival-custom-item/${itemId}`);
+      fetchCalendarData(selectedCalendarYear);
+    } catch (err) {
+      console.error('Failed to delete custom festival item', err);
+      alert('Failed to delete item.');
     }
   };
 
@@ -880,21 +929,146 @@ export const ReportsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Recommended Stock Checklist */}
-                <div className="space-y-1 pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Stock Lead: {fest.stock_lead_days}d prior
-                  </span>
+                {/* Recommended Stock & Custom Stock Lead Checklist */}
+                <div className="space-y-1.5 pt-1.5 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Stock Lead: {fest.stock_lead_days}d prior
+                    </span>
+                    <button
+                      onClick={() => handleOpenAddFestItem(fest.name)}
+                      className="text-[10px] font-bold text-pink-600 hover:text-pink-700 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md hover:bg-pink-50 dark:hover:bg-pink-950/40 border border-pink-200 dark:border-pink-900/50"
+                      title="Add custom stock item for this festival"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
+
                   <div className="flex flex-wrap gap-1">
-                    {fest.recommended_stock.slice(0, 3).map((item: string, i: number) => (
+                    {/* Default Recommended Stock */}
+                    {fest.recommended_stock.map((item: string, i: number) => (
                       <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-700 border text-slate-700 dark:text-slate-300 font-medium">
                         {item}
+                      </span>
+                    ))}
+
+                    {/* Custom Store Owner Stock Lead Items */}
+                    {fest.custom_stock?.map((cItem: any) => (
+                      <span
+                        key={cItem.id}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-pink-100 dark:bg-pink-950/80 border border-pink-300 dark:border-pink-800 text-pink-800 dark:text-pink-200 font-bold flex items-center gap-1 shadow-2xs"
+                      >
+                        <span>{cItem.item_name}</span>
+                        <span className="text-[8px] font-mono opacity-80">
+                          ({cItem.scope === 'ALL_YEARS' ? 'All Years' : `${cItem.year}`})
+                        </span>
+                        <button
+                          onClick={(e) => handleDeleteCustomFestItem(cItem.id, e)}
+                          className="hover:text-rose-600 text-pink-500 font-black ml-0.5 text-[10px] cursor-pointer"
+                          title="Remove this custom item"
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Custom Festival Stock Lead */}
+      {isAddFestivalItemModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h2 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-pink-500" />
+                  Add Custom Stock Lead Item
+                </h2>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5 truncate max-w-xs">
+                  For: <span className="font-bold text-pink-600">{targetFestivalName}</span>
+                </p>
+              </div>
+              <button onClick={() => setIsAddFestivalItemModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-base">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveCustomFestItem} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Item / Product to Stock *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Colourful Dhoti kurta, Light Dandiya Sets, Red Santa Frock"
+                  value={newFestItemName}
+                  onChange={(e) => setNewFestItemName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-2 border-pink-400 rounded-xl font-bold focus:outline-none focus:border-pink-600 text-slate-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Scope / Duration *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewFestItemScope('THIS_YEAR')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      newFestItemScope === 'THIS_YEAR'
+                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 font-bold shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">📅</span>
+                      <span className="font-bold">Only This Year ({selectedCalendarYear})</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Appears only in {selectedCalendarYear} calendar</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewFestItemScope('ALL_YEARS')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      newFestItemScope === 'ALL_YEARS'
+                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 font-bold shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">♾️</span>
+                      <span className="font-bold">All Years (Every Year)</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Recurs annually for this festival</p>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsAddFestivalItemModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border text-slate-600 font-bold text-xs hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingFestItem || !newFestItemName.trim()}
+                  className="px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-md shadow-pink-600/20 disabled:opacity-50"
+                >
+                  {isSubmittingFestItem ? 'Saving...' : 'Save Stock Lead'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

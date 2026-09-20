@@ -253,7 +253,7 @@ export const DefectiveStockPage: React.FC = () => {
           className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-md shadow-rose-600/20 active:scale-95 transition-all"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Log Damaged Item</span>
+          <span>Log Damaged Item</span>
         </button>
       </div>
 

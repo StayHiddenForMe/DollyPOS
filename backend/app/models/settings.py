@@ -29,6 +29,7 @@ class StoreSettings(Base):
     terms_and_conditions = Column(Text, default="1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.", nullable=True)
     show_terms_on_bill = Column(Boolean, default=True, nullable=False)
     whatsapp_bill_template = Column(Text, nullable=True)
+    custom_festival_items = Column(Text, nullable=True)
     
     # Social Media & Branding
     instagram_handle = Column(String(100), default="@dollytoys_dhule", nullable=True)

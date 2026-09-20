@@ -16,7 +16,7 @@ from app.models.expense import Expense, ExpenseCategory
 from app.models.purchase import Purchase, PurchaseItem
 from app.models.user import User
 from app.models.whatsapp import WhatsAppLog
-from app.models.lost_demand import LostDemand
+from app.models.lost_demand import LostDemand, ProcurementNote
 
 class BackupService:
     @staticmethod
@@ -80,6 +80,8 @@ class BackupService:
                 "is_power_footer_bold": st.is_power_footer_bold if st else False,
                 "terms_and_conditions": st.terms_and_conditions if st else None,
                 "show_terms_on_bill": st.show_terms_on_bill if st else True,
+                "whatsapp_bill_template": getattr(st, 'whatsapp_bill_template', None) if st else None,
+                "custom_festival_items": getattr(st, 'custom_festival_items', None) if st else None,
                 "instagram_handle": st.instagram_handle if st else "@dollytoys_dhule",
                 "show_instagram_on_bill": st.show_instagram_on_bill if st else True,
                 "facebook_handle": st.facebook_handle if st else None,
@@ -374,6 +376,36 @@ class BackupService:
                     "expense_date": exp.expense_date.isoformat() if exp.expense_date else None
                 }
                 for exp in db.query(Expense).all()
+            ],
+            "procurement_notes": [
+                {
+                    "item_name": n.item_name,
+                    "quantity": n.quantity,
+                    "description": n.description,
+                    "vendor_name": n.vendor_name,
+                    "estimated_price": n.estimated_price,
+                    "priority": n.priority.value if hasattr(n.priority, 'value') else str(n.priority),
+                    "status": n.status.value if hasattr(n.status, 'value') else str(n.status),
+                    "notes": n.notes,
+                    "created_at": n.created_at.isoformat() if n.created_at else None
+                }
+                for n in db.query(ProcurementNote).all()
+            ],
+            "lost_demands": [
+                {
+                    "item_description": ld.item_description,
+                    "category_name": ld.category_name,
+                    "preferred_size": ld.preferred_size,
+                    "preferred_color": ld.preferred_color,
+                    "customer_name": ld.customer_name,
+                    "customer_phone": ld.customer_phone,
+                    "urgency": ld.urgency.value if hasattr(ld.urgency, 'value') else str(ld.urgency),
+                    "request_count": ld.request_count,
+                    "status": ld.status.value if hasattr(ld.status, 'value') else str(ld.status),
+                    "notes": ld.notes,
+                    "created_at": ld.created_at.isoformat() if ld.created_at else None
+                }
+                for ld in db.query(LostDemand).all()
             ]
         }
 
