@@ -69,11 +69,25 @@ if exist "%ROOT_DIR%installer\Uninstall-DollyPOS.bat" (
     powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%UNINSTALL_SHORTCUT%'); $s.TargetPath = '%ROOT_DIR%installer\Uninstall-DollyPOS.bat'; $s.Description = 'Uninstall Dolly POS'; $s.Save()"
 )
 
+:: 5. Register in Windows Control Panel (Programs and Features / Installed Apps)
+echo Registering in Windows Control Panel...
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "DisplayName" /d "Dolly POS - Retail Management" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "DisplayVersion" /d "1.0.0" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "Publisher" /d "Dolly Toys & Kids Wear" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "InstallLocation" /d "%WORKING_DIR%" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "DisplayIcon" /d "%EXE_PATH%" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "UninstallString" /d "cmd.exe /c \"%ROOT_DIR%installer\Uninstall-DollyPOS.bat\"" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "URLInfoAbout" /d "https://github.com/StayHiddenForMe/DollyPOS" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "NoModify" /t REG_DWORD /d 1 /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "NoRepair" /t REG_DWORD /d 1 /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /v "EstimatedSize" /t REG_DWORD /d 184320 /f >nul 2>&1
+
 echo.
 echo ======================================================================
 echo    INSTALLATION COMPLETE!
 echo    - Standalone Executable: %EXE_PATH%
 echo    - Shortcut Created on your Desktop: 'Dolly POS'
+echo    - Registered in Windows Control Panel: 'Dolly POS - Retail Management'
 echo ======================================================================
 echo.
 
@@ -84,5 +98,6 @@ if /i "%LAUNCH%"=="Y" (
 )
 
 exit
+
 
 
