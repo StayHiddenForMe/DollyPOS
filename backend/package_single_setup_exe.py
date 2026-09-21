@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import zipfile
 import shutil
@@ -32,18 +32,74 @@ with zipfile.ZipFile(zip_payload_path, "w", zipfile.ZIP_DEFLATED) as zf:
 print("Compressed payload ready.")
 
 # 3. Create Setup Wizard Python Script
-wizard_code = """
+wizard_code = r"""
 import os
 import sys
 import time
 import zipfile
 import subprocess
+import winreg
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 
 APP_NAME = "Dolly POS"
 TARGET_DIR = os.path.expandvars(r"%LOCALAPPDATA%\\DollyPOS")
+
+UNINSTALL_BAT_CONTENT = r'''@echo off
+title Dolly POS - Uninstaller
+echo ======================================================================
+echo             Dolly Toys & Kids Wear - Dolly POS Uninstaller
+echo ======================================================================
+echo.
+set /p CONFIRM="Are you sure you want to uninstall Dolly POS? (Y/N): "
+if /i not "%CONFIRM%"=="Y" (
+    echo Uninstall cancelled.
+    timeout /t 2 >nul
+    exit /b 0
+)
+
+echo.
+echo Stopping any running Dolly POS processes...
+taskkill /F /IM DollyPOS.exe /T >nul 2>&1
+
+echo Removing Desktop and Start Menu Shortcuts...
+del /f /q "%USERPROFILE%\\Desktop\\Dolly POS.lnk" >nul 2>&1
+rd /s /q "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Dolly POS" >nul 2>&1
+
+echo Removing Windows Control Panel Registration...
+reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DollyPOS" /f >nul 2>&1
+
+echo.
+echo ======================================================================
+echo Dolly POS application files removed successfully!
+echo [NOTE] Your database and store backups in "%USERPROFILE%\\DollyPOS_Backups"
+echo have been safely preserved.
+echo ======================================================================
+echo.
+pause
+
+:: Cleanly remove installation directory in background after exit
+start /b "" cmd /c "timeout /t 2 /nobreak >nul & rd /s /q \"%~dp0\" >nul 2>&1"
+exit
+'''
+
+def register_windows_control_panel(target_dir, exe_path, uninstall_bat_path):
+    try:
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS"
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Dolly POS - Retail Management")
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.0.0")
+            winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Dolly Toys & Kids Wear")
+            winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, target_dir)
+            winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, exe_path)
+            winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'cmd.exe /c "{uninstall_bat_path}"')
+            winreg.SetValueEx(key, "URLInfoAbout", 0, winreg.REG_SZ, "https://github.com/StayHiddenForMe/DollyPOS")
+            winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, 184320) # ~180MB
+    except Exception as ex:
+        print(f"Registry Warning: {ex}")
 
 def extract_and_install(progress_var, status_var, root, on_complete):
     try:
@@ -65,19 +121,19 @@ def extract_and_install(progress_var, status_var, root, on_complete):
             return
 
         status_var.set("Extracting Dolly POS files...")
-        progress_var.set(30)
+        progress_var.set(25)
 
         with zipfile.ZipFile(zip_path, "r") as zf:
             total_files = len(zf.namelist())
             for i, member in enumerate(zf.namelist()):
                 zf.extract(member, TARGET_DIR)
                 if i % 20 == 0:
-                    prog = 30 + int((i / total_files) * 45)
+                    prog = 25 + int((i / total_files) * 50)
                     progress_var.set(prog)
 
         status_var.set("Creating Desktop & Start Menu shortcuts...")
-        progress_var.set(85)
-        time.sleep(0.3)
+        progress_var.set(80)
+        time.sleep(0.2)
 
         exe_path = os.path.join(TARGET_DIR, "DollyPOS.exe")
         desktop_dir = os.path.expandvars(r"%USERPROFILE%\\Desktop")
@@ -94,9 +150,25 @@ def extract_and_install(progress_var, status_var, root, on_complete):
         ps_cmd2 = f"$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('{start_shortcut}'); $s.TargetPath = '{exe_path}'; $s.WorkingDirectory = '{TARGET_DIR}'; $s.Description = 'Dolly Toys & Kids Wear POS System'; $s.Save()"
         subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd2], creationflags=0x08000000)
 
+        # Write uninstall.bat into TARGET_DIR
+        uninstall_bat_path = os.path.join(TARGET_DIR, "uninstall.bat")
+        with open(uninstall_bat_path, "w", encoding="utf-8") as f:
+            f.write(UNINSTALL_BAT_CONTENT.strip())
+
+        # Create Uninstall Start Menu Shortcut
+        uninstall_shortcut = os.path.join(start_dir, "Uninstall Dolly POS.lnk")
+        ps_cmd3 = f"$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('{uninstall_shortcut}'); $s.TargetPath = '{uninstall_bat_path}'; $s.WorkingDirectory = '{TARGET_DIR}'; $s.Description = 'Uninstall Dolly POS'; $s.Save()"
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd3], creationflags=0x08000000)
+
+        # Register in Windows Control Panel (Programs and Features / Installed Apps)
+        status_var.set("Registering with Windows Control Panel...")
+        progress_var.set(92)
+        time.sleep(0.2)
+        register_windows_control_panel(TARGET_DIR, exe_path, uninstall_bat_path)
+
         progress_var.set(100)
         status_var.set("Installation complete! Ready to launch.")
-        time.sleep(0.5)
+        time.sleep(0.4)
         on_complete(exe_path)
     except Exception as ex:
         messagebox.showerror("Installation Error", f"Failed to install: {ex}")
