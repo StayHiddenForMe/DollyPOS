@@ -7,12 +7,15 @@ echo ======================================================================
 echo       Dolly Toys and Kids Wear - POS System Setup Wizard
 echo ======================================================================
 echo.
-echo Welcome to the Dolly POS Installation Wizard.
-echo This wizard will install Dolly POS on your computer and create a
-echo Desktop shortcut icon for 1-click launching.
-echo.
 
-:: Detect root project folder whether run from root or dist_installer subfolder
+:: 1. If standalone setup executable exists in current folder, launch setup wizard directly
+if exist "%~dp0DollyPOS_Setup_v1.0.0.exe" (
+    echo Launching Dolly POS Standalone Installation Wizard...
+    start "" "%~dp0DollyPOS_Setup_v1.0.0.exe"
+    exit /b 0
+)
+
+:: 2. Detect root project folder whether run from root or dist_installer subfolder
 set "ROOT_DIR=%~dp0"
 if exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
     set "ROOT_DIR=%~dp0"
@@ -24,30 +27,24 @@ if exist "%~dp0dist_app\DollyPOS\DollyPOS.exe" (
     set "ROOT_DIR=%~dp0..\"
 )
 
-:: 1. System Requirements Scan
-echo [1/4] Scanning System Requirements...
-echo  - Operating System: Windows 64-bit... [OK]
-echo  - Display and Audio Capabilities... [OK]
-echo  - Thermal and Barcode Printer Ports... [OK]
-echo.
-
-:: 2. Check if Standalone DollyPOS.exe is built
+:: 3. Check if Standalone DollyPOS.exe is built
 if not exist "%ROOT_DIR%dist_app\DollyPOS\DollyPOS.exe" (
     echo.
-    echo [2/4] Compiling Standalone Executable Binary...
+    echo Compiling Standalone Executable Binary...
     if exist "%ROOT_DIR%backend\venv\Scripts\python.exe" (
         call "%ROOT_DIR%backend\venv\Scripts\python.exe" "%ROOT_DIR%backend\build_standalone_exe.py"
     ) else (
-        echo Error: Python environment not found. Please ensure backend files are present.
+        echo Error: Neither Standalone DollyPOS.exe nor Python environment found.
+        echo If running on a new laptop, please run DollyPOS_Setup_v1.0.0.exe.
         pause
         exit /b 1
     )
 ) else (
-    echo [2/4] Standalone DollyPOS.exe binary verified... [OK]
+    echo Standalone DollyPOS.exe binary verified... [OK]
 )
 
-:: 3. Setup Desktop and Start Menu Shortcuts
-echo [3/4] Creating Desktop and Start Menu Shortcuts...
+:: 4. Setup Desktop and Start Menu Shortcuts
+echo Creating Desktop and Start Menu Shortcuts...
 set "EXE_PATH=%ROOT_DIR%dist_app\DollyPOS\DollyPOS.exe"
 set "WORKING_DIR=%ROOT_DIR%dist_app\DollyPOS"
 set "DESKTOP_SHORTCUT=%USERPROFILE%\Desktop\Dolly POS.lnk"
@@ -87,4 +84,5 @@ if /i "%LAUNCH%"=="Y" (
 )
 
 exit
+
 
