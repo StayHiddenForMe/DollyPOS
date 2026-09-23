@@ -485,7 +485,10 @@ export const CustomerPage: React.FC = () => {
                           type="button"
                           onClick={() => {
                             const cleanName = (!c.name || /^Customer(\s*\(\d+\))?$/i.test(c.name.trim())) ? 'Customer' : c.name.trim();
-                            const msg = `Hello ${cleanName},\n\nGreetings from *Dolly Toys and Kids Wear Dhule*! 🛍️✨\nVisit our showroom for brand new festive arrivals & exciting offers!\n\n📍 *Agra Road, Near MG Statue, Dhule* | 📞 7972558842`;
+                            const shop = settings?.shop_name || 'our store';
+                            const addr = settings?.address || 'Agra Road, Near MG Statue, Dhule';
+                            const phone = settings?.mobile || '7972558842';
+                            const msg = `Hello ${cleanName},\n\nGreetings from *${shop}*! 🛍️✨\nVisit our showroom for brand new festive arrivals & exciting offers!\n\n📍 *${addr}* | 📞 ${phone}`;
                             const cleanPhone = (c.phone || '').replace(/\D/g, '');
                             const finalPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
                             window.open(`https://api.whatsapp.com/send/?phone=${finalPhone}&text=${encodeURIComponent(msg)}&type=phone_number&app_absent=0`, '_blank');

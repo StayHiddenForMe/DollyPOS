@@ -226,7 +226,8 @@ export const SettingsPage: React.FC = () => {
         setBackupConfig(prev => ({
           ...prev,
           backup_path: res.data.backup_path,
-          auto_backup: res.data.auto_backup ?? true
+          auto_backup: res.data.auto_backup ?? true,
+          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY'
         }));
       }
     } catch (e) {
@@ -273,7 +274,8 @@ export const SettingsPage: React.FC = () => {
         setBackupConfig(prev => ({
           ...prev,
           backup_path: res.data.backup_directory,
-          auto_backup: res.data.auto_backup_enabled ?? true
+          auto_backup: res.data.auto_backup_enabled ?? true,
+          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY'
         }));
       }
     } catch (e) {
@@ -643,6 +645,22 @@ export const SettingsPage: React.FC = () => {
   };
 
   // Backup & Restore Handlers
+  const handleSaveBackupFrequency = async (newFreq?: string) => {
+    const freq = newFreq || backupConfig.backup_frequency || 'DAILY';
+    setBackupConfig(prev => ({ ...prev, backup_frequency: freq }));
+    try {
+      const res = await api.post('/backup/save-config', {
+        backup_path: backupConfig.backup_path,
+        auto_backup: backupConfig.auto_backup,
+        backup_frequency: freq
+      });
+      setBackupMsg(`✓ Backup frequency saved: ${freq === 'DAILY' ? '📅 Daily' : freq === 'WEEKLY_MONDAY' ? '📆 Weekly (Monday)' : '🗓️ Monthly (1st)'}`);
+      fetchBackupStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to save backup schedule frequency');
+    }
+  };
+
   const handleSaveBackupPath = async () => {
     setIsSavingBackupPath(true);
     setBackupMsg(null);
@@ -2693,22 +2711,42 @@ export const SettingsPage: React.FC = () => {
 
               {/* Schedule Frequency Selector */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    ⏰ Backup Schedule Frequency:
-                  </label>
-                  <select
-                    value={backupConfig.backup_frequency || 'DAILY'}
-                    onChange={(e) => setBackupConfig({ ...backupConfig, backup_frequency: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
-                  >
-                    <option value="DAILY">📅 Daily — Automatic backup everyday on POS launch / startup</option>
-                    <option value="WEEKLY_MONDAY">📆 Weekly — Automatic backup every Monday</option>
-                    <option value="MONTHLY_FIRST">🗓️ Monthly — Automatic backup on the 1st of every month</option>
-                  </select>
+                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      ⏰ Backup Schedule Frequency:
+                    </label>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                      Auto-Saves on Selection
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <select
+                      value={backupConfig.backup_frequency || 'DAILY'}
+                      onChange={(e) => {
+                        const newFreq = e.target.value;
+                        setBackupConfig({ ...backupConfig, backup_frequency: newFreq });
+                        handleSaveBackupFrequency(newFreq);
+                      }}
+                      className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 cursor-pointer"
+                    >
+                      <option value="DAILY">📅 Daily — Automatic backup everyday on POS launch / startup</option>
+                      <option value="WEEKLY_MONDAY">📆 Weekly — Automatic backup every Monday</option>
+                      <option value="MONTHLY_FIRST">🗓️ Monthly — Automatic backup on the 1st of every month</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveBackupFrequency()}
+                      className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
+                      title="Save Selected Frequency"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5">
+                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5 flex flex-col justify-center">
                   <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                     🛡️ Verification Guarantee:
                   </span>

@@ -23,6 +23,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
+import { useSettingStore } from '../store/settingStore';
 
 interface ChatMessage {
   id: string;
@@ -32,6 +33,8 @@ interface ChatMessage {
 }
 
 export const AIAdvisorPage: React.FC = () => {
+  const { settings } = useSettingStore();
+  const shopName = settings?.shop_name || 'your store';
   const [activeTab, setActiveTab] = useState<'COPILOT' | 'REORDER' | 'PRICING' | 'CUSTOMERS' | 'CATEGORIES' | 'SUPPLIERS' | 'BASKET' | 'SEASONAL'>('COPILOT');
   
   // Data States
@@ -50,7 +53,7 @@ export const AIAdvisorPage: React.FC = () => {
     {
       id: 'welcome',
       sender: 'ai',
-      text: "### 👋 Hello Somesh! I am your AI Retail Copilot for Dolly Toys and Kids Wear.\n\nI have real-time access to your 20,500+ products, sales transactions, customer Khata ledgers, and operating expenses.\n\nAsk me anything! For example:\n• *'What is our total stock valuation in the store?'*\n• *'How much profit did we make this month?'*\n• *'Which products are bestsellers?'*\n• *'Who owes the most Khata credit?'*\n• *'How much capital is trapped in dead stock?'*",
+      text: `### 👋 Hello! I am your AI Retail Copilot for ${shopName}.\n\nI have real-time access to your 20,500+ products, sales transactions, customer Khata ledgers, and operating expenses.\n\nAsk me anything! For example:\n• *'What is our total stock valuation in the store?'*\n• *'How much profit did we make this month?'*\n• *'Which products are bestsellers?'*\n• *'Who owes the most Khata credit?'*\n• *'How much capital is trapped in dead stock?'*`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -475,7 +478,7 @@ export const AIAdvisorPage: React.FC = () => {
         {activeTab === 'SUPPLIERS' && (
           <div className="flex-1 overflow-y-auto space-y-3 text-xs">
             <div className="p-3 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/40 text-blue-900 dark:text-blue-200">
-              Ranks your suppliers by gross margin percentage generated in Dolly Toys and Kids Wear.
+              Ranks your suppliers by gross margin percentage generated in {shopName}.
             </div>
 
             <div className="grid grid-cols-2 gap-3">

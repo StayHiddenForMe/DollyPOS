@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useSettingStore } from '../store/settingStore';
 import api from '../utils/api';
 import { 
   TrendingUp, 
@@ -30,6 +31,7 @@ import { formatINR } from '../utils/formatters';
 
 export const DashboardPage: React.FC = () => {
   const { user, isOwner } = useAuthStore();
+  const { settings } = useSettingStore();
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -182,7 +184,7 @@ export const DashboardPage: React.FC = () => {
             </span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Dolly Toys and Kids Wear • Live Retail Pulse, Stock Velocity & Growth Cockpit
+            {settings?.shop_name || 'Dolly Toys & Kids Wear'} • Live Retail Pulse, Stock Velocity & Growth Cockpit
           </p>
         </div>
 
@@ -218,14 +220,14 @@ export const DashboardPage: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-black tracking-tight">
-                    Happy {yearsPassed}th Anniversary, Dolly Toys & Kids Wear! 🎉
+                    Happy {yearsPassed}th Anniversary, {settings?.shop_name || 'Dolly Toys & Kids Wear'}! 🎉
                   </h2>
                   <span className="px-2.5 py-0.5 rounded-full bg-white text-pink-700 text-[10px] font-black uppercase shadow-xs">
                     Est. 17 Feb 2002
                   </span>
                 </div>
                 <p className="text-xs text-pink-100 font-medium mt-0.5">
-                  Celebrating {yearsPassed} glorious years of retail excellence, quality toys, trendy kids wear, and happy families in Dhule!
+                  Celebrating {yearsPassed} glorious years of retail excellence, quality products, and happy families!
                 </p>
               </div>
             </div>

@@ -102,10 +102,14 @@ def save_bill_template(
 def get_whatsapp_config(db: Session = Depends(get_db)):
     """Fetches the active WhatsApp configuration."""
     config = db.query(WhatsAppConfig).first()
+    store_settings = db.query(StoreSettings).first()
+    default_phone = store_settings.mobile if store_settings and store_settings.mobile else "7972558842"
+    default_name = store_settings.shop_name if store_settings and store_settings.shop_name else "Dolly Toys & Kids Wear"
+    
     if not config:
         config = WhatsAppConfig(
-            store_phone="7972558842",
-            store_name="Dolly Toys and Kids Wear",
+            store_phone=default_phone,
+            store_name=default_name,
             provider=WhatsAppProvider.DIRECT_WEB,
             is_connected=True,
             updated_at=datetime.utcnow()
@@ -121,14 +125,14 @@ def update_whatsapp_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Updates WhatsApp connection settings and phone number."""
+    """Updates WhatsApp connection settings, phone number, and syncs with store settings."""
     config = db.query(WhatsAppConfig).first()
     if not config:
         config = WhatsAppConfig()
         db.add(config)
     
     config.store_phone = req.store_phone.strip()
-    config.store_name = req.store_name.strip() if req.store_name else "Dolly Toys and Kids Wear"
+    config.store_name = req.store_name.strip() if req.store_name else "Dolly Toys & Kids Wear"
     config.provider = req.provider or WhatsAppProvider.DIRECT_WEB
     config.meta_api_token = req.meta_api_token.strip() if req.meta_api_token else None
     config.meta_phone_number_id = req.meta_phone_number_id.strip() if req.meta_phone_number_id else None
@@ -136,9 +140,17 @@ def update_whatsapp_config(
     config.is_connected = True
     config.updated_at = datetime.utcnow()
     
+    # Sync with StoreSettings so both stay aligned
+    store_settings = db.query(StoreSettings).first()
+    if store_settings:
+        if req.store_phone.strip():
+            store_settings.mobile = req.store_phone.strip()
+        if req.store_name and req.store_name.strip():
+            store_settings.shop_name = req.store_name.strip()
+
     db.commit()
     db.refresh(config)
-    return {"success": True, "message": "WhatsApp configuration updated successfully", "config": config}
+    return {"success": True, "message": "WhatsApp configuration updated and synchronized successfully", "config": config}
 
 @router.get("/status")
 def get_whatsapp_status(db: Session = Depends(get_db)):
@@ -151,7 +163,7 @@ def get_whatsapp_status(db: Session = Depends(get_db)):
         "gateway": "DollyPOS Automated WhatsApp Gateway",
         "registered_store_phone": store_phone,
         "provider": provider,
-        "supported_test_numbers": [store_phone, "9422296627"],
+        "supported_test_numbers": [store_phone],
         "is_active": True,
         "timestamp": datetime.utcnow().isoformat()
     }

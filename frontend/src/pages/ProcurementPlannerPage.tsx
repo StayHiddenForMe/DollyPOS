@@ -37,8 +37,13 @@ import {
 import { formatINR } from '../utils/formatters';
 import { ProcurementNote } from '../types';
 import { buildWhatsAppUrl } from '../utils/whatsappFormatter';
+import { useSettingStore } from '../store/settingStore';
 
 export const ProcurementPlannerPage: React.FC = () => {
+  const { settings } = useSettingStore();
+  const shopName = settings?.shop_name || 'Dolly Toys & Kids Wear';
+  const shopAddress = settings?.address || 'Agra Road, Near Mahatma Gandhi Statue, Dhule';
+  const shopMobile = settings?.mobile || '7972558842';
   const [activeTab, setActiveTab] = useState<'LOW_STOCK' | 'BUYING_NOTES' | 'LOST_DEMAND'>('LOW_STOCK');
   const [lowStockData, setLowStockData] = useState<any>(null);
   const [lostDemandList, setLostDemandList] = useState<any[]>([]);
@@ -301,11 +306,11 @@ export const ProcurementPlannerPage: React.FC = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Buying Notes & Purchase Wishlist — Dolly Toys & Kids Wear</title>
+        <title>Buying Notes & Purchase Wishlist — ${shopName}</title>
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #1e293b; font-size: 11px; }
           .header { border-bottom: 2px solid #ec4899; padding-bottom: 8px; margin-bottom: 12px; }
-          .title { font-size: 17px; font-weight: bold; color: #be185d; }
+          .title { font-size: 17px; font-weight: bold; color: #be185d; text-transform: uppercase; }
           .subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
           th { background: #f1f5f9; padding: 7px 8px; text-align: left; border-bottom: 2px solid #cbd5e1; }
@@ -316,8 +321,8 @@ export const ProcurementPlannerPage: React.FC = () => {
       </head>
       <body>
         <div class="header">
-          <div class="title">DOLLY TOYS AND KIDS WEAR — BUYING NOTES & PURCHASE WISHLIST</div>
-          <div class="subtitle">Agra Road, Near Mahatma Gandhi Statue, Dhule | Phone: 7972558842</div>
+          <div class="title">${shopName} — BUYING NOTES & PURCHASE WISHLIST</div>
+          <div class="subtitle">${shopAddress} | Phone: ${shopMobile}</div>
           <div class="subtitle">Generated on: ${new Date().toLocaleString('en-IN')} | Filter: ${notesStatusFilter} | Vendor: ${notesVendorFilter}</div>
         </div>
         <table>
@@ -362,9 +367,9 @@ export const ProcurementPlannerPage: React.FC = () => {
       `${idx + 1}. *${n.item_name}* (Qty: ${n.quantity} pcs)${n.vendor_name ? ` [Vendor: ${n.vendor_name}]` : ''}${n.description ? `\n   - Note: ${n.description}` : ''}`
     ).join('\n');
 
-    const message = `🛍️ *DOLLY TOYS & KIDS WEAR — MARKET PURCHASE WISHLIST*\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n------------------------------------\n${itemsText}\n------------------------------------\n📦 Total Items: ${notesList.length} | Units: ${notesSummary.total_units || 0} pcs\n💰 Est. Budget: ₹${(notesSummary.total_estimated_budget || 0).toLocaleString('en-IN')}\n\n_Generated from Dolly POS Buying Planner_`;
+    const message = `🛍️ *${shopName.toUpperCase()} — MARKET PURCHASE WISHLIST*\n📅 Date: ${new Date().toLocaleDateString('en-IN')}\n------------------------------------\n${itemsText}\n------------------------------------\n📦 Total Items: ${notesList.length} | Units: ${notesSummary.total_units || 0} pcs\n💰 Est. Budget: ₹${(notesSummary.total_estimated_budget || 0).toLocaleString('en-IN')}\n\n_Generated from Dolly POS Buying Planner_`;
 
-    const url = buildWhatsAppUrl('7972558842', message);
+    const url = buildWhatsAppUrl(shopMobile, message);
     window.open(url, '_blank');
   };
 
@@ -477,11 +482,11 @@ export const ProcurementPlannerPage: React.FC = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Procurement Buying Sheet — Dolly Toys & Kids Wear</title>
+        <title>Procurement Buying Sheet — ${shopName}</title>
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #1e293b; font-size: 12px; }
           .header { border-bottom: 2px solid #ec4899; padding-bottom: 10px; margin-bottom: 15px; }
-          .title { font-size: 18px; font-weight: bold; color: #be185d; }
+          .title { font-size: 18px; font-weight: bold; color: #be185d; text-transform: uppercase; }
           .subtitle { font-size: 11px; color: #64748b; margin-top: 3px; }
           .vendor-section { margin-top: 20px; page-break-inside: avoid; }
           .vendor-title { font-size: 14px; font-weight: bold; background: #fdf2f8; padding: 6px 10px; border-left: 4px solid #ec4899; }
@@ -501,8 +506,8 @@ export const ProcurementPlannerPage: React.FC = () => {
       </head>
       <body>
         <div class="header">
-          <div class="title">DOLLY TOYS AND KIDS WEAR — WHOLESALE BUYING SHEET</div>
-          <div class="subtitle">Agra Road, Near Mahatma Gandhi Statue, Dhule | Phone: 7972558842</div>
+          <div class="title">${shopName} — WHOLESALE BUYING SHEET</div>
+          <div class="subtitle">${shopAddress} | Phone: ${shopMobile}</div>
           <div class="subtitle">Generated on: ${new Date().toLocaleString('en-IN')} | Scope: ${selectedVendorFilter === 'ALL' ? 'All Vendors & General Stock' : selectedVendorFilter}</div>
         </div>
 

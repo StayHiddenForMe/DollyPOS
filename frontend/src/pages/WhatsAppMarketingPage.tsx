@@ -105,7 +105,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
   // Single Direct Chat Form
   const [singlePhone, setSinglePhone] = useState('');
   const [singleName, setSingleName] = useState('');
-  const [singleMessage, setSingleMessage] = useState('Namaskar! Special greetings from Dolly Toys and Kids Wear, Dhule.');
+  const [singleMessage, setSingleMessage] = useState('Namaskar! Special greetings from our store.');
   const [sendingSingle, setSendingSingle] = useState(false);
   const [singleFeedback, setSingleFeedback] = useState<string | null>(null);
 
@@ -563,8 +563,11 @@ export const WhatsAppMarketingPage: React.FC = () => {
   };
 
   const handleSendKhataReminder = async (cust: any) => {
+    const storeName = config.store_name || 'our store';
+    const storeAddr = config.store_address || 'our showroom';
+    const storeUpi = config.upi_id || `${config.store_phone || '7972558842'}@upi`;
     const template = templates.find(t => t.id === 'khata_reminder')?.template || 
-      `Namaskar {name} ji, 🙏\n\nThis is a gentle reminder regarding your outstanding Khata balance of *₹{balance}* at *Dolly Toys and Kids Wear, Dhule*.\n\n📲 *Pay easily via UPI:* ${config.store_phone}@upi\nOr visit our shop at Agra Road, Near MG Statue, Dhule.\n\nThank you for shopping with us! 😊`;
+      `Namaskar {name} ji, 🙏\n\nThis is a gentle reminder regarding your outstanding Khata balance of *₹{balance}* at *${storeName}*.\n\n📲 *Pay easily via UPI:* ${storeUpi}\nOr visit our shop at ${storeAddr}.\n\nThank you for shopping with us! 😊`;
     
     const text = personalizeTextForCustomer(cust, template);
     openWhatsAppDirect(cust.phone, text);
@@ -1442,14 +1445,25 @@ export const WhatsAppMarketingPage: React.FC = () => {
         {activeTab === 'SETTINGS' && (
           <div className="h-full flex flex-col space-y-4 overflow-y-auto max-w-4xl">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
-              <h4 className="font-bold text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Settings className="w-3.5 h-3.5 text-emerald-600" />
-                Store Profile & Default WhatsApp Number
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <Settings className="w-3.5 h-3.5 text-emerald-600" />
+                  Store Profile & Default WhatsApp Number
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={savingConfig}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingConfig ? 'Saving...' : 'Save Profile Phone'}</span>
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="font-bold text-slate-500 block mb-1">Store WhatsApp Phone</label>
+                  <label className="font-bold text-slate-500 block mb-1">Store WhatsApp Phone (Editable)</label>
                   <div className="flex items-center">
                     <span className="px-3 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-l-xl border border-r-0 text-xs">
                       +91
@@ -1458,7 +1472,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
                       type="text"
                       value={config.store_phone || ''}
                       onChange={(e) => setConfig({ ...config, store_phone: e.target.value })}
-                      placeholder="7972558842"
+                      placeholder="e.g. 7972558842"
                       className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border rounded-r-xl font-mono font-bold focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -1470,7 +1484,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
                     type="text"
                     value={config.store_name || ''}
                     onChange={(e) => setConfig({ ...config, store_name: e.target.value })}
-                    placeholder="Dolly Toys and Kids Wear"
+                    placeholder="Dolly Toys & Kids Wear"
                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border rounded-xl font-bold focus:outline-none focus:border-emerald-500"
                   />
                 </div>
