@@ -65,7 +65,7 @@ export const StatusBar: React.FC = () => {
       <div className="flex items-center space-x-3">
         <div className="flex items-center space-x-1 text-slate-300">
           <UserIcon className="w-3 h-3 text-purple-400" />
-          <span>{user?.full_name || 'Owner'} ({user?.role || 'ADMIN'})</span>
+          <span>{user?.full_name?.replace(/\s*\([^)]*\)/g, '').trim() || 'Somesh Bang'} • <strong className="text-purple-300">{user?.role || 'OWNER'}</strong></span>
         </div>
 
         <span className="text-slate-600">|</span>

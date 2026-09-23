@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useSettingStore } from '../store/settingStore';
 import api from '../utils/api';
 import { Store, Lock, User, KeyRound, AlertCircle, ArrowRight } from 'lucide-react';
 
@@ -10,7 +11,12 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
+  const { settings, fetchSettings } = useSettingStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,11 +43,16 @@ export const LoginPage: React.FC = () => {
             <Store className="w-9 h-9" />
           </div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
-            Dolly Toys & Kids Wear
+            {settings?.shop_name || 'Dolly Toys & Kids Wear'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Agra Road, Near Mahatma Gandhi Statue, Dhule
+            {settings?.address || 'Agra Road, Near Mahatma Gandhi Statue, Dhule'}
           </p>
+          {settings?.tag_line && (
+            <p className={`text-[11px] text-pink-600 dark:text-pink-400 ${settings?.is_tagline_bold ? 'font-black' : 'font-semibold'}`}>
+              {settings.tag_line}
+            </p>
+          )}
         </div>
 
         {/* Error alert */}

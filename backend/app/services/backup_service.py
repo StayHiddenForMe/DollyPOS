@@ -15,8 +15,10 @@ from app.models.return_order import ReturnOrder, ReturnItem
 from app.models.expense import Expense, ExpenseCategory
 from app.models.purchase import Purchase, PurchaseItem
 from app.models.user import User
-from app.models.whatsapp import WhatsAppLog
+from app.models.whatsapp import WhatsAppLog, WhatsAppConfig
 from app.models.lost_demand import LostDemand, ProcurementNote
+from app.models.product_price_history import ProductPriceHistory
+from app.models.audit_log import AuditLog
 
 class BackupService:
     @staticmethod
@@ -34,11 +36,11 @@ class BackupService:
         return target
 
     @staticmethod
-    def create_database_backup(db: Session, custom_path: str = None, is_auto_monthly: bool = False) -> dict:
+    def create_database_backup(db: Session, custom_path: str = None, is_auto_monthly: bool = False, auto_schedule: str = None) -> dict:
         """
         Creates a 100% complete portable JSON snapshot of the entire Dolly POS database:
         Products, Categories, Invoices, Customers, Ledgers, Expenses, Purchases,
-        Vendors, Returns, WhatsApp logs, Users, and Store Settings.
+        Vendors, Returns, WhatsApp logs, Users, Price History, Audit Logs, and Store Settings.
         """
         target_dir = custom_path or BackupService.get_backup_directory(db)
         os.makedirs(target_dir, exist_ok=True)
@@ -46,7 +48,11 @@ class BackupService:
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         
-        if is_auto_monthly:
+        if auto_schedule == "DAILY":
+            backup_filename = f"DollyToys_AutoDailyBackup_{now.strftime('%Y_%m_%d')}.json"
+        elif auto_schedule in ["WEEKLY", "WEEKLY_MONDAY"]:
+            backup_filename = f"DollyToys_AutoWeeklyBackup_{now.strftime('%Y_W%W')}.json"
+        elif is_auto_monthly or auto_schedule in ["MONTHLY", "MONTHLY_FIRST"]:
             backup_filename = f"DollyToys_AutoMonthlyBackup_{now.strftime('%Y_%m_01')}.json"
         else:
             backup_filename = f"DollyToys_CompleteBackup_{timestamp}.json"
@@ -56,9 +62,10 @@ class BackupService:
 
         # Build full JSON data payload
         data = {
-            "backup_version": "2.0",
+            "backup_version": "2.1",
             "export_date": now.isoformat(),
-            "is_auto_monthly": is_auto_monthly,
+            "is_auto_monthly": is_auto_monthly or (auto_schedule in ["MONTHLY", "MONTHLY_FIRST"]),
+            "auto_schedule": auto_schedule,
             "store_name": st.shop_name if st else "Dolly Toys and Kids Wear",
             "store_settings": {
                 "shop_name": st.shop_name if st else "Dolly Toys and Kids Wear",
@@ -71,11 +78,13 @@ class BackupService:
                 "gstin": st.gstin if st else None,
                 "show_gst_on_bill": st.show_gst_on_bill if st else False,
                 "upi_id": st.upi_id if st else "7972558842@upi",
+                "show_upi_qr_on_bill": getattr(st, 'show_upi_qr_on_bill', True) if st else True,
                 "opening_date": st.opening_date if st else "2002-01-01",
                 "bill_header": st.bill_header if st else "Tax Invoice / Retail Bill",
                 "bill_footer": st.bill_footer if st else None,
                 "footer_font_size": st.footer_font_size if st else "10px",
                 "is_footer_bold": st.is_footer_bold if st else False,
+                "power_footer_text": getattr(st, 'power_footer_text', "Software powered by Dolly POS© | Since 2002") if st else "Software powered by Dolly POS© | Since 2002",
                 "power_footer_font_size": st.power_footer_font_size if st else "9px",
                 "is_power_footer_bold": st.is_power_footer_bold if st else False,
                 "terms_and_conditions": st.terms_and_conditions if st else None,
@@ -406,6 +415,46 @@ class BackupService:
                     "created_at": ld.created_at.isoformat() if ld.created_at else None
                 }
                 for ld in db.query(LostDemand).all()
+            ],
+            "product_price_history": [
+                {
+                    "barcode": pph.product.barcode if pph.product else None,
+                    "product_name": pph.product.name if pph.product else None,
+                    "old_purchase_price": pph.old_purchase_price,
+                    "new_purchase_price": pph.new_purchase_price,
+                    "old_selling_price": pph.old_selling_price,
+                    "new_selling_price": pph.new_selling_price,
+                    "old_mrp": pph.old_mrp,
+                    "new_mrp": pph.new_mrp,
+                    "reason": pph.reason,
+                    "changed_by": pph.changed_by,
+                    "created_at": pph.created_at.isoformat() if pph.created_at else None
+                }
+                for pph in db.query(ProductPriceHistory).all()
+            ],
+            "whatsapp_logs": [
+                {
+                    "recipient_name": wl.recipient_name,
+                    "recipient_phone": wl.recipient_phone,
+                    "message_type": wl.message_type.value if hasattr(wl.message_type, 'value') else str(wl.message_type),
+                    "message_text": wl.message_text,
+                    "status": wl.status.value if hasattr(wl.status, 'value') else str(wl.status),
+                    "error_message": wl.error_message,
+                    "sent_at": wl.sent_at.isoformat() if wl.sent_at else None
+                }
+                for wl in db.query(WhatsAppLog).all()
+            ],
+            "audit_logs": [
+                {
+                    "user_id": al.user_id,
+                    "action_type": al.action_type,
+                    "entity": al.entity,
+                    "entity_id": al.entity_id,
+                    "details_json": al.details_json,
+                    "ip_address": al.ip_address,
+                    "created_at": al.created_at.isoformat() if al.created_at else None
+                }
+                for al in db.query(AuditLog).all()
             ]
         }
 
@@ -427,34 +476,51 @@ class BackupService:
         }
 
     @staticmethod
-    def check_and_run_monthly_auto_backup(db: Session) -> dict:
+    def check_and_run_scheduled_auto_backup(db: Session) -> dict:
         """
-        Checks if the current month's automatic backup has been created.
-        If missing and auto_backup is enabled, automatically creates it in the configured folder.
+        Checks if the configured automatic backup (DAILY, WEEKLY_MONDAY, or MONTHLY_FIRST) has been created.
+        If missing and auto_backup is enabled, automatically creates it in the configured destination folder.
         """
         store_settings = db.query(StoreSettings).first()
         if store_settings and not store_settings.auto_backup:
-            return {"status": "DISABLED", "message": "Automatic monthly backup is disabled in settings."}
+            return {"status": "DISABLED", "message": "Automatic backup is disabled in settings."}
 
+        freq = (store_settings.backup_frequency if store_settings and store_settings.backup_frequency else "DAILY").upper()
         target_dir = BackupService.get_backup_directory(db)
         now = datetime.now()
-        monthly_filename = f"DollyToys_AutoMonthlyBackup_{now.strftime('%Y_%m_01')}.json"
-        monthly_filepath = os.path.join(target_dir, monthly_filename)
 
-        if not os.path.exists(monthly_filepath):
-            # Create the monthly backup automatically
-            result = BackupService.create_database_backup(db, custom_path=target_dir, is_auto_monthly=True)
+        if freq == "DAILY":
+            scheduled_filename = f"DollyToys_AutoDailyBackup_{now.strftime('%Y_%m_%d')}.json"
+            schedule_label = f"Daily ({now.strftime('%d-%m-%Y')})"
+        elif freq in ["WEEKLY", "WEEKLY_MONDAY"]:
+            scheduled_filename = f"DollyToys_AutoWeeklyBackup_{now.strftime('%Y_W%W')}.json"
+            schedule_label = f"Weekly (Week {now.strftime('%W, %Y')})"
+        else: # MONTHLY / MONTHLY_FIRST
+            scheduled_filename = f"DollyToys_AutoMonthlyBackup_{now.strftime('%Y_%m_01')}.json"
+            schedule_label = f"Monthly ({now.strftime('%B %Y')})"
+
+        scheduled_filepath = os.path.join(target_dir, scheduled_filename)
+
+        if not os.path.exists(scheduled_filepath):
+            result = BackupService.create_database_backup(db, custom_path=target_dir, auto_schedule=freq)
             return {
                 "status": "CREATED_NOW",
-                "message": f"Automatic monthly backup created for {now.strftime('%B %Y')}",
-                "file_path": monthly_filepath,
+                "frequency": freq,
+                "message": f"Automatic {schedule_label} backup created successfully.",
+                "file_path": scheduled_filepath,
                 "details": result
             }
 
         return {
             "status": "UP_TO_DATE",
-            "message": f"Current month ({now.strftime('%B %Y')}) backup is already up to date.",
-            "file_path": monthly_filepath
+            "frequency": freq,
+            "message": f"{schedule_label} backup is already up to date.",
+            "file_path": scheduled_filepath
         }
+
+    @staticmethod
+    def check_and_run_monthly_auto_backup(db: Session) -> dict:
+        """Backwards compatibility alias for check_and_run_scheduled_auto_backup."""
+        return BackupService.check_and_run_scheduled_auto_backup(db)
 
 backup_service = BackupService()

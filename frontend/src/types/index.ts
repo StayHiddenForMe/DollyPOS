@@ -197,11 +197,13 @@ export interface StoreSettings {
   gstin?: string;
   show_gst_on_bill: boolean;
   upi_id: string;
+  show_upi_qr_on_bill?: boolean;
   opening_date?: string;
   bill_header?: string;
   bill_footer?: string;
   footer_font_size?: string;
   is_footer_bold?: boolean;
+  power_footer_text?: string;
   power_footer_font_size?: string;
   is_power_footer_bold?: boolean;
   terms_and_conditions?: string;

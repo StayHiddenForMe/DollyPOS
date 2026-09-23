@@ -406,6 +406,10 @@ def get_category_boom_analysis(current_user: User = Depends(get_current_user), d
         last_rev = last_month_items.rev or 0.0
         last_qty = last_month_items.qty or 0
 
+        # Skip categories with zero sales in both periods to avoid prefilled synthetic data
+        if this_rev == 0.0 and last_rev == 0.0 and this_qty == 0 and last_qty == 0:
+            continue
+
         growth = round(((this_rev - last_rev) / max(1.0, last_rev)) * 100, 1) if last_rev > 0 else (100.0 if this_rev > 0 else 0.0)
 
         if growth >= 40:

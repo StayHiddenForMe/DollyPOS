@@ -249,7 +249,7 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
           <div className="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium">
             <UserIcon className="w-3.5 h-3.5 text-slate-500" />
-            <span>{user?.full_name || user?.username}</span>
+            <span className="font-bold">{user?.full_name?.replace(/\s*\([^)]*\)/g, '').trim() || user?.full_name || user?.username}</span>
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
               isOwner() 
                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' 

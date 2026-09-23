@@ -23,11 +23,14 @@ def seed_initial_data():
         migration_statements = [
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS footer_font_size VARCHAR(20) DEFAULT '10px'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS is_footer_bold BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS power_footer_text VARCHAR(255) DEFAULT 'Software powered by Dolly POS© | Since 2002'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS power_footer_font_size VARCHAR(20) DEFAULT '9px'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS is_power_footer_bold BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS show_upi_qr_on_bill BOOLEAN DEFAULT TRUE",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS terms_and_conditions TEXT DEFAULT '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS show_terms_on_bill BOOLEAN DEFAULT TRUE",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS whatsapp_bill_template TEXT",
+            "UPDATE users SET full_name = 'Somesh Bang' WHERE username = 'admin'",
             "CREATE TABLE IF NOT EXISTS procurement_notes (id INTEGER PRIMARY KEY, item_name VARCHAR(255) NOT NULL, quantity INTEGER DEFAULT 1, description TEXT, vendor_name VARCHAR(255), estimated_price FLOAT DEFAULT 0.0, priority VARCHAR(50) DEFAULT 'NORMAL', status VARCHAR(50) DEFAULT 'PENDING', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS instagram_handle VARCHAR(100) DEFAULT '@dollytoys_dhule'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS show_instagram_on_bill BOOLEAN DEFAULT TRUE",
@@ -136,7 +139,7 @@ def seed_initial_data():
             owner_user = User(
                 username="admin",
                 password_hash=get_password_hash("somesh123"),
-                full_name="Somesh Bang (Owner)",
+                full_name="Somesh Bang",
                 role=UserRole.OWNER,
                 is_active=True
             )

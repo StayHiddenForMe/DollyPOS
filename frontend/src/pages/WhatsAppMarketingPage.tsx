@@ -85,7 +85,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
 
   // Bill Template Designer State
   const [billTemplateText, setBillTemplateText] = useState<string>(DEFAULT_WHATSAPP_BILL_TEMPLATE);
-  const [testBillPhone, setTestBillPhone] = useState<string>('7972558842');
+  const [testBillPhone, setTestBillPhone] = useState<string>('');
   const [savingBillTemplate, setSavingBillTemplate] = useState<boolean>(false);
   const [billTemplateFeedback, setBillTemplateFeedback] = useState<string | null>(null);
   const billTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,8 +103,8 @@ export const WhatsAppMarketingPage: React.FC = () => {
   const [assistantSentIds, setAssistantSentIds] = useState<number[]>([]);
 
   // Single Direct Chat Form
-  const [singlePhone, setSinglePhone] = useState('7972558842');
-  const [singleName, setSingleName] = useState('Somesh Bang');
+  const [singlePhone, setSinglePhone] = useState('');
+  const [singleName, setSingleName] = useState('');
   const [singleMessage, setSingleMessage] = useState('Namaskar! Special greetings from Dolly Toys and Kids Wear, Dhule.');
   const [sendingSingle, setSendingSingle] = useState(false);
   const [singleFeedback, setSingleFeedback] = useState<string | null>(null);
@@ -142,7 +142,6 @@ export const WhatsAppMarketingPage: React.FC = () => {
       if (statusRes.data) setStatus(statusRes.data);
       if (configRes.data) {
         setConfig(configRes.data);
-        setSinglePhone(configRes.data.store_phone || '7972558842');
       }
       if (tmplRes.data) {
         setTemplates(tmplRes.data);
@@ -1386,40 +1385,8 @@ export const WhatsAppMarketingPage: React.FC = () => {
         {/* TAB 3: QUICK DIRECT CHAT */}
         {activeTab === 'TEST_SENDER' && (
           <div className="h-full flex flex-col space-y-4 overflow-y-auto max-w-3xl">
-            <div className="p-4 rounded-2xl bg-gradient-to-tr from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-900/50 space-y-3">
-              <span className="font-bold text-xs text-emerald-800 dark:text-emerald-300 block uppercase tracking-wider">
-                🧪 1-Click Quick Test Senders
-              </span>
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <button
-                  onClick={() => {
-                    const phone = config.store_phone || '7972558842';
-                    openWhatsAppDirect(phone, `Namaskar Somesh! This is a test message from Dolly Toys and Kids Wear POS.`);
-                    handleSendSingle(phone, 'Somesh Bang', false);
-                  }}
-                  disabled={sendingSingle}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Test on Store Number (+91 {config.store_phone})</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    openWhatsAppDirect('9422296627', `Namaskar! This is a test message from Dolly Toys and Kids Wear POS.`);
-                    handleSendSingle('9422296627', 'Store Manager', false);
-                  }}
-                  disabled={sendingSingle}
-                  className="px-4 py-2 bg-teal-700 hover:bg-teal-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-teal-700/20 active:scale-95 transition-all"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Test on Manager (9422296627)</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Direct Customer Message Dispatcher</h3>
+            <div className="space-y-3">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Direct Customer WhatsApp Dispatcher</h3>
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="font-semibold text-slate-500 block mb-1">Recipient Phone Number</label>
@@ -1427,7 +1394,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
                     type="text"
                     value={singlePhone}
                     onChange={(e) => setSinglePhone(e.target.value)}
-                    placeholder="e.g. 7972558842"
+                    placeholder="Enter 10-digit mobile number"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono font-bold focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -1437,7 +1404,7 @@ export const WhatsAppMarketingPage: React.FC = () => {
                     type="text"
                     value={singleName}
                     onChange={(e) => setSingleName(e.target.value)}
-                    placeholder="Customer Name"
+                    placeholder="Customer Name (Optional)"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold focus:outline-none focus:border-emerald-500"
                   />
                 </div>

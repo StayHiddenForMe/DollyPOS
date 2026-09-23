@@ -29,7 +29,7 @@ router = APIRouter(prefix="/backup", tags=["Database Backup & Safety"])
 class BackupConfigRequest(BaseModel):
     backup_path: str
     auto_backup: bool = True
-    backup_frequency: str = "MONTHLY"
+    backup_frequency: str = "DAILY"
 
 @router.get("/status")
 def get_backup_status(
@@ -38,13 +38,13 @@ def get_backup_status(
 ):
     """
     Returns the backup configuration, target folder path, auto-backup status,
-    and runs monthly check automatically.
+    and runs scheduled check (Daily, Weekly Monday, or 1st of Month) automatically.
     """
     store_settings = db.query(StoreSettings).first()
     target_dir = backup_service.get_backup_directory(db)
     
-    # Run monthly auto-backup check
-    auto_res = backup_service.check_and_run_monthly_auto_backup(db)
+    # Run scheduled auto-backup check (Daily / Weekly Monday / Monthly 1st)
+    auto_res = backup_service.check_and_run_scheduled_auto_backup(db)
     
     # Check existing files
     backups = []
@@ -59,15 +59,16 @@ def get_backup_status(
                     "path": fpath,
                     "size_kb": size_kb,
                     "created_timestamp": mtime,
-                    "is_auto_monthly": "AutoMonthly" in f
+                    "is_auto_monthly": "AutoMonthly" in f or "AutoDaily" in f or "AutoWeekly" in f
                 })
         backups.sort(key=lambda x: x["created_timestamp"], reverse=True)
 
     return {
         "auto_backup_enabled": store_settings.auto_backup if store_settings else True,
-        "backup_frequency": store_settings.backup_frequency if store_settings else "MONTHLY",
+        "backup_frequency": store_settings.backup_frequency if store_settings else "DAILY",
         "backup_directory": target_dir,
         "monthly_check": auto_res,
+        "scheduled_check": auto_res,
         "total_backups_found": len(backups),
         "backups": backups
     }
@@ -78,7 +79,7 @@ def save_backup_config(
     current_user: User = Depends(require_owner),
     db: Session = Depends(get_db)
 ):
-    """Saves custom backup path and auto-backup toggle preference."""
+    """Saves custom backup path, auto-backup toggle, and frequency preference."""
     store_settings = db.query(StoreSettings).first()
     if not store_settings:
         store_settings = StoreSettings()
@@ -92,14 +93,15 @@ def save_backup_config(
 
     store_settings.backup_path = clean_path
     store_settings.auto_backup = req.auto_backup
-    store_settings.backup_frequency = req.backup_frequency or "MONTHLY"
+    store_settings.backup_frequency = req.backup_frequency or "DAILY"
     db.commit()
 
     return {
         "success": True,
-        "message": f"Backup directory set to: {clean_path}",
+        "message": f"Backup directory set to: {clean_path} (Frequency: {store_settings.backup_frequency})",
         "backup_path": clean_path,
-        "auto_backup": store_settings.auto_backup
+        "auto_backup": store_settings.auto_backup,
+        "backup_frequency": store_settings.backup_frequency
     }
 
 @router.post("/create")

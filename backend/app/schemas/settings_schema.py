@@ -13,11 +13,13 @@ class StoreSettingsBase(BaseModel):
     gstin: Optional[str] = None
     show_gst_on_bill: bool = False
     upi_id: str = "7972558842@upi"
+    show_upi_qr_on_bill: bool = True
     opening_date: Optional[str] = "2002-01-01"
     bill_header: Optional[str] = "Tax Invoice / Retail Bill"
     bill_footer: Optional[str] = "Thank you for shopping with Dolly Toys! No exchange without original bill."
     footer_font_size: Optional[str] = "10px"
     is_footer_bold: bool = False
+    power_footer_text: Optional[str] = "Software powered by Dolly POS© | Since 2002"
     power_footer_font_size: Optional[str] = "9px"
     is_power_footer_bold: bool = False
     terms_and_conditions: Optional[str] = "1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund."
@@ -112,11 +114,13 @@ class StoreSettingsUpdate(BaseModel):
     gstin: Optional[str] = None
     show_gst_on_bill: Optional[bool] = None
     upi_id: Optional[str] = None
+    show_upi_qr_on_bill: Optional[bool] = None
     opening_date: Optional[str] = None
     bill_header: Optional[str] = None
     bill_footer: Optional[str] = None
     footer_font_size: Optional[str] = None
     is_footer_bold: Optional[bool] = None
+    power_footer_text: Optional[str] = None
     power_footer_font_size: Optional[str] = None
     is_power_footer_bold: Optional[bool] = None
     terms_and_conditions: Optional[str] = None

@@ -17,6 +17,7 @@ class StoreSettings(Base):
     gstin = Column(String(20), nullable=True)
     show_gst_on_bill = Column(Boolean, default=False, nullable=False)
     upi_id = Column(String(100), default="7972558842@upi", nullable=False)
+    show_upi_qr_on_bill = Column(Boolean, default=True, nullable=False)
     opening_date = Column(String(50), default="2002-01-01", nullable=True)
     
     # Receipts Customization
@@ -24,6 +25,7 @@ class StoreSettings(Base):
     bill_footer = Column(Text, default="Thank you for shopping with Dolly Toys! No exchange without original bill.", nullable=True)
     footer_font_size = Column(String(20), default="10px", nullable=True)
     is_footer_bold = Column(Boolean, default=False, nullable=False)
+    power_footer_text = Column(String(255), default="Software powered by Dolly POS© | Since 2002", nullable=True)
     power_footer_font_size = Column(String(20), default="9px", nullable=True)
     is_power_footer_bold = Column(Boolean, default=False, nullable=False)
     terms_and_conditions = Column(Text, default="1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.", nullable=True)

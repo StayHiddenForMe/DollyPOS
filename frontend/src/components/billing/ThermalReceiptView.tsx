@@ -281,7 +281,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
             </div>
 
             {/* Dynamic UPI QR Embedded */}
-            {receiptData.upi_qr_base64 && (
+            {receiptData.upi_qr_base64 && receiptData.show_upi_qr_on_bill !== false && (
               <div className="py-2.5 flex flex-col items-center justify-center border-b border-dashed border-black">
                 <img 
                   src={receiptData.upi_qr_base64} 
@@ -361,9 +361,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                   WebkitTextStroke: receiptData.is_power_footer_bold ? '0.3px #000' : 'none'
                 }}
               >
-                <span>Software powered by Dolly POS©</span>
-                <span>|</span>
-                <span className="font-black">Since 2002</span>
+                <span>{receiptData.power_footer_text || 'Software powered by Dolly POS© | Since 2002'}</span>
               </p>
             </div>
           </div>

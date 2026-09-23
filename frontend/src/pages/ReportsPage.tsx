@@ -780,6 +780,13 @@ export const ReportsPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {loadingBoom ? (
                   <tr><td colSpan={6} className="text-center py-12 text-slate-400">Analyzing category momentum...</td></tr>
+                ) : categoryBoomData.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-slate-400">
+                      <p className="font-semibold text-xs text-slate-500 dark:text-slate-400">No active category sales recorded for this period.</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Start selling items to see live surge & boom momentum rankings!</p>
+                    </td>
+                  </tr>
                 ) : categoryBoomData.map((cat, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="py-3 px-3 font-bold text-slate-900 dark:text-white flex items-center gap-2">

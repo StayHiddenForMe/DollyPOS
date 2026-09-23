@@ -6,6 +6,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (user: User, token: string) => void;
+  setUser: (user: User) => void;
   logout: () => void;
   isOwner: () => boolean;
   isCashier: () => boolean;
@@ -30,6 +31,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
       sessionStorage.setItem('dolly_user', JSON.stringify(user));
       sessionStorage.setItem('dolly_token', token);
       set({ user, token, isAuthenticated: true });
+    },
+
+    setUser: (user: User) => {
+      sessionStorage.setItem('dolly_user', JSON.stringify(user));
+      set({ user });
     },
 
     logout: () => {

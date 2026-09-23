@@ -176,7 +176,7 @@ export const DashboardPage: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <span>Welcome back, {user?.full_name || 'Owner'}</span>
+            <span>Welcome back, {user?.full_name?.replace(/\s*\([^)]*\)/g, '').trim() || user?.full_name || 'Somesh'}</span>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 font-bold">
               {isOwner() ? 'Store Owner' : 'Counter Cashier'}
             </span>

@@ -57,8 +57,14 @@ export const SettingsPage: React.FC = () => {
     gstin: '',
     show_gst_on_bill: false,
     upi_id: '7972558842@upi',
+    show_upi_qr_on_bill: true,
     bill_header: 'Tax Invoice / Retail Bill',
     bill_footer: 'Thank you for shopping at Dolly Toys! No exchange without original bill.',
+    footer_font_size: '10px',
+    is_footer_bold: false,
+    power_footer_text: 'Software powered by Dolly POS© | Since 2002',
+    power_footer_font_size: '9px',
+    is_power_footer_bold: false,
     terms_and_conditions: '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.',
     show_terms_on_bill: true,
     instagram_handle: '@dollytoys_dhule',
@@ -344,12 +350,17 @@ export const SettingsPage: React.FC = () => {
     e.preventDefault();
     if (!editingStaff) return;
     try {
-      await api.put(`/auth/users/${editingStaff.id}`, {
+      const res = await api.put(`/auth/users/${editingStaff.id}`, {
         username: editingStaff.username,
         full_name: editingStaff.full_name,
         role: editingStaff.role,
         is_active: editingStaff.is_active
       });
+      // If updating the currently logged-in user, refresh auth state immediately
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser && currentUser.id === editingStaff.id) {
+        useAuthStore.getState().setUser(res.data);
+      }
       alert('Staff details updated successfully!');
       setIsEditStaffOpen(false);
       setEditingStaff(null);
@@ -529,10 +540,12 @@ export const SettingsPage: React.FC = () => {
       gstin: settings.gstin || '',
       show_gst_on_bill: settings.show_gst_on_bill || false,
       upi_id: settings.upi_id || '7972558842@upi',
+      show_upi_qr_on_bill: settings.show_upi_qr_on_bill !== false,
       bill_header: settings.bill_header || 'Tax Invoice / Retail Bill',
       bill_footer: settings.bill_footer || 'Thank you for shopping with Dolly Toys! Visit Again.',
       footer_font_size: settings.footer_font_size || '10px',
       is_footer_bold: settings.is_footer_bold || false,
+      power_footer_text: settings.power_footer_text || 'Software powered by Dolly POS© | Since 2002',
       power_footer_font_size: settings.power_footer_font_size || '9px',
       is_power_footer_bold: settings.is_power_footer_bold || false,
       terms_and_conditions: settings.terms_and_conditions || '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.',
@@ -637,11 +650,11 @@ export const SettingsPage: React.FC = () => {
       const res = await api.post('/backup/save-config', {
         backup_path: backupConfig.backup_path,
         auto_backup: backupConfig.auto_backup,
-        backup_frequency: 'MONTHLY'
+        backup_frequency: backupConfig.backup_frequency || 'DAILY'
       });
       // Also run instant test backup to verify folder works
       const backupRes = await api.post('/backup/create');
-      setBackupMsg(`✓ Saved! Target folder set to: ${res.data.backup_path}. Verified with test backup: ${backupRes.data.file_name}`);
+      setBackupMsg(`✓ Saved! Target folder set to: ${res.data.backup_path} (${res.data.backup_frequency || 'DAILY'}). Verified with test backup: ${backupRes.data.file_name}`);
       fetchBackupStatus();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to save backup path');
@@ -876,13 +889,25 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  UPI ID (For Dynamic Billing QR)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300">
+                    UPI ID (For Dynamic Billing QR)
+                  </label>
+                  <label className="flex items-center space-x-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.show_upi_qr_on_bill !== false}
+                      onChange={(e) => setSettings({ ...settings, show_upi_qr_on_bill: e.target.checked })}
+                      className="w-3.5 h-3.5 text-pink-600 rounded border-slate-300 focus:ring-pink-500"
+                    />
+                    <span className="text-[11px] font-bold text-pink-600 dark:text-pink-400">Show QR on Bill</span>
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={settings.upi_id || ''}
                   onChange={(e) => setSettings({ ...settings, upi_id: e.target.value })}
+                  placeholder="e.g. 7972558842@upi"
                   className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-pink-600 font-bold"
                 />
               </div>
@@ -1018,11 +1043,11 @@ export const SettingsPage: React.FC = () => {
               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300 text-xs block">
-                      Footer 2: Software Powered By & Since Line
-                    </span>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs">
+                      Footer 2: Software Powered By & Established Line
+                    </label>
                     <span className="text-[11px] text-slate-400 font-mono">
-                      "Software powered by Dolly POS© | Since 2002"
+                      Editable text printed at the bottom of thermal receipts
                     </span>
                   </div>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
@@ -1038,9 +1063,13 @@ export const SettingsPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                   <div className="md:col-span-2">
-                    <div className={`w-full px-3.5 py-2 bg-slate-100 dark:bg-slate-900/60 border rounded-xl text-slate-600 dark:text-slate-300 text-xs ${settings.is_power_footer_bold ? 'font-black' : 'font-medium'}`}>
-                      Software powered by Dolly POS© | Since 2002
-                    </div>
+                    <input
+                      type="text"
+                      value={settings.power_footer_text ?? 'Software powered by Dolly POS© | Since 2002'}
+                      onChange={(e) => setSettings({ ...settings, power_footer_text: e.target.value })}
+                      placeholder="e.g. Software powered by Dolly POS© | Since 2002"
+                      className={`w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl ${settings.is_power_footer_bold ? 'font-black' : 'font-semibold'}`}
+                    />
                   </div>
 
                   <div>
@@ -2628,7 +2657,7 @@ export const SettingsPage: React.FC = () => {
               </div>
             )}
 
-            {/* Section 1: AUTOMATIC 1ST-OF-THE-MONTH BACKUP & CUSTOM PATH CONFIG */}
+            {/* Section 1: AUTOMATIC SCHEDULED BACKUP & CUSTOM PATH CONFIG */}
             <div className="p-5 bg-gradient-to-r from-pink-500/5 via-purple-500/5 to-blue-500/5 rounded-3xl border border-pink-100 dark:border-pink-900/30 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
@@ -2637,13 +2666,13 @@ export const SettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-xs text-slate-800 dark:text-white flex items-center gap-2">
-                      Automatic Monthly Backup on 1st of Every Month
+                      Automatic Scheduled Database Backup
                       <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 text-[10px] font-black uppercase">
                         Zero Data Loss Safe
                       </span>
                     </h3>
                     <p className="text-[11px] text-slate-500">
-                      On the 1st of every month (or whenever POS starts), a complete snapshot of all products, barcodes, bills, and customers is saved automatically to your chosen folder.
+                      Guarantees complete safety by automatically creating a 100% full snapshot of all products, barcodes, bills, and customers according to your chosen schedule.
                     </p>
                   </div>
                 </div>
@@ -2660,6 +2689,33 @@ export const SettingsPage: React.FC = () => {
                     {backupConfig.auto_backup ? 'Active (Enabled)' : 'Disabled'}
                   </span>
                 </label>
+              </div>
+
+              {/* Schedule Frequency Selector */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    ⏰ Backup Schedule Frequency:
+                  </label>
+                  <select
+                    value={backupConfig.backup_frequency || 'DAILY'}
+                    onChange={(e) => setBackupConfig({ ...backupConfig, backup_frequency: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                  >
+                    <option value="DAILY">📅 Daily — Automatic backup everyday on POS launch / startup</option>
+                    <option value="WEEKLY_MONDAY">📆 Weekly — Automatic backup every Monday</option>
+                    <option value="MONTHLY_FIRST">🗓️ Monthly — Automatic backup on the 1st of every month</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    🛡️ Verification Guarantee:
+                  </span>
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Full backup exports all 23 database tables (Products, Barcodes, Pricing History, Invoices, Khata Ledgers, Expenses, Purchases, Vendors & Audit Logs).
+                  </p>
+                </div>
               </div>
 
               {/* Custom Path Selection Input */}
@@ -2681,7 +2737,7 @@ export const SettingsPage: React.FC = () => {
                     className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl flex items-center space-x-1.5 shadow-sm transition-all"
                   >
                     <Save className="w-4 h-4 text-pink-400" />
-                    <span>{isSavingBackupPath ? 'Saving...' : 'Save Path & Test Backup'}</span>
+                    <span>{isSavingBackupPath ? 'Saving...' : 'Save Config & Test'}</span>
                   </button>
                 </div>
 

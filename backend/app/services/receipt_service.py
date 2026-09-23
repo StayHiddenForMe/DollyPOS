@@ -71,8 +71,9 @@ class ReceiptService:
                 "total_price": item.total_price if not is_gift_receipt else 0.0,
             })
 
+        show_upi_qr = getattr(store_settings, 'show_upi_qr_on_bill', True) if store_settings else True
         qr_info = None
-        if not is_gift_receipt and invoice.grand_total > 0:
+        if not is_gift_receipt and invoice.grand_total > 0 and show_upi_qr:
             qr_info = upi_service.generate_upi_qr_base64(
                 upi_id=upi_id,
                 merchant_name=shop_name,
@@ -85,6 +86,7 @@ class ReceiptService:
         is_tagline_bold = getattr(store_settings, 'is_tagline_bold', False) if store_settings else False
         footer_font_size = getattr(store_settings, 'footer_font_size', '10px') if store_settings else '10px'
         is_footer_bold = getattr(store_settings, 'is_footer_bold', False) if store_settings else False
+        power_footer_text = getattr(store_settings, 'power_footer_text', "Software powered by Dolly POS© | Since 2002") if store_settings else "Software powered by Dolly POS© | Since 2002"
         power_footer_font_size = getattr(store_settings, 'power_footer_font_size', '9px') if store_settings else '9px'
         is_power_footer_bold = getattr(store_settings, 'is_power_footer_bold', False) if store_settings else False
 
@@ -97,10 +99,12 @@ class ReceiptService:
             "gstin": gstin,
             "show_gst": show_gst and bool(gstin),
             "upi_id": upi_id,
+            "show_upi_qr_on_bill": show_upi_qr,
             "bill_header": bill_header,
             "bill_footer": bill_footer,
             "footer_font_size": footer_font_size,
             "is_footer_bold": is_footer_bold,
+            "power_footer_text": power_footer_text,
             "power_footer_font_size": power_footer_font_size,
             "is_power_footer_bold": is_power_footer_bold,
             "terms_and_conditions": terms_and_conditions,
