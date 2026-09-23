@@ -20,3 +20,5 @@ if %errorlevel% neq 0 (
     echo [ERROR] PostgreSQL setup encountered an issue. See details above.
     pause
 )
+
+
