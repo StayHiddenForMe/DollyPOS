@@ -29,32 +29,6 @@ import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { LabelPreviewModal } from '../components/barcode/LabelPreviewModal';
 import { PriceHistoryModal } from '../components/inventory/PriceHistoryModal';
 
-export interface InventoryHeaderConfig {
-  barcode: string;
-  name: string;
-  category: string;
-  size: string;
-  color: string;
-  speedDial: string;
-  cost: string;
-  sell: string;
-  stock: string;
-  actions: string;
-}
-
-export const DEFAULT_INVENTORY_HEADERS: InventoryHeaderConfig = {
-  barcode: 'Barcode',
-  name: 'Product Name',
-  category: 'Category',
-  size: 'Size',
-  color: 'Color',
-  speedDial: '⚡ Speed Dial',
-  cost: 'Cost (₹)',
-  sell: 'Sell (₹)',
-  stock: 'Stock',
-  actions: 'Actions'
-};
-
 export const InventoryPage: React.FC = () => {
   const { isOwner } = useAuthStore();
 
@@ -66,16 +40,11 @@ export const InventoryPage: React.FC = () => {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Customizable Column Headings
-  const [headers, setHeaders] = useState<InventoryHeaderConfig>(() => {
-    try {
-      const saved = localStorage.getItem('dollypos_inventory_custom_headers');
-      if (saved) return { ...DEFAULT_INVENTORY_HEADERS, ...JSON.parse(saved) };
-    } catch (e) {}
-    return DEFAULT_INVENTORY_HEADERS;
+  // Editable Page Catalog Heading (Click-to-edit directly without extra buttons)
+  const [catalogTitle, setCatalogTitle] = useState<string>(() => {
+    return localStorage.getItem('dollypos_inventory_catalog_title') || 'Kids Wear & Toy Inventory Catalog';
   });
-  const [isCustomizeHeadersOpen, setIsCustomizeHeadersOpen] = useState(false);
-  const [tempHeaders, setTempHeaders] = useState<InventoryHeaderConfig>(headers);
+  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
 
   // Pagination State
   const [page, setPage] = useState(1);
@@ -220,10 +189,49 @@ export const InventoryPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Package className="w-5 h-5 text-pink-500" />
-            Kids Wear & Toy Inventory Catalog
-          </h1>
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-pink-500 shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                value={catalogTitle}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCatalogTitle(val);
+                  localStorage.setItem('dollypos_inventory_catalog_title', val);
+                }}
+                onBlur={() => {
+                  if (!catalogTitle.trim()) {
+                    setCatalogTitle('Kids Wear & Toy Inventory Catalog');
+                    localStorage.setItem('dollypos_inventory_catalog_title', 'Kids Wear & Toy Inventory Catalog');
+                  }
+                  setIsEditingTitle(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') {
+                    if (!catalogTitle.trim()) {
+                      setCatalogTitle('Kids Wear & Toy Inventory Catalog');
+                      localStorage.setItem('dollypos_inventory_catalog_title', 'Kids Wear & Toy Inventory Catalog');
+                    }
+                    setIsEditingTitle(false);
+                  }
+                }}
+                className="text-xl font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 border-2 border-pink-500 rounded-xl px-2.5 py-0.5 outline-none shadow-sm min-w-[320px]"
+              />
+            </div>
+          ) : (
+            <h1
+              onClick={() => setIsEditingTitle(true)}
+              title="Click to edit heading"
+              className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 group transition-colors"
+            >
+              <Package className="w-5 h-5 text-pink-500 shrink-0" />
+              <span className="border-b-2 border-dashed border-transparent group-hover:border-pink-500/50 pb-0.5">
+                {catalogTitle || 'Kids Wear & Toy Inventory Catalog'}
+              </span>
+            </h1>
+          )}
           <p className="text-xs text-slate-500">
             Total {total} unique SKUs • Multi-size matrix, instant shortcodes, price logs & barcode stickers.
           </p>
@@ -257,19 +265,6 @@ export const InventoryPage: React.FC = () => {
               >
                 <Download className="w-4 h-4" />
                 <span>{isExporting ? 'Exporting...' : 'Export Stock (.xlsx)'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTempHeaders(headers);
-                  setIsCustomizeHeadersOpen(true);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all active:scale-95 border border-slate-700 cursor-pointer"
-                title="Customize table column headings (Rename columns)"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-pink-400" />
-                <span>Custom Headings</span>
               </button>
             </>
           )}
@@ -346,16 +341,16 @@ export const InventoryPage: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 uppercase sticky top-0 z-10">
               <tr>
-                <th className="py-2.5 px-3">{headers.barcode || 'Barcode'}</th>
-                <th className="py-2.5 px-3 max-w-[220px]">{headers.name || 'Product Name'}</th>
-                <th className="py-2.5 px-2">{headers.category || 'Category'}</th>
-                <th className="py-2.5 px-2 text-center">{headers.size || 'Size'}</th>
-                <th className="py-2.5 px-2 text-center">{headers.color || 'Color'}</th>
-                <th className="py-2.5 px-2 text-center">{headers.speedDial || '⚡ Speed Dial'}</th>
-                <th className="py-2.5 px-3 text-right">{headers.cost || 'Cost (₹)'}</th>
-                <th className="py-2.5 px-3 text-right">{headers.sell || 'Sell (₹)'}</th>
-                <th className="py-2.5 px-2 text-center">{headers.stock || 'Stock'}</th>
-                <th className="py-2.5 px-3 text-center w-28">{headers.actions || 'Actions'}</th>
+                <th className="py-2.5 px-3">Barcode</th>
+                <th className="py-2.5 px-3 max-w-[220px]">Product Name</th>
+                <th className="py-2.5 px-2">Category</th>
+                <th className="py-2.5 px-2 text-center">Size</th>
+                <th className="py-2.5 px-2 text-center">Color</th>
+                <th className="py-2.5 px-2 text-center">⚡ Speed Dial</th>
+                <th className="py-2.5 px-3 text-right">Cost (₹)</th>
+                <th className="py-2.5 px-3 text-right">Sell (₹)</th>
+                <th className="py-2.5 px-2 text-center">Stock</th>
+                <th className="py-2.5 px-3 text-center w-28">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -609,184 +604,6 @@ export const InventoryPage: React.FC = () => {
           product={historyProduct}
           onClose={() => setHistoryProduct(null)}
         />
-      )}
-
-      {/* Customize Inventory Column Headings Modal */}
-      {isCustomizeHeadersOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-4 bg-gradient-to-r from-pink-600 to-purple-600 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold flex items-center gap-2">
-                  <Edit3 className="w-5 h-5" />
-                  Customize Inventory Column Headings
-                </h3>
-                <p className="text-xs text-pink-100">
-                  Rename table column labels to match your store terminology. Saved instantly.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsCustomizeHeadersOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-white/20 text-white transition cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body - 2 Column Form */}
-            <div className="p-5 max-h-[65vh] overflow-y-auto space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">1. Barcode Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.barcode}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, barcode: e.target.value })}
-                    placeholder="Barcode"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">2. Product / Item Name</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.name}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, name: e.target.value })}
-                    placeholder="Product Name"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">3. Category Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.category}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, category: e.target.value })}
-                    placeholder="Category"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">4. Size Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.size}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, size: e.target.value })}
-                    placeholder="Size"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">5. Color Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.color}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, color: e.target.value })}
-                    placeholder="Color"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">6. Speed Dial / Shortcode</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.speedDial}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, speedDial: e.target.value })}
-                    placeholder="⚡ Speed Dial"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">7. Cost Price Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.cost}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, cost: e.target.value })}
-                    placeholder="Cost (₹)"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">8. Selling Price / MRP Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.sell}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, sell: e.target.value })}
-                    placeholder="Sell (₹)"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">9. Stock Quantity Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.stock}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, stock: e.target.value })}
-                    placeholder="Stock"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 dark:text-slate-300 block mb-1">10. Actions Column</label>
-                  <input
-                    type="text"
-                    value={tempHeaders.actions}
-                    onChange={(e) => setTempHeaders({ ...tempHeaders, actions: e.target.value })}
-                    placeholder="Actions"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setTempHeaders(DEFAULT_INVENTORY_HEADERS);
-                  setHeaders(DEFAULT_INVENTORY_HEADERS);
-                  localStorage.removeItem('dollypos_inventory_custom_headers');
-                  setIsCustomizeHeadersOpen(false);
-                }}
-                className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl font-bold transition cursor-pointer"
-              >
-                Reset to Factory Defaults
-              </button>
-
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomizeHeadersOpen(false)}
-                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHeaders(tempHeaders);
-                    localStorage.setItem('dollypos_inventory_custom_headers', JSON.stringify(tempHeaders));
-                    setIsCustomizeHeadersOpen(false);
-                  }}
-                  className="px-5 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold shadow-md shadow-pink-600/20 transition cursor-pointer"
-                >
-                  Save Headings
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

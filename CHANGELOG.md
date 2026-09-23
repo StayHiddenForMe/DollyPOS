@@ -7,7 +7,7 @@ All notable changes to the Dolly POS application will be documented in this file
 ## [v1.3.0] - 2026-09-23
 ### Added
 - **Interactive Changelog in Statusbar**: Added clickable `v1.3.0` pill in the bottom statusbar that opens a modal showing version release notes and update history.
-- **Editable Inventory Column Headings**: Added customizable table headers for the Inventory page with local storage persistence and quick reset to default.
+- **Inline Click-to-Edit Inventory Title**: Made the main "Kids Wear & Toy Inventory Catalog" heading directly click-to-edit without any extra buttons, with instant local persistence and restoration.
 - **Dynamic Store Branding Everywhere**: Removed all residual hardcoded store names across Navbar, Sidebar, Dashboard, Reports, AI Advisor, and Receipts, making the application 100% white-label ready.
 - **Configurable Auto-Backup Frequency**: Added frequency choices (Daily, Every Monday, 1st of Every Month) with dedicated save confirmation and backend database persistence.
 - **Editable WhatsApp Store Number**: Enabled direct editing of the store WhatsApp mobile number in WhatsApp Marketing settings with automatic sync to Store Settings.

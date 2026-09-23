@@ -15,7 +15,7 @@ export const VERSION_HISTORY: VersionRelease[] = [
     title: 'Custom Inventory Headings, Dynamic Store Branding & Schedule Persistence',
     highlights: [
       'Interactive Changelog modal accessible directly from the Statusbar',
-      'Editable Inventory Column Headings with customizable labels & reset option',
+      'Inline Click-to-Edit Inventory Catalog Title with instant local persistence',
       'Fully Dynamic Shop Name across all pages, layouts, and receipts (100% white-label)',
       'Configurable Automatic Backup Schedule (Daily, Weekly, Monthly) with permanent DB persistence',
       'Editable WhatsApp Store Phone in marketing settings with auto-sync to Store Settings'
