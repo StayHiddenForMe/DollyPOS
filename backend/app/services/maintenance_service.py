@@ -71,7 +71,7 @@ class DatabaseLongevityService:
             projected_50yr_gb = round((db_size_mb + (1825000 * 0.0012)) / 1024, 2)
 
             return {
-                "database_name": "dollytoyskidswear",
+                "database_name": settings.DB_NAME,
                 "total_barcodes_generated": barcode_count,
                 "current_product_count": prod_count,
                 "current_invoice_count": inv_count,

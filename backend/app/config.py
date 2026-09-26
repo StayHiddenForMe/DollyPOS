@@ -1,6 +1,45 @@
 import os
+import sys
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+def load_environment_files():
+    """Finds and loads .env from multiple candidate locations into os.environ if not already set."""
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+    ]
+    if getattr(sys, "frozen", False):
+        candidates.append(os.path.join(os.path.dirname(sys.executable), ".env"))
+    
+    backend_base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    candidates.append(os.path.join(backend_base, ".env"))
+    candidates.append(os.path.join(backend_base, "backend", ".env"))
+    
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidates.append(os.path.join(local_app_data, "DollyPOS", ".env"))
+        
+    user_profile = os.environ.get("USERPROFILE", os.path.expanduser("~"))
+    candidates.append(os.path.join(user_profile, "DollyPOS_Backups", ".env"))
+    candidates.append(os.path.join(user_profile, ".dollypos.env"))
+
+    for env_path in candidates:
+        if os.path.isfile(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip().strip("'\"")
+                        if key and key not in os.environ:
+                            os.environ[key] = val
+            except Exception:
+                pass
+
+load_environment_files()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Dolly POS - Dolly Toys and Kids Wear"
@@ -38,6 +77,6 @@ class Settings(BaseSettings):
     
     class Config:
         case_sensitive = True
-        env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

@@ -160,6 +160,24 @@ def extract_and_install(progress_var, status_var, root, on_complete):
         ps_cmd3 = f"$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('{uninstall_shortcut}'); $s.TargetPath = '{uninstall_bat_path}'; $s.WorkingDirectory = '{TARGET_DIR}'; $s.Description = 'Uninstall Dolly POS'; $s.Save()"
         subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd3], creationflags=0x08000000)
 
+        # Ensure .env configuration is copied or preserved in TARGET_DIR
+        target_env = os.path.join(TARGET_DIR, ".env")
+        if not os.path.exists(target_env):
+            installer_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+            installer_env = os.path.join(installer_dir, ".env")
+            cwd_env = os.path.join(os.getcwd(), ".env")
+            backup_env = os.path.expandvars(r"%USERPROFILE%\DollyPOS_Backups\.env")
+            
+            if os.path.exists(installer_env):
+                shutil.copy2(installer_env, target_env)
+            elif os.path.exists(cwd_env):
+                shutil.copy2(cwd_env, target_env)
+            elif os.path.exists(backup_env):
+                shutil.copy2(backup_env, target_env)
+            else:
+                with open(target_env, "w", encoding="utf-8") as fe:
+                    fe.write("DB_USER=postgres\nDB_PASSWORD=somesh123\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_NAME=dollytoyskidswear\n")
+
         # Register in Windows Control Panel (Programs and Features / Installed Apps)
         status_var.set("Registering with Windows Control Panel...")
         progress_var.set(92)

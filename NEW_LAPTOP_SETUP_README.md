@@ -67,11 +67,15 @@ All database configurations are pre-wired and automatically matched between the 
 
 1. **Right-click** `Setup_PostgreSQL_Database.bat` and select **"Run as administrator"** (or simply double-click it).
 2. If Windows displays a **User Account Control (UAC)** prompt asking *"Do you want to allow this app to make changes to your device?"*, click **Yes**.
-3. A blue/black terminal window will open and perform all 4 steps automatically:
-   - **Step 1 (Detection)**: Checks if PostgreSQL 16 (or 15/17/18) is already on the laptop.
-   - **Step 2 (Auto-Download & Silent Install)**: If not found, it downloads official PostgreSQL 16 from EnterpriseDB (~380 MB) and installs it silently with superuser password `somesh123` on port `5432`.
-   - **Step 3 (Service Check)**: Ensures the Windows service `postgresql-x64-16` is running.
-   - **Step 4 (Database Creation & Readiness Loop)**: Waits for the PostgreSQL socket to accept connections, then executes `CREATE DATABASE dollytoyskidswear WITH OWNER postgres ENCODING 'UTF8';`.
+3. A terminal window will open:
+   - **Interactive Setup Prompt**: You will be prompted to set or confirm:
+     * **Database Name** (Press `ENTER` for default `dollytoyskidswear` or enter a custom name)
+     * **Superuser Username** (Press `ENTER` for default `postgres`)
+     * **Superuser Password** (Press `ENTER` for default `somesh123` or enter a custom password)
+     * **PostgreSQL Port** (Press `ENTER` for default `5432`)
+     * **Confirmation**: Review the configuration summary and press `ENTER` (or `Y`) to proceed.
+   - **Automatic PostgreSQL Installation**: If PostgreSQL is not yet installed, the installer automatically downloads PostgreSQL 16 (~380 MB) and installs it with your chosen settings silently.
+   - **Service Check & Database Creation**: Ensures the PostgreSQL service is active, creates the database with UTF-8 encoding, and writes configuration to `.env` files automatically.
 4. The terminal will show a **green success box**:
    ```
    ============================================================================
@@ -80,8 +84,9 @@ All database configurations are pre-wired and automatically matched between the 
       PostgreSQL Host : 127.0.0.1 (localhost)
       Port            : 5432
       Superuser       : postgres
-      Password        : somesh123
+      Password        : somesh123 (or your custom password)
       Database Name   : dollytoyskidswear (Live & Verified)
+      Config File     : %LOCALAPPDATA%\DollyPOS\.env
    ============================================================================
    ```
 5. Press **Enter** to close the window.

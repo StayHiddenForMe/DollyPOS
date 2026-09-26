@@ -8,13 +8,10 @@ $ErrorActionPreference = "Continue"
 
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "   DOLLY TOYS & KIDS WEAR - POSTGRESQL 16 ONE-CLICK SETUP ENGINE" -ForegroundColor Yellow
+Write-Host "   DOLLY TOYS & KIDS WEAR - POSTGRESQL 16 SETUP ENGINE" -ForegroundColor Yellow
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "   Target Database : dollytoyskidswear" -ForegroundColor White
-Write-Host "   Superuser       : postgres" -ForegroundColor White
-Write-Host "   Password        : somesh123" -ForegroundColor White
-Write-Host "   Port            : 5432" -ForegroundColor White
-Write-Host "   Recommended PG  : PostgreSQL 16 (64-Bit)" -ForegroundColor White
+Write-Host "   This setup wizard configures PostgreSQL 16 and your store database." -ForegroundColor White
+Write-Host "   Press [ENTER] on any prompt to accept the default recommended values." -ForegroundColor Gray
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -23,9 +20,69 @@ try {
     Get-ChildItem -Path $PSScriptRoot -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
 } catch {}
 
-# 2. Function to locate psql.exe
+# 2. Interactive Database Configuration Prompt Loop
+$confirmed = $false
+$dbName = "dollytoyskidswear"
+$dbUser = "postgres"
+$dbPass = "somesh123"
+$dbPort = "5432"
+
+while (-not $confirmed) {
+    Write-Host "----------------------------------------------------------------------------" -ForegroundColor DarkCyan
+    Write-Host " STEP 1: DATABASE CONFIGURATION PARAMETERS" -ForegroundColor Yellow
+    Write-Host "----------------------------------------------------------------------------" -ForegroundColor DarkCyan
+
+    $rawDbName = Read-Host " 1. Database Name [Default: dollytoyskidswear]"
+    if (-not [string]::IsNullOrWhiteSpace($rawDbName)) {
+        $dbName = $rawDbName.Trim()
+    } else {
+        $dbName = "dollytoyskidswear"
+    }
+
+    $rawDbUser = Read-Host " 2. PostgreSQL Superuser [Default: postgres]"
+    if (-not [string]::IsNullOrWhiteSpace($rawDbUser)) {
+        $dbUser = $rawDbUser.Trim()
+    } else {
+        $dbUser = "postgres"
+    }
+
+    $rawDbPass = Read-Host " 3. Superuser Password [Default: somesh123]"
+    if (-not [string]::IsNullOrWhiteSpace($rawDbPass)) {
+        $dbPass = $rawDbPass.Trim()
+    } else {
+        $dbPass = "somesh123"
+    }
+
+    $rawDbPort = Read-Host " 4. PostgreSQL Port [Default: 5432]"
+    if (-not [string]::IsNullOrWhiteSpace($rawDbPort)) {
+        $dbPort = $rawDbPort.Trim()
+    } else {
+        $dbPort = "5432"
+    }
+
+    Write-Host ""
+    Write-Host "============================================================================" -ForegroundColor Cyan
+    Write-Host "   CONFIGURATION SUMMARY TO BE APPLIED" -ForegroundColor Yellow
+    Write-Host "============================================================================" -ForegroundColor Cyan
+    Write-Host "   Database Name : $dbName" -ForegroundColor White
+    Write-Host "   Superuser     : $dbUser" -ForegroundColor White
+    Write-Host "   Password      : $dbPass" -ForegroundColor White
+    Write-Host "   Port          : $dbPort" -ForegroundColor White
+    Write-Host "   Host          : 127.0.0.1 (localhost)" -ForegroundColor White
+    Write-Host "============================================================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    $confirmInput = Read-Host " Confirm these database settings? (Y/N) [Default: Y]"
+    if ([string]::IsNullOrWhiteSpace($confirmInput) -or $confirmInput.Trim().ToUpper() -eq "Y") {
+        $confirmed = $true
+        Write-Host "`n[OK] Configuration confirmed. Proceeding with database setup...`n" -ForegroundColor Green
+    } else {
+        Write-Host "`n[!] Let's re-enter the configuration settings.`n" -ForegroundColor Yellow
+    }
+}
+
+# 3. Function to locate psql.exe
 function Find-Psql {
-    # Check PATH
     $cmd = Get-Command psql -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
 
@@ -55,10 +112,10 @@ function Find-Psql {
 
 $psqlExe = Find-Psql
 
-# 3. If PostgreSQL not found, download and install silently
+# 4. If PostgreSQL not found, download and install silently
 if (-not $psqlExe) {
-    Write-Host "[STEP 1/4] PostgreSQL was not found on this system." -ForegroundColor Yellow
-    Write-Host "[STEP 2/4] Downloading official PostgreSQL 16 (x64) silent installer..." -ForegroundColor Cyan
+    Write-Host "[STEP 2/5] PostgreSQL engine was not found on this system." -ForegroundColor Yellow
+    Write-Host "[STEP 2/5] Downloading official PostgreSQL 16 (x64) silent installer..." -ForegroundColor Cyan
     
     $downloadUrl = "https://get.enterprisedb.com/postgresql/postgresql-16.6-1-windows-x64.exe"
     $installerPath = "$env:TEMP\postgresql-16.6-windows-x64.exe"
@@ -79,10 +136,10 @@ if (-not $psqlExe) {
     }
 
     Write-Host ""
-    Write-Host "[STEP 2/4] Installing PostgreSQL 16 silently (Password: somesh123, Port: 5432)..." -ForegroundColor Cyan
+    Write-Host "[STEP 2/5] Installing PostgreSQL 16 silently (Password: $dbPass, Port: $dbPort)..." -ForegroundColor Cyan
     Write-Host "           This takes 1 to 2 minutes. Please wait..." -ForegroundColor Gray
 
-    $installArgs = "--mode unattended --unattendedmodeui none --superpassword somesh123 --serverport 5432"
+    $installArgs = "--mode unattended --unattendedmodeui none --superpassword $dbPass --serverport $dbPort"
     $process = Start-Process -FilePath $installerPath -ArgumentList $installArgs -PassThru -Wait
 
     Write-Host "           Installation finished with exit code $($process.ExitCode)." -ForegroundColor Green
@@ -91,7 +148,7 @@ if (-not $psqlExe) {
     Start-Sleep -Seconds 3
     $psqlExe = Find-Psql
 } else {
-    Write-Host "[STEP 1/4] Existing PostgreSQL installation detected." -ForegroundColor Green
+    Write-Host "[STEP 2/5] Existing PostgreSQL installation detected." -ForegroundColor Green
     Write-Host "           psql located at: $psqlExe" -ForegroundColor Gray
 }
 
@@ -101,9 +158,9 @@ if (-not $psqlExe) {
     exit 1
 }
 
-# 4. Ensure PostgreSQL Service is Running
+# 5. Ensure PostgreSQL Windows Service is Running
 Write-Host ""
-Write-Host "[STEP 3/4] Ensuring PostgreSQL Windows service is running..." -ForegroundColor Cyan
+Write-Host "[STEP 3/5] Ensuring PostgreSQL Windows service is running..." -ForegroundColor Cyan
 $pgServices = Get-Service -Name "postgresql*" -ErrorAction SilentlyContinue
 if ($pgServices) {
     foreach ($svc in $pgServices) {
@@ -114,15 +171,15 @@ if ($pgServices) {
     }
 }
 
-# 5. Readiness Polling Loop: Wait for PostgreSQL socket to accept connections
+# 6. Readiness Polling Loop: Wait for PostgreSQL socket to accept connections
 Write-Host ""
-Write-Host "[STEP 4/4] Connecting to PostgreSQL engine..." -ForegroundColor Cyan
-$env:PGPASSWORD = "somesh123"
+Write-Host "[STEP 4/5] Connecting to PostgreSQL engine on port $dbPort..." -ForegroundColor Cyan
+$env:PGPASSWORD = $dbPass
 
 $connected = $false
 for ($i = 1; $i -le 30; $i++) {
-    Write-Host "           Testing connection to localhost:5432 (attempt $i/30)..." -ForegroundColor Gray
-    $testResult = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1;" 2>&1
+    Write-Host "           Testing connection to localhost:$dbPort (attempt $i/30)..." -ForegroundColor Gray
+    $testResult = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "SELECT 1;" 2>&1
     if ($LASTEXITCODE -eq 0 -or ($testResult -match "1")) {
         $connected = $true
         Write-Host "           [OK] PostgreSQL engine is ready and accepting connections!" -ForegroundColor Green
@@ -134,24 +191,22 @@ for ($i = 1; $i -le 30; $i++) {
 if (-not $connected) {
     Write-Host "[WARNING] Could not connect to PostgreSQL within 30 seconds." -ForegroundColor Yellow
     Write-Host "Details: $testResult" -ForegroundColor Gray
-    Write-Host "If the postgres password is not 'somesh123', please update it in pgAdmin." -ForegroundColor Yellow
+    Write-Host "If the postgres superuser password is already set differently, please verify it." -ForegroundColor Yellow
 }
 
-# 6. Create Database dollytoyskidswear
+# 7. Create Database and verify
 Write-Host ""
-Write-Host "Configuring Database: dollytoyskidswear..." -ForegroundColor Cyan
-
-$dbName = "dollytoyskidswear"
+Write-Host "[STEP 5/5] Configuring Database: $dbName..." -ForegroundColor Cyan
 
 # Clean up accidental alias database if present
-$null = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "DROP DATABASE IF EXISTS dollytoysandkidswear WITH (FORCE);" 2>&1
+$null = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "DROP DATABASE IF EXISTS dollytoysandkidswear WITH (FORCE);" 2>&1
 
-$checkDb = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$dbName';" 2>&1
+$checkDb = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$dbName';" 2>&1
 if ($checkDb -match "1") {
-    Write-Host "  [OK] Database '$dbName' already exists." -ForegroundColor Green
+    Write-Host "  [OK] Database '$dbName' already exists and is ready." -ForegroundColor Green
 } else {
     Write-Host "  [*] Creating database '$dbName' with UTF-8 encoding..." -ForegroundColor Yellow
-    $createRes = & "$psqlExe" -U postgres -h 127.0.0.1 -p 5432 -d postgres -c "CREATE DATABASE $dbName WITH OWNER postgres ENCODING 'UTF8';" 2>&1
+    $createRes = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "CREATE DATABASE $dbName WITH OWNER $dbUser ENCODING 'UTF8';" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [SUCCESS] Database '$dbName' created successfully!" -ForegroundColor Green
     } else {
@@ -159,7 +214,44 @@ if ($checkDb -match "1") {
     }
 }
 
-# 7. Trust Digital Certificate (Optional / Enhanced Security)
+# 8. Persist Database Configuration to .env Files
+Write-Host ""
+Write-Host "Saving configuration settings to environment files (.env)..." -ForegroundColor Cyan
+
+$envContent = @"
+# Dolly POS - PostgreSQL Database Configuration
+DB_USER=$dbUser
+DB_PASSWORD=$dbPass
+DB_HOST=127.0.0.1
+DB_PORT=$dbPort
+DB_NAME=$dbName
+"@
+
+$envSavePaths = @(
+    (Join-Path $PSScriptRoot ".env"),
+    (Join-Path (Get-Location).Path ".env"),
+    "$env:LOCALAPPDATA\DollyPOS\.env",
+    "$env:USERPROFILE\DollyPOS_Backups\.env"
+)
+
+# If running inside dist_installer or scripts, also check parent folder
+$parentDir = Split-Path -Path $PSScriptRoot -Parent
+if ($parentDir -and (Test-Path $parentDir)) {
+    $envSavePaths += (Join-Path $parentDir ".env")
+}
+
+foreach ($savePath in $envSavePaths) {
+    try {
+        $parentFolder = Split-Path -Path $savePath -Parent
+        if ($parentFolder -and -not (Test-Path $parentFolder)) {
+            New-Item -ItemType Directory -Path $parentFolder -Force | Out-Null
+        }
+        $envContent | Out-File -FilePath $savePath -Encoding utf8 -Force
+        Write-Host "  [OK] Saved config -> $savePath" -ForegroundColor Gray
+    } catch {}
+}
+
+# 9. Trust Digital Certificate (Optional / Enhanced Security)
 $certFile = Join-Path $PSScriptRoot "DollyToys_Publisher.cer"
 if (Test-Path $certFile) {
     try {
@@ -168,25 +260,27 @@ if (Test-Path $certFile) {
     } catch {}
 }
 
-# 8. Clean up temp installer
+# 10. Clean up temp installer
 if (Test-Path "$env:TEMP\postgresql-16.6-windows-x64.exe") {
     Remove-Item "$env:TEMP\postgresql-16.6-windows-x64.exe" -Force -ErrorAction SilentlyContinue
 }
 
-# 9. Final Verification Summary
+# 11. Final Verification Summary
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host "   DOLLY POS DATABASE & POSTGRESQL ENGINE ARE 100% READY!" -ForegroundColor Green
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host "   PostgreSQL Host : 127.0.0.1 (localhost)" -ForegroundColor White
-Write-Host "   Port            : 5432" -ForegroundColor White
-Write-Host "   Superuser       : postgres" -ForegroundColor White
-Write-Host "   Password        : somesh123" -ForegroundColor White
-Write-Host "   Database Name   : dollytoyskidswear (Live & Verified)" -ForegroundColor Yellow
+Write-Host "   Port            : $dbPort" -ForegroundColor White
+Write-Host "   Superuser       : $dbUser" -ForegroundColor White
+Write-Host "   Password        : $dbPass" -ForegroundColor White
+Write-Host "   Database Name   : $dbName (Live & Verified)" -ForegroundColor Yellow
+Write-Host "   Config File     : $env:LOCALAPPDATA\DollyPOS\.env" -ForegroundColor Gray
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next Step: You can now launch Dolly POS:" -ForegroundColor Cyan
 Write-Host "1. Double-click 'DollyPOS_Setup_v1.0.0.exe' or 'Dolly POS' desktop icon." -ForegroundColor White
-Write-Host "2. The software will automatically connect to PostgreSQL and run live!" -ForegroundColor White
+Write-Host "2. The software will automatically connect to database '$dbName'!" -ForegroundColor White
 Write-Host ""
 Read-Host "Press Enter to close this window..."
+

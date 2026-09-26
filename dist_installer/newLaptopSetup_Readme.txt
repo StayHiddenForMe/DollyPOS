@@ -46,11 +46,14 @@ Copy the "dist_installer" folder onto your new laptop. It contains:
 1. Right-click "Setup_PostgreSQL_Database.bat" and click "Run as administrator"
    (or double-click it).
 2. If Windows asks for permission (UAC), click "Yes".
-3. A terminal window will open and perform all 4 steps automatically:
-   - Step 1: Detects existing PostgreSQL or checks if download is needed.
-   - Step 2: Downloads official PostgreSQL 16 (~380MB) & installs silently.
-   - Step 3: Starts the PostgreSQL Windows service.
-   - Step 4: Creates the "dollytoyskidswear" database and verifies connection.
+3. A terminal window will open:
+   - Interactive Configuration: It prompts for Database Name, Superuser, Password, and Port.
+     * To use standard defaults, simply press ENTER on each prompt!
+     * Or type custom database name and password, then press Y to confirm.
+   - Automatic Engine Setup:
+     * Downloads & installs PostgreSQL 16 silently if not installed.
+     * Starts the PostgreSQL Windows service.
+     * Creates your specified database and saves connection settings to .env.
 4. When you see the green success message, press ENTER to close the window.
 
 
