@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        import urllib.parse
+        enc_user = urllib.parse.quote_plus(self.DB_USER)
+        enc_pass = urllib.parse.quote_plus(self.DB_PASSWORD)
+        return f"postgresql://{enc_user}:{enc_pass}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # JWT Authentication
     SECRET_KEY: str = "dolly-toys-dhule-super-secure-secret-key-2026-xyz987654321"

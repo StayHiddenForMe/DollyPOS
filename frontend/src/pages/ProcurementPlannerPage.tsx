@@ -53,6 +53,7 @@ export const ProcurementPlannerPage: React.FC = () => {
   const [selectedVendorFilter, setSelectedVendorFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'CRITICAL' | 'BUDGET' | 'QTY' | 'NAME'>('CRITICAL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [orderedProductIds, setOrderedProductIds] = useState<Set<number>>(new Set());
 
   // Buying Notes State (Hotkey: F10)
   const [notesList, setNotesList] = useState<ProcurementNote[]>([]);
@@ -90,7 +91,15 @@ export const ProcurementPlannerPage: React.FC = () => {
   const [editStatus, setEditStatus] = useState<'PENDING' | 'ORDERED' | 'COMPLETED' | 'CANCELLED'>('PENDING');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
-  // Lost Demand Modal State
+  // Quick Restock Modal State
+  const [restockItem, setRestockItem] = useState<any | null>(null);
+  const [restockQty, setRestockQty] = useState<number>(6);
+  const [restockPurchasePrice, setRestockPurchasePrice] = useState<string>('');
+  const [restockSellingPrice, setRestockSellingPrice] = useState<string>('');
+  const [restockMrp, setRestockMrp] = useState<string>('');
+  const [isSubmittingRestock, setIsSubmittingRestock] = useState<boolean>(false);
+
+  // Demand Log Modal State
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [itemDesc, setItemDesc] = useState('');
   const [categoryName, setCategoryName] = useState('Kids Wear');
@@ -117,6 +126,10 @@ export const ProcurementPlannerPage: React.FC = () => {
           itemNameInputRef.current?.select();
         }, 60);
       } else if (e.key === 'Escape') {
+        if (restockItem) {
+          e.preventDefault();
+          setRestockItem(null);
+        }
         if (isLogModalOpen) {
           e.preventDefault();
           setIsLogModalOpen(false);
@@ -129,7 +142,7 @@ export const ProcurementPlannerPage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLogModalOpen, editingNote]);
+  }, [isLogModalOpen, editingNote, restockItem]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -137,6 +150,13 @@ export const ProcurementPlannerPage: React.FC = () => {
       if (activeTab === 'LOW_STOCK') {
         const res = await api.get('/procurement/low-stock-sheet');
         setLowStockData(res.data);
+        const orderedIds = new Set<number>();
+        res.data?.vendor_groups?.forEach((vg: any) => {
+          vg.items?.forEach((i: any) => {
+            if (i.is_ordered) orderedIds.add(i.product_id);
+          });
+        });
+        setOrderedProductIds(orderedIds);
       } else if (activeTab === 'BUYING_NOTES') {
         const params: any = {};
         if (notesStatusFilter !== 'ALL') params.status = notesStatusFilter;
@@ -156,6 +176,104 @@ export const ProcurementPlannerPage: React.FC = () => {
       console.error('Failed to load procurement data', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // LOW STOCK ACTIONS: MARK ORDERED & QUICK RESTOCK
+  // -------------------------------------------------------------
+  const handleOpenRestockModal = (item: any) => {
+    setRestockItem(item);
+    setRestockQty(item.suggested_reorder_qty || 6);
+    setRestockPurchasePrice(item.purchase_price !== undefined ? String(item.purchase_price) : '');
+    setRestockSellingPrice(item.selling_price !== undefined ? String(item.selling_price) : '');
+    setRestockMrp(item.mrp !== undefined ? String(item.mrp) : String(item.selling_price || ''));
+  };
+
+  const handleMarkOrdered = async (item: any, vendorName: string) => {
+    // Immediate optimistic update: turn button into "Ordered" with zero delay
+    setOrderedProductIds(prev => new Set(prev).add(item.product_id));
+
+    try {
+      await api.post('/procurement/mark-ordered', {
+        product_id: item.product_id,
+        quantity: item.suggested_reorder_qty || 1,
+        vendor_name: vendorName !== 'General / Local Market Procurement' ? vendorName : undefined,
+        estimated_price: item.purchase_price || 0.0
+      });
+      // In background: refresh notes summary to update tab badges without popup
+      const notesRes = await api.get('/procurement/notes');
+      setNotesSummary(notesRes.data?.summary || {});
+    } catch (err: any) {
+      setOrderedProductIds(prev => {
+        const next = new Set(prev);
+        next.delete(item.product_id);
+        return next;
+      });
+      console.error('Failed to mark product as ordered', err);
+    }
+  };
+
+  const handleQuickRestockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restockItem) return;
+    const qty = parseInt(String(restockQty), 10);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid restock quantity greater than 0');
+      return;
+    }
+
+    setIsSubmittingRestock(true);
+    try {
+      await api.post('/procurement/quick-restock', {
+        product_id: restockItem.product_id,
+        add_quantity: qty,
+        purchase_price: restockPurchasePrice !== '' ? parseFloat(restockPurchasePrice) : undefined,
+        selling_price: restockSellingPrice !== '' ? parseFloat(restockSellingPrice) : undefined,
+        mrp: restockMrp !== '' ? parseFloat(restockMrp) : undefined,
+        note_id: restockItem.note_id || undefined
+      });
+      setRestockItem(null);
+      fetchData();
+    } catch (err: any) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to restock item'}`);
+    } finally {
+      setIsSubmittingRestock(false);
+    }
+  };
+
+  const handleCompleteNoteWithoutRestock = async (noteId: number) => {
+    try {
+      await api.patch(`/procurement/notes/${noteId}/status`, { status: 'COMPLETED' });
+      setRestockItem(null);
+      fetchData();
+    } catch (err) {
+      console.error('Failed to complete note', err);
+    }
+  };
+
+  const handleNoteDoneClick = (note: any) => {
+    if (note.product_id) {
+      // Open Quick Restock Modal prefilled with product and note details
+      setRestockItem({
+        product_id: note.product_id,
+        name: note.product_name || note.item_name,
+        barcode: note.barcode || '',
+        current_stock: note.current_stock || 0,
+        suggested_reorder_qty: note.quantity || 1,
+        purchase_price: note.purchase_price !== undefined ? note.purchase_price : (note.estimated_price || 0.0),
+        selling_price: note.selling_price || 0.0,
+        mrp: note.mrp || note.selling_price || 0.0,
+        note_id: note.id,
+      });
+      setRestockQty(note.quantity || 1);
+      setRestockPurchasePrice(note.purchase_price ? String(note.purchase_price) : (note.estimated_price ? String(note.estimated_price) : ''));
+      setRestockSellingPrice(note.selling_price ? String(note.selling_price) : '');
+      setRestockMrp(note.mrp ? String(note.mrp) : (note.selling_price ? String(note.selling_price) : ''));
+    } else {
+      if (window.confirm(`Mark '${note.item_name}' (Qty: ${note.quantity} pcs) as Completed / Done?`)) {
+        handleCompleteNoteWithoutRestock(note.id);
+      }
     }
   };
 
@@ -202,21 +320,31 @@ export const ProcurementPlannerPage: React.FC = () => {
     }
   };
 
-  const handleToggleNoteStatus = async (note: ProcurementNote) => {
-    const nextStatus = 
-      note.status === 'PENDING' ? 'ORDERED' :
-      note.status === 'ORDERED' ? 'COMPLETED' : 'PENDING';
-
-    // Optimistic UI update
-    setNotesList(prev => prev.map(n => n.id === note.id ? { ...n, status: nextStatus as any } : n));
-
-    try {
-      await api.patch(`/procurement/notes/${note.id}/status`, { status: nextStatus });
-      const res = await api.get('/procurement/notes');
-      setNotesSummary(res.data.summary || {});
-    } catch (err) {
-      console.error('Failed to update status', err);
-      fetchData();
+  const handleToggleNoteStatus = async (note: any) => {
+    if (note.status === 'PENDING') {
+      try {
+        await api.patch(`/procurement/notes/${note.id}/status`, { status: 'ORDERED' });
+        const res = await api.get('/procurement/notes');
+        setNotesList(res.data.notes || []);
+        setNotesSummary(res.data.summary || {});
+      } catch (err) {
+        console.error('Failed to update status', err);
+        fetchData();
+      }
+    } else if (note.status === 'ORDERED') {
+      // User clicked "Mark Done ✓": ask to restock!
+      handleNoteDoneClick(note);
+    } else {
+      // Reopen to PENDING
+      try {
+        await api.patch(`/procurement/notes/${note.id}/status`, { status: 'PENDING' });
+        const res = await api.get('/procurement/notes');
+        setNotesList(res.data.notes || []);
+        setNotesSummary(res.data.summary || {});
+      } catch (err) {
+        console.error('Failed to update status', err);
+        fetchData();
+      }
     }
   };
 
@@ -572,7 +700,7 @@ export const ProcurementPlannerPage: React.FC = () => {
             Smart Procurement & Market Buying Planner
           </h1>
           <p className="text-xs text-slate-500">
-            Supplier Buying Sheet by Vendor Code, General Unlinked Stock, Lost Customer Demand Logger & Festival Checklists.
+            Supplier Buying Sheet by Vendor Code, General Unlinked Stock, Customer Demand Register & Festival Checklists.
           </p>
         </div>
 
@@ -627,7 +755,7 @@ export const ProcurementPlannerPage: React.FC = () => {
               className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-pink-600/30 transition-all active:scale-95"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Log Lost Customer Request</span>
+              <span>Log Customer Request</span>
             </button>
           )}
 
@@ -646,7 +774,7 @@ export const ProcurementPlannerPage: React.FC = () => {
         {[
           { id: 'LOW_STOCK', label: 'Low Stock Buying Sheet', icon: Truck },
           { id: 'BUYING_NOTES', label: 'Buying Notes & Wishlist', icon: FileText, hotkey: 'F10', count: notesSummary.pending_count },
-          { id: 'LOST_DEMAND', label: 'Customer Lost Demand Log', icon: UserX },
+          { id: 'LOST_DEMAND', label: 'Customer Demand Register', icon: UserX },
         ].map((tab: any) => (
           <button
             key={tab.id}
@@ -809,6 +937,7 @@ export const ProcurementPlannerPage: React.FC = () => {
                             <th className="py-1 px-2 text-right">Cost (₹)</th>
                             <th className="py-1 px-2 text-right font-bold text-emerald-600">Order Qty</th>
                             <th className="py-1 px-2 text-right font-mono font-bold">Line Total</th>
+                            <th className="py-1 px-2 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -837,6 +966,36 @@ export const ProcurementPlannerPage: React.FC = () => {
                               </td>
                               <td className="py-2 px-2 text-right font-mono font-bold text-slate-800 dark:text-white">
                                 {formatINR(item.estimated_cost)}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {orderedProductIds.has(item.product_id) || item.is_ordered ? (
+                                    <span
+                                      className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold rounded-lg text-[10.5px] flex items-center gap-1 border border-purple-200 dark:border-purple-800 whitespace-nowrap shadow-xs"
+                                      title="Added to Buying Notes & Wishlist as ORDERED"
+                                    >
+                                      <Check className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                      <span>Ordered</span>
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleMarkOrdered(item, vGroup.vendor_name)}
+                                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold rounded-lg text-[10.5px] flex items-center gap-1 shadow-xs transition-all whitespace-nowrap"
+                                      title="Add to Buying Notes with ORDERED status"
+                                    >
+                                      <Truck className="w-3 h-3" />
+                                      <span>Mark Ordered</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleOpenRestockModal(item)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-lg text-[10.5px] flex items-center gap-1 shadow-xs transition-all whitespace-nowrap"
+                                    title="Quick Restock directly into inventory"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Quick Restock</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1214,13 +1373,13 @@ export const ProcurementPlannerPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 3: CUSTOMER LOST DEMAND LOG */}
+        {/* TAB 3: CUSTOMER DEMAND REGISTER */}
         {activeTab === 'LOST_DEMAND' && (
           <div className="h-full flex flex-col space-y-3 overflow-hidden">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Customer Out-of-Stock & Unmet Requests ({lostDemandList.length} items logged)
+                  Customer Demand Register ({lostDemandList.length} items logged)
                 </h3>
                 <p className="text-[11px] text-slate-400">
                   Track exact items customers asked for so you never miss buying them when visiting supplier wholesale markets.
@@ -1246,7 +1405,7 @@ export const ProcurementPlannerPage: React.FC = () => {
                   {lostDemandList.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">
-                        No customer lost demand logged yet. Click "+ Log Lost Customer Request" above when a customer asks for a missing item!
+                        No customer demand logged yet. Click "+ Log Customer Request" above when a customer asks for a missing item!
                       </td>
                     </tr>
                   ) : (
@@ -1314,7 +1473,7 @@ export const ProcurementPlannerPage: React.FC = () => {
               <div>
                 <h2 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
                   <UserX className="w-4 h-4 text-pink-500" />
-                  Log Customer Out-of-Stock / Missing Demand
+                  Log Customer Product Demand
                 </h2>
                 <p className="text-xs text-slate-400">
                   Quickly record what a customer wanted so the owner can procure it in market.
@@ -1560,6 +1719,137 @@ export const ProcurementPlannerPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* QUICK RESTOCK MODAL */}
+      {restockItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h2 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-emerald-500" />
+                  {restockItem.note_id ? 'Restock Item & Complete Note' : 'Quick Restock Inventory'}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {restockItem.note_id
+                    ? 'Add received shipment to inventory and mark this buying note as Done.'
+                    : 'Directly add new units and update rates in the database.'}
+                </p>
+              </div>
+              <button onClick={() => setRestockItem(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+              <span className="font-bold text-xs text-slate-800 dark:text-white block truncate">{restockItem.name}</span>
+              <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-mono">
+                <span>Barcode: <strong className="text-slate-700 dark:text-slate-300">{restockItem.barcode}</strong></span>
+                <span>•</span>
+                <span>Current Stock: <strong className="text-rose-600">{restockItem.current_stock} pcs</strong></span>
+              </div>
+            </div>
+
+            <form onSubmit={handleQuickRestockSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  How many pcs to restock / add? *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    autoFocus
+                    value={restockQty}
+                    onChange={(e) => setRestockQty(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 bg-emerald-50/50 dark:bg-emerald-950/30 border-2 border-emerald-500 rounded-xl font-mono font-black text-base text-emerald-700 dark:text-emerald-300 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs font-bold text-emerald-600 font-mono">
+                    New Stock: {restockItem.current_stock + (Number(restockQty) || 0)} pcs
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-500 block mb-1">Cost Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={restockPurchasePrice}
+                    onChange={(e) => setRestockPurchasePrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-500 block mb-1">Selling Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={restockSellingPrice}
+                    onChange={(e) => setRestockSellingPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-500 block mb-1">MRP (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={restockMrp}
+                    onChange={(e) => setRestockMrp(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setRestockItem(null)}
+                  className="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 text-xs"
+                >
+                  Cancel
+                </button>
+
+                <div className="flex items-center space-x-2">
+                  {restockItem.note_id && (
+                    <button
+                      type="button"
+                      onClick={() => handleCompleteNoteWithoutRestock(restockItem.note_id)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs transition-all"
+                      title="Mark this note as Done without altering inventory stock"
+                    >
+                      Just Mark Done
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingRestock}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md shadow-emerald-600/30 flex items-center gap-1.5 active:scale-95 transition-all text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>
+                      {isSubmittingRestock
+                        ? 'Updating Stock...'
+                        : restockItem.note_id
+                        ? `Add +${restockQty || 0} & Mark Done`
+                        : `Add +${restockQty || 0} to Stock`}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

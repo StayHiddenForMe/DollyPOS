@@ -14,10 +14,12 @@ import {
   Check,
   Database,
   Sun,
-  Moon
+  Moon,
+  Power
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { formatINR } from '../../utils/formatters';
+import { AppCloseBackupModal } from './AppCloseBackupModal';
 
 export const Navbar: React.FC = () => {
   const { user, logout, isOwner } = useAuthStore();
@@ -28,6 +30,7 @@ export const Navbar: React.FC = () => {
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const [isAnniversaryDismissed, setIsAnniversaryDismissed] = useState(false);
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
 
   // Dynamic Shop Anniversary Check from StoreSettings
   const anniversaryData = alerts?.anniversary;
@@ -41,6 +44,31 @@ export const Navbar: React.FC = () => {
     const interval = setInterval(fetchAlerts, 45000);
     return () => clearInterval(interval);
   }, []);
+
+  // Intercept Electron Window (X) close event
+  useEffect(() => {
+    if ((window as any).electronAPI?.onTriggerCloseBackup) {
+      const unsubscribe = (window as any).electronAPI.onTriggerCloseBackup(() => {
+        setIsCloseModalOpen(true);
+      });
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
+  }, []);
+
+  // Global exit shortcuts (Ctrl + W, Ctrl + Q, Cmd + W)
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'q' || e.key === 'Q' || e.key === 'w' || e.key === 'W')) {
+        e.preventDefault();
+        setIsCloseModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
+
 
   useEffect(() => {
     if (!isAlertsOpen) return;
@@ -261,14 +289,33 @@ export const Navbar: React.FC = () => {
 
           <button
             onClick={logout}
-            title="Logout"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+            title="Logout User Session"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
           >
             <LogOut className="w-4 h-4" />
+          </button>
+
+          {/* Exit / Close App Button */}
+          <button
+            onClick={() => setIsCloseModalOpen(true)}
+            title="Close Dolly POS (Auto-Backup & Cloud Sync) [Ctrl+Q]"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+          >
+            <Power className="w-4 h-4 text-rose-500" />
           </button>
         </div>
       </div>
     </header>
+
+    {/* On-Close Backup & Safe Exit Modal */}
+    <AppCloseBackupModal
+      isOpen={isCloseModalOpen}
+      onClose={() => setIsCloseModalOpen(false)}
+      googleConnected={settings?.google_drive_connected}
+      googleEmail={settings?.google_drive_email}
+      destination={settings?.backup_destination || 'BOTH'}
+      retentionDays={settings?.backup_retention_days ?? 30}
+    />
     </>
   );
 };

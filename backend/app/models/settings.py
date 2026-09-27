@@ -76,6 +76,21 @@ class StoreSettings(Base):
     auto_backup = Column(Boolean, default=True, nullable=False)
     backup_frequency = Column(String(20), default="DAILY", nullable=False)
     backup_path = Column(String(255), nullable=True)
+    backup_filename_prefix = Column(String(100), default="DollyToys", nullable=False)
+
+    # Google Drive Cloud Sync & Retention Policy
+    google_drive_connected = Column(Boolean, default=False, nullable=False)
+    google_drive_email = Column(String(150), nullable=True)
+    google_drive_folder_id = Column(String(100), nullable=True)
+    google_drive_refresh_token = Column(Text, nullable=True)
+    google_drive_access_token = Column(Text, nullable=True)
+    google_drive_token_expires_at = Column(DateTime, nullable=True)
+    google_client_id = Column(String(255), nullable=True)
+    google_client_secret = Column(String(255), nullable=True)
+    backup_destination = Column(String(50), default="BOTH", nullable=False)  # 'BOTH', 'GOOGLE_DRIVE_ONLY', 'LOCAL_ONLY'
+    backup_on_app_close = Column(Boolean, default=True, nullable=False)
+    backup_retention_days = Column(Integer, default=30, nullable=False)  # 7, 15, 30, 60, 90, 180, 365, 0 (Never)
+    last_cloud_backup_at = Column(DateTime, nullable=True)
 
     # Extra Charges & Surcharges (5 Configurable Templates)
     # Template 1 (Default preset: Online / MDR Surcharge on bills > 2000)

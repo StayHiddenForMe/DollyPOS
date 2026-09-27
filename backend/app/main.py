@@ -106,6 +106,19 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS custom_festival_items TEXT",
             "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS extra_charges_amount FLOAT DEFAULT 0.0",
             "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS extra_charges_breakdown TEXT",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_connected BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_email VARCHAR(150)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_folder_id VARCHAR(100)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_refresh_token TEXT",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_access_token TEXT",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_drive_token_expires_at TIMESTAMP",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_client_id VARCHAR(255)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS google_client_secret VARCHAR(255)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS backup_destination VARCHAR(50) DEFAULT 'BOTH'",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS backup_on_app_close BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS backup_retention_days INTEGER DEFAULT 30",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS last_cloud_backup_at TIMESTAMP",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS backup_filename_prefix VARCHAR(100) DEFAULT 'DollyToys'",
             "ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_product_id_fkey, ADD CONSTRAINT purchase_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;",
             "ALTER TABLE purchases DROP CONSTRAINT IF EXISTS purchases_vendor_id_fkey, ADD CONSTRAINT purchases_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE;",
         ]
@@ -187,6 +200,18 @@ def seed_initial_data():
 async def lifespan(app: FastAPI):
     # Startup bootstrap
     seed_initial_data()
+    # Automatic check & sync of offline SQLite bills into PostgreSQL
+    try:
+        from app.services.offline_sync_service import offline_sync_service
+        sync_db = SessionLocal()
+        try:
+            sync_res = offline_sync_service.sync_offline_sqlite_to_postgres(sync_db)
+            if sync_res.get("invoices_synced", 0) > 0:
+                print(f"[OfflineSync] {sync_res.get('message')}")
+        finally:
+            sync_db.close()
+    except Exception as e:
+        print(f"[OfflineSync Warning] Startup offline sync check: {e}")
     yield
 
 from starlette.middleware.gzip import GZipMiddleware
@@ -229,4 +254,4 @@ def api_v1_health():
     return health_check()
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

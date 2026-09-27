@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Dolly POS Companion",
+    "slug": "dolly-pos-companion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#db2777"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dollytoys.poscompanion"
+    },
+    "android": {
+      "package": "com.dollytoys.poscompanion",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#db2777",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sharing"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1f477713-b840-4c38-ae87-72b7a58c8fca"
+      }
+    }
+  }
+}

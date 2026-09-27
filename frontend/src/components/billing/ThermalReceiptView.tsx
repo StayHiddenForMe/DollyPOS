@@ -3,6 +3,7 @@ import { Printer, X, Share2 } from 'lucide-react';
 import { formatINR } from '../../utils/formatters';
 import { useSettingStore } from '../../store/settingStore';
 import { renderWhatsAppBillMessage, buildWhatsAppUrl, DEFAULT_WHATSAPP_BILL_TEMPLATE } from '../../utils/whatsappFormatter';
+import { OWNER_SIGNATURE_FOOTER } from '../../config/branding';
 
 interface ThermalReceiptViewProps {
   receiptData: any;
@@ -361,7 +362,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                   WebkitTextStroke: receiptData.is_power_footer_bold ? '0.3px #000' : 'none'
                 }}
               >
-                <span>{receiptData.power_footer_text || 'Software powered by Dolly POS© | Since 2002'}</span>
+                <span>{OWNER_SIGNATURE_FOOTER}</span>
               </p>
             </div>
           </div>

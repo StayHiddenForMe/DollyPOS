@@ -44,6 +44,11 @@ def update_store_settings(
 
     db.commit()
     db.refresh(settings)
+    try:
+        from app.api.mobile_router import clear_cache_prefix
+        clear_cache_prefix("mobile_overview")
+    except Exception:
+        pass
     log_action(db, user_id=current_user.id, action_type="UPDATE_SETTINGS", entity="STORE_SETTINGS", entity_id=str(settings.id))
     return settings
 

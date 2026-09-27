@@ -2,6 +2,9 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.services.upi_service import upi_service
 
+# Permanent Owner Signature / Footer 2 text:
+OWNER_SIGNATURE_FOOTER = "Software powered by Dolly POS© | Since 2002"
+
 def format_ist_datetime(dt: Optional[datetime]) -> str:
     """Converts UTC datetime into Indian Standard Time (IST: UTC+5:30) string."""
     if not dt:
@@ -86,7 +89,7 @@ class ReceiptService:
         is_tagline_bold = getattr(store_settings, 'is_tagline_bold', False) if store_settings else False
         footer_font_size = getattr(store_settings, 'footer_font_size', '10px') if store_settings else '10px'
         is_footer_bold = getattr(store_settings, 'is_footer_bold', False) if store_settings else False
-        power_footer_text = getattr(store_settings, 'power_footer_text', "Software powered by Dolly POS© | Since 2002") if store_settings else "Software powered by Dolly POS© | Since 2002"
+        power_footer_text = OWNER_SIGNATURE_FOOTER
         power_footer_font_size = getattr(store_settings, 'power_footer_font_size', '9px') if store_settings else '9px'
         is_power_footer_bold = getattr(store_settings, 'is_power_footer_bold', False) if store_settings else False
 

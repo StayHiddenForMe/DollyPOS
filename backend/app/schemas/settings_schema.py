@@ -61,6 +61,16 @@ class StoreSettingsBase(BaseModel):
     auto_backup: bool = True
     backup_frequency: str = "DAILY"
     backup_path: Optional[str] = None
+    backup_filename_prefix: Optional[str] = "DollyToys"
+    google_drive_connected: bool = False
+    google_drive_email: Optional[str] = None
+    google_drive_folder_id: Optional[str] = None
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    backup_destination: str = "BOTH"
+    backup_on_app_close: bool = True
+    backup_retention_days: int = 30
+    last_cloud_backup_at: Optional[datetime] = None
 
     # Extra Charges & Surcharges (5 Templates)
     extra_charge_enabled_1: bool = False
@@ -158,6 +168,16 @@ class StoreSettingsUpdate(BaseModel):
     auto_backup: Optional[bool] = None
     backup_frequency: Optional[str] = None
     backup_path: Optional[str] = None
+    backup_filename_prefix: Optional[str] = None
+    google_drive_connected: Optional[bool] = None
+    google_drive_email: Optional[str] = None
+    google_drive_folder_id: Optional[str] = None
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    backup_destination: Optional[str] = None
+    backup_on_app_close: Optional[bool] = None
+    backup_retention_days: Optional[int] = None
+    last_cloud_backup_at: Optional[datetime] = None
 
     # Extra Charges & Surcharges (5 Templates)
     extra_charge_enabled_1: Optional[bool] = None

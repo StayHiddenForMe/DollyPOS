@@ -36,18 +36,34 @@ import {
   Sliders,
   Sparkles,
   Percent,
-  IndianRupee
+  IndianRupee,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  ExternalLink,
+  Clock,
+  RotateCcw,
+  Search,
+  FileText,
+  CheckCircle2,
+  FolderOpen,
+  Loader2,
+  Smartphone,
+  QrCode,
+  Copy,
+  Globe
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 import { computeExtraCharges, getReadableRuleSummary, evaluateRuleDiagnostics } from '../utils/extraCharges';
 import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
 import { printBarcodeStickers, PrintStickerItem } from '../utils/printBarcode';
+import { OWNER_SIGNATURE_FOOTER } from '../config/branding';
 
 export const SettingsPage: React.FC = () => {
   const { isOwner } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'STORE' | 'CHARGES' | 'STAFF' | 'CATEGORIES' | 'PRINTERS' | 'DATABASE' | 'BACKUP' | 'CLEANUP'>('STORE');
+  const [activeTab, setActiveTab] = useState<'STORE' | 'CHARGES' | 'STAFF' | 'CATEGORIES' | 'PRINTERS' | 'DATABASE' | 'BACKUP' | 'CLEANUP' | 'MOBILE'>('STORE');
 
   const [settings, setSettings] = useState<Partial<StoreSettings>>({
     shop_name: 'Dolly Toys and Kids Wear',
@@ -62,7 +78,7 @@ export const SettingsPage: React.FC = () => {
     bill_footer: 'Thank you for shopping at Dolly Toys! No exchange without original bill.',
     footer_font_size: '10px',
     is_footer_bold: false,
-    power_footer_text: 'Software powered by Dolly POS© | Since 2002',
+    power_footer_text: OWNER_SIGNATURE_FOOTER,
     power_footer_font_size: '9px',
     is_power_footer_bold: false,
     terms_and_conditions: '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.',
@@ -154,6 +170,44 @@ export const SettingsPage: React.FC = () => {
   const [factoryPurgeResult, setFactoryPurgeResult] = useState<string | null>(null);
   const purgeFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mobile Connect State
+  const [mobileNetworkInfo, setMobileNetworkInfo] = useState<{
+    shop_name: string;
+    local_ip: string;
+    port: number;
+    api_base_url: string;
+    status: string;
+    pairing_code: string;
+  } | null>(null);
+  const [customTunnelUrl, setCustomTunnelUrl] = useState<string>(() => localStorage.getItem('dolly_pos_tunnel_url') || '');
+  const [copyCodeSuccess, setCopyCodeSuccess] = useState(false);
+  const [copyUrlSuccess, setCopyUrlSuccess] = useState(false);
+  const [isLoadingMobileInfo, setIsLoadingMobileInfo] = useState(false);
+
+  const fetchMobileInfo = async () => {
+    setIsLoadingMobileInfo(true);
+    try {
+      const res = await api.get('/mobile/network-info');
+      setMobileNetworkInfo(res.data);
+    } catch (e) {
+      console.error('Failed to fetch mobile network info:', e);
+    } finally {
+      setIsLoadingMobileInfo(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'MOBILE') {
+      fetchMobileInfo();
+    }
+  }, [activeTab]);
+
+  const handleSaveTunnelUrl = (val: string) => {
+    const clean = val.trim().replace(/\/$/, '');
+    setCustomTunnelUrl(clean);
+    localStorage.setItem('dolly_pos_tunnel_url', clean);
+  };
+
   // Category Management State
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCatName, setNewCatName] = useState('');
@@ -177,8 +231,10 @@ export const SettingsPage: React.FC = () => {
   const [backupConfig, setBackupConfig] = useState({
     backup_path: 'C:\\DollyPos_Backups',
     auto_backup: true,
-    backup_frequency: 'MONTHLY'
+    backup_frequency: 'MONTHLY',
+    backup_filename_prefix: 'DollyToys'
   });
+  const [isSavingPrefix, setIsSavingPrefix] = useState(false);
   const [backupStatus, setBackupStatus] = useState<any>(null);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isSavingBackupPath, setIsSavingBackupPath] = useState(false);
@@ -186,13 +242,67 @@ export const SettingsPage: React.FC = () => {
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
 
+  // Google Drive Cloud Sync & Retention State
+  const [googleDriveStatus, setGoogleDriveStatus] = useState<{
+    connected: boolean;
+    email: string | null;
+    folder_name: string;
+    folder_id: string | null;
+    backup_destination: 'BOTH' | 'GOOGLE_DRIVE_ONLY' | 'LOCAL_ONLY';
+    backup_on_app_close: boolean;
+    backup_retention_days: number;
+    last_cloud_backup_at: string | null;
+    has_custom_credentials?: boolean;
+  }>({
+    connected: false,
+    email: null,
+    folder_name: 'DollyPOS_Cloud_Backups',
+    folder_id: null,
+    backup_destination: 'BOTH',
+    backup_on_app_close: true,
+    backup_retention_days: 30,
+    last_cloud_backup_at: null
+  });
+  const [cloudFiles, setCloudFiles] = useState<any[]>([]);
+  const [isFetchingCloudFiles, setIsFetchingCloudFiles] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [googleMsg, setGoogleMsg] = useState<string | null>(null);
+
+  // Google OAuth Credentials Config
+  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [customClientId, setCustomClientId] = useState('');
+  const [customClientSecret, setCustomClientSecret] = useState('');
+  const [showClientId, setShowClientId] = useState(true);
+  const [showClientSecret, setShowClientSecret] = useState(false);
+  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
+
+  // Unified Backups Studio State
+  const [backupFilter, setBackupFilter] = useState<'ALL' | 'CLOUD' | 'LOCAL'>('ALL');
+  const [backupSearch, setBackupSearch] = useState('');
+  const [restoringFile, setRestoringFile] = useState<string | null>(null);
+
   useEffect(() => {
     fetchSettings();
     if (isOwner()) {
       fetchStaffUsers();
       fetchCategories();
       fetchBackupStatus();
+      fetchGoogleDriveStatus();
     }
+  }, []);
+
+  // Listen for Google OAuth popup messages
+  useEffect(() => {
+    const handleAuthMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'GOOGLE_DRIVE_CONNECTED') {
+        fetchGoogleDriveStatus();
+        fetchSettings();
+        setGoogleMsg(`✓ Google Drive successfully connected (${event.data.email || 'Your Account'})!`);
+      }
+    };
+    window.addEventListener('message', handleAuthMessage);
+    return () => window.removeEventListener('message', handleAuthMessage);
   }, []);
 
   // Close active modals on Escape key
@@ -222,12 +332,13 @@ export const SettingsPage: React.FC = () => {
       if (res.data.sound_enabled !== undefined) {
         localStorage.setItem('dolly_sound_enabled', String(res.data.sound_enabled));
       }
-      if (res.data.backup_path) {
+      if (res.data.backup_path || res.data.backup_filename_prefix) {
         setBackupConfig(prev => ({
           ...prev,
-          backup_path: res.data.backup_path,
+          backup_path: res.data.backup_path || prev.backup_path,
           auto_backup: res.data.auto_backup ?? true,
-          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY'
+          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY',
+          backup_filename_prefix: res.data.backup_filename_prefix || prev.backup_filename_prefix || 'DollyToys'
         }));
       }
     } catch (e) {
@@ -270,12 +381,13 @@ export const SettingsPage: React.FC = () => {
       const res = await api.get('/backup/status');
       setBackupStatus(res.data);
       setExistingBackups(res.data.backups || []);
-      if (res.data.backup_directory) {
+      if (res.data.backup_directory || res.data.backup_filename_prefix) {
         setBackupConfig(prev => ({
           ...prev,
-          backup_path: res.data.backup_directory,
+          backup_path: res.data.backup_directory || prev.backup_path,
           auto_backup: res.data.auto_backup_enabled ?? true,
-          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY'
+          backup_frequency: res.data.backup_frequency || prev.backup_frequency || 'DAILY',
+          backup_filename_prefix: res.data.backup_filename_prefix || prev.backup_filename_prefix || 'DollyToys'
         }));
       }
     } catch (e) {
@@ -289,7 +401,11 @@ export const SettingsPage: React.FC = () => {
     setSaveSuccess(false);
 
     try {
-      const res = await api.put('/settings', settings);
+      const payload = {
+        ...settings,
+        power_footer_text: OWNER_SIGNATURE_FOOTER
+      };
+      const res = await api.put('/settings', payload);
       setSettings(res.data);
       useSettingStore.getState().fetchSettings();
       setSaveSuccess(true);
@@ -547,7 +663,7 @@ export const SettingsPage: React.FC = () => {
       bill_footer: settings.bill_footer || 'Thank you for shopping with Dolly Toys! Visit Again.',
       footer_font_size: settings.footer_font_size || '10px',
       is_footer_bold: settings.is_footer_bold || false,
-      power_footer_text: settings.power_footer_text || 'Software powered by Dolly POS© | Since 2002',
+      power_footer_text: OWNER_SIGNATURE_FOOTER,
       power_footer_font_size: settings.power_footer_font_size || '9px',
       is_power_footer_bold: settings.is_power_footer_bold || false,
       terms_and_conditions: settings.terms_and_conditions || '1. Goods once sold can be exchanged within 7 days with original tag and bill intact.\n2. No cash refund.',
@@ -652,7 +768,8 @@ export const SettingsPage: React.FC = () => {
       const res = await api.post('/backup/save-config', {
         backup_path: backupConfig.backup_path,
         auto_backup: backupConfig.auto_backup,
-        backup_frequency: freq
+        backup_frequency: freq,
+        backup_filename_prefix: backupConfig.backup_filename_prefix || 'DollyToys'
       });
       setBackupMsg(`✓ Backup frequency saved: ${freq === 'DAILY' ? '📅 Daily' : freq === 'WEEKLY_MONDAY' ? '📆 Weekly (Monday)' : '🗓️ Monthly (1st)'}`);
       fetchBackupStatus();
@@ -668,7 +785,8 @@ export const SettingsPage: React.FC = () => {
       const res = await api.post('/backup/save-config', {
         backup_path: backupConfig.backup_path,
         auto_backup: backupConfig.auto_backup,
-        backup_frequency: backupConfig.backup_frequency || 'DAILY'
+        backup_frequency: backupConfig.backup_frequency || 'DAILY',
+        backup_filename_prefix: backupConfig.backup_filename_prefix || 'DollyToys'
       });
       // Also run instant test backup to verify folder works
       const backupRes = await api.post('/backup/create');
@@ -681,6 +799,27 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleSaveBackupPrefix = async () => {
+    setIsSavingPrefix(true);
+    setBackupMsg(null);
+    try {
+      const cleanPrefix = (backupConfig.backup_filename_prefix || 'DollyToys').replace(/[^a-zA-Z0-9_-]/g, '').trim() || 'DollyToys';
+      setBackupConfig(prev => ({ ...prev, backup_filename_prefix: cleanPrefix }));
+      await api.post('/backup/save-config', {
+        backup_path: backupConfig.backup_path,
+        auto_backup: backupConfig.auto_backup,
+        backup_frequency: backupConfig.backup_frequency || 'DAILY',
+        backup_filename_prefix: cleanPrefix
+      });
+      setBackupMsg(`✓ Backup file prefix saved: "${cleanPrefix}_Backup_..."`);
+      fetchBackupStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to save backup filename prefix');
+    } finally {
+      setIsSavingPrefix(false);
+    }
+  };
+
   const handleExportFullJsonBackup = async () => {
     try {
       const res = await api.get('/backup/export-full-json', { responseType: 'blob' });
@@ -688,7 +827,7 @@ export const SettingsPage: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `DollyToys_CompleteDatabaseBackup_${Date.now()}.json`);
+      link.setAttribute('download', `${backupConfig.backup_filename_prefix || 'DollyToys'}_CompleteDatabaseBackup_${Date.now()}.json`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -755,6 +894,287 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleDownloadCloudBackupFile = async (fileId: string, filename: string) => {
+    try {
+      const res = await api.get(`/google-drive/download/${fileId}`, {
+        params: { filename },
+        responseType: 'blob'
+      });
+      const blob = new Blob([res.data], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e) {
+      alert('Failed to download cloud backup file');
+    }
+  };
+
+  // Google Drive Cloud Sync Handlers
+  const fetchGoogleDriveStatus = async () => {
+    try {
+      const res = await api.get('/google-drive/status');
+      setGoogleDriveStatus(res.data);
+      if (res.data?.client_id) {
+        setCustomClientId(res.data.client_id);
+      }
+      if (res.data?.client_secret) {
+        setCustomClientSecret(res.data.client_secret);
+      }
+      if (res.data.connected) {
+        fetchCloudFiles();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchCloudFiles = async () => {
+    setIsFetchingCloudFiles(true);
+    try {
+      const res = await api.get('/google-drive/cloud-files');
+      setCloudFiles(res.data?.files || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsFetchingCloudFiles(false);
+    }
+  };
+
+  const handleConnectGoogleDrive = async () => {
+    setIsConnectingGoogle(true);
+    setGoogleMsg(null);
+    try {
+      const res = await api.get('/google-drive/auth-url');
+      const authUrl = res.data?.auth_url;
+      if (authUrl) {
+        const width = 550;
+        const height = 650;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        window.open(
+          authUrl,
+          'GoogleDriveAuth',
+          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+        );
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to initialize Google Authorization.');
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
+
+  const handleSaveGoogleCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customClientId.trim()) {
+      alert('Please enter your Google OAuth Client ID');
+      return;
+    }
+    setIsSavingCredentials(true);
+    try {
+      await api.post('/google-drive/save-credentials', {
+        client_id: customClientId.trim(),
+        client_secret: customClientSecret.trim() || undefined
+      });
+      alert('✓ Google OAuth credentials saved successfully! You can now click "Connect Google Account".');
+      setIsCredentialsModalOpen(false);
+      fetchGoogleDriveStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to save Google OAuth credentials');
+    } finally {
+      setIsSavingCredentials(false);
+    }
+  };
+
+  const handleDisconnectGoogleDrive = async () => {
+    const confirmDisc = window.confirm('Are you sure you want to disconnect your Google Account from Dolly POS Cloud Backups?');
+    if (!confirmDisc) return;
+    try {
+      await api.post('/google-drive/disconnect');
+      setGoogleMsg('✓ Google Account disconnected successfully.');
+      fetchGoogleDriveStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to disconnect Google Account.');
+    }
+  };
+
+  const handleSaveBackupPreferences = async (
+    updates: Partial<{
+      backup_destination: 'BOTH' | 'GOOGLE_DRIVE_ONLY' | 'LOCAL_ONLY';
+      backup_on_app_close: boolean;
+      backup_retention_days: number;
+    }>
+  ) => {
+    const payload = {
+      backup_destination: updates.backup_destination ?? googleDriveStatus.backup_destination,
+      backup_on_app_close: updates.backup_on_app_close ?? googleDriveStatus.backup_on_app_close,
+      backup_retention_days: updates.backup_retention_days ?? googleDriveStatus.backup_retention_days
+    };
+    try {
+      const res = await api.post('/google-drive/save-preferences', payload);
+      setGoogleDriveStatus(prev => ({ ...prev, ...payload }));
+      setGoogleMsg('✓ Backup & Retention preferences saved successfully.');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to save backup preferences.');
+    }
+  };
+
+  const handleSyncToGoogleDriveNow = async () => {
+    setIsSyncingCloud(true);
+    setGoogleMsg(null);
+    try {
+      const res = await api.post('/google-drive/sync-now');
+      setGoogleMsg(`✓ Snapshot synced to Google Drive folder "DollyPOS_Cloud_Backups" (${res.data?.local_file?.file_name || 'Backup File'})!`);
+      fetchGoogleDriveStatus();
+      fetchCloudFiles();
+      fetchBackupStatus();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to sync backup to Google Drive. Please check your internet connection.');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleRestoreFromCloud = async (fileId: string, filename: string) => {
+    const confirm = window.confirm(
+      `⚠️ RESTORE FROM GOOGLE DRIVE CLOUD\n\nFile: ${filename}\n\nAre you sure you want to restore your database from this cloud snapshot?\nThis will import all products, bills, purchases, expenses, and ledgers into your database.`
+    );
+    if (!confirm) return;
+
+    setRestoringFile(filename);
+    setRestoreMsg(null);
+    try {
+      const res = await api.post(`/google-drive/restore/${fileId}`);
+      const successMessage = res.data?.message || 'Database restored successfully from Google Drive!';
+      setRestoreMsg(successMessage);
+      alert(successMessage);
+      fetchBackupStatus();
+      fetchCloudFiles();
+      handleFetchLongevityAudit();
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || err.message || 'Failed to restore database from Google Drive.';
+      setRestoreMsg(errMsg);
+      alert(`Restore Error: ${errMsg}`);
+    } finally {
+      setRestoringFile(null);
+    }
+  };
+
+  const handleRestoreFromLocal = async (filename: string) => {
+    const confirm = window.confirm(
+      `⚠️ RESTORE FROM LOCAL BACKUP DISK\n\nFile: ${filename}\n\nAre you sure you want to restore your database from this local backup?\nThis will import all products, bills, purchases, expenses, and ledgers into your database.`
+    );
+    if (!confirm) return;
+
+    setRestoringFile(filename);
+    setRestoreMsg(null);
+    try {
+      const res = await api.post(`/backup/restore-local/${filename}`);
+      const successMessage = res.data?.message || 'Database restored successfully from local backup file!';
+      setRestoreMsg(successMessage);
+      alert(successMessage);
+      fetchBackupStatus();
+      fetchCloudFiles();
+      handleFetchLongevityAudit();
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || err.message || 'Failed to restore database from local backup.';
+      setRestoreMsg(errMsg);
+      alert(`Restore Error: ${errMsg}`);
+    } finally {
+      setRestoringFile(null);
+    }
+  };
+
+  const unifiedBackups = React.useMemo(() => {
+    const map = new Map<string, {
+      key: string;
+      filename: string;
+      location: 'BOTH' | 'GOOGLE_DRIVE' | 'LOCAL';
+      method: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_CLOSE' | 'MANUAL';
+      size_kb: number;
+      dateStr: string;
+      timestamp: number;
+      localPath?: string;
+      cloudFileId?: string;
+      cloudWebLink?: string;
+    }>();
+
+    const getMethod = (fn: string): 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_CLOSE' | 'MANUAL' => {
+      if (fn.includes('Monthly')) return 'MONTHLY';
+      if (fn.includes('Weekly')) return 'WEEKLY';
+      if (fn.includes('Daily')) {
+        if (/Daily_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}/i.test(fn)) return 'ON_CLOSE';
+        return 'DAILY';
+      }
+      return 'MANUAL';
+    };
+
+    // 1. Process local backup files
+    (existingBackups || []).forEach((b: any) => {
+      const fn = b.filename;
+      const ts = b.created_timestamp
+        ? (typeof b.created_timestamp === 'number' && b.created_timestamp < 1e11 ? b.created_timestamp * 1000 : Number(b.created_timestamp))
+        : Date.now();
+      map.set(fn, {
+        key: fn,
+        filename: fn,
+        location: 'LOCAL',
+        method: getMethod(fn),
+        size_kb: b.size_kb || 0,
+        dateStr: new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+        timestamp: ts,
+        localPath: b.path
+      });
+    });
+
+    // 2. Process Google Drive cloud files
+    (cloudFiles || []).forEach((cf: any) => {
+      const fn = cf.filename;
+      const ts = cf.created_time ? new Date(cf.created_time).getTime() : Date.now();
+      if (map.has(fn)) {
+        const item = map.get(fn)!;
+        item.location = 'BOTH';
+        item.cloudFileId = cf.id;
+        item.cloudWebLink = cf.web_link;
+      } else {
+        map.set(fn, {
+          key: cf.id || fn,
+          filename: fn,
+          location: 'GOOGLE_DRIVE',
+          method: getMethod(fn),
+          size_kb: cf.size_kb || 0,
+          dateStr: new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+          timestamp: ts,
+          cloudFileId: cf.id,
+          cloudWebLink: cf.web_link
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }, [existingBackups, cloudFiles]);
+
+  const filteredBackups = React.useMemo(() => {
+    return unifiedBackups.filter(b => {
+      if (backupFilter === 'CLOUD' && b.location === 'LOCAL') return false;
+      if (backupFilter === 'LOCAL' && b.location === 'GOOGLE_DRIVE') return false;
+      if (backupSearch.trim() && !b.filename.toLowerCase().includes(backupSearch.toLowerCase().trim())) return false;
+      return true;
+    });
+  }, [unifiedBackups, backupFilter, backupSearch]);
+
+  const cloudBackupsCount = React.useMemo(() => {
+    return unifiedBackups.filter(b => b.location === 'GOOGLE_DRIVE' || b.location === 'BOTH').length;
+  }, [unifiedBackups]);
+
+  const localBackupsCount = React.useMemo(() => {
+    return unifiedBackups.filter(b => b.location === 'LOCAL' || b.location === 'BOTH').length;
+  }, [unifiedBackups]);
+
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-100 dark:bg-slate-950 overflow-y-auto select-none p-4 space-y-4">
       {/* Header */}
@@ -812,6 +1232,13 @@ export const SettingsPage: React.FC = () => {
           >
             <HardDrive className="w-3.5 h-3.5" />
             <span>Backup & Restore</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('MOBILE')}
+            className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${activeTab === 'MOBILE' ? 'bg-white dark:bg-slate-700 text-pink-600 dark:text-pink-400 shadow-xs font-bold' : 'text-slate-500'}`}
+          >
+            <Smartphone className="w-3.5 h-3.5 text-pink-500" />
+            <span>Mobile Connect</span>
           </button>
           <button
             onClick={() => setActiveTab('DATABASE')}
@@ -1057,15 +1484,16 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Footer 2: Powered by Dolly POS Line */}
+              {/* Footer 2: Owner Signature & Established Line (LOCKED / NON-EDITABLE IN UI) */}
               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center space-x-2">
                     <label className="block font-bold text-slate-700 dark:text-slate-300 text-xs">
-                      Footer 2: Software Powered By & Established Line
+                      Footer 2: Owner Signature & Established Line
                     </label>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      Editable text printed at the bottom of thermal receipts
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                      <Lock className="w-2.5 h-2.5" />
+                      Locked Signature
                     </span>
                   </div>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
@@ -1081,13 +1509,16 @@ export const SettingsPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                   <div className="md:col-span-2">
-                    <input
-                      type="text"
-                      value={settings.power_footer_text ?? 'Software powered by Dolly POS© | Since 2002'}
-                      onChange={(e) => setSettings({ ...settings, power_footer_text: e.target.value })}
-                      placeholder="e.g. Software powered by Dolly POS© | Since 2002"
-                      className={`w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl ${settings.is_power_footer_bold ? 'font-black' : 'font-semibold'}`}
-                    />
+                    <div
+                      title="This signature line is locked against UI changes. To modify, edit OWNER_SIGNATURE_FOOTER in frontend/src/config/branding.ts"
+                      className={`w-full px-3.5 py-2 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 text-xs flex items-center justify-between select-all cursor-not-allowed ${settings.is_power_footer_bold ? 'font-black' : 'font-semibold'}`}
+                    >
+                      <span className="truncate">{OWNER_SIGNATURE_FOOTER}</span>
+                      <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                      🔒 Non-editable in UI (Personal Signature). Code location: <code className="text-pink-500 font-bold">frontend/src/config/branding.ts</code>
+                    </span>
                   </div>
 
                   <div>
@@ -2622,77 +3053,300 @@ export const SettingsPage: React.FC = () => {
         />
       )}
 
-      {/* TAB 5: BACKUP & DISASTER RECOVERY */}
+      {/* TAB 5: BACKUP & DISASTER RECOVERY & GOOGLE DRIVE CLOUD */}
       {activeTab === 'BACKUP' && (
-        <div className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+        <div className="space-y-6">
+          {/* Main Studio Container */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+            
             {/* Header */}
-            <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 flex-wrap gap-4">
               <div>
-                <h2 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
-                  <HardDrive className="w-5 h-5 text-pink-500" />
-                  Automatic Monthly Backup & Disaster Recovery Studio
+                <h2 className="font-bold text-base text-slate-800 dark:text-white flex items-center gap-2.5">
+                  <Cloud className="w-5 h-5 text-pink-600" />
+                  Database Backup & Disaster Recovery Studio
                 </h2>
-                <p className="text-xs text-slate-400">
-                  Guaranteed 0% data loss. Automatic full backups on the 1st of every month + manual instant exports.
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Zero data loss protection with automated Google Drive cloud backup, local disk snapshots, and 1-click database restore.
                 </p>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center space-x-2">
+              {/* Primary Action Buttons */}
+              <div className="flex items-center space-x-2.5 flex-wrap gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportJsonBackup}
+                  className="hidden"
+                />
+
                 <button
-                  onClick={handleExportFullJsonBackup}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-sm"
-                  title="Download complete database JSON archive"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isRestoring}
+                  className="px-3.5 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+                  title="Upload and restore a .json backup file from external drive or PC"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download Full Database (.JSON)</span>
+                  <Upload className="w-4 h-4 text-blue-500" />
+                  <span>{isRestoring ? 'Restoring File...' : 'Upload & Restore .JSON'}</span>
                 </button>
 
                 <button
+                  type="button"
+                  onClick={handleExportFullJsonBackup}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-sm transition cursor-pointer"
+                  title="Export portable database JSON archive to download folder"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Download .JSON</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleCreateInstantBackup}
                   disabled={isCreatingBackup}
-                  className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-sm"
-                  title="Create backup directly to configured folder"
+                  className="px-4 py-2 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-md shadow-pink-500/20 transition cursor-pointer"
+                  title="Create instant backup snapshot to local folder"
                 >
                   <Zap className="w-4 h-4 text-white" />
-                  <span>{isCreatingBackup ? 'Saving Backup...' : 'Save Backup to Folder Now'}</span>
+                  <span>{isCreatingBackup ? 'Creating Snapshot...' : 'Save Local Backup Now'}</span>
                 </button>
               </div>
             </div>
 
+            {/* Notification Banners */}
+            {googleMsg && (
+              <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 rounded-2xl border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center justify-between space-x-2 animate-in fade-in">
+                <div className="flex items-center space-x-2">
+                  <Cloud className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>{googleMsg}</span>
+                </div>
+                <button onClick={() => setGoogleMsg(null)} className="text-blue-500 hover:text-blue-700 cursor-pointer">✕</button>
+              </div>
+            )}
+
             {backupMsg && (
-              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{backupMsg}</span>
+              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center justify-between space-x-2 animate-in fade-in">
+                <div className="flex items-center space-x-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{backupMsg}</span>
+                </div>
+                <button onClick={() => setBackupMsg(null)} className="text-emerald-500 hover:text-emerald-700 cursor-pointer">✕</button>
               </div>
             )}
 
             {restoreMsg && (
-              <div className="p-3.5 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 rounded-2xl border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-                <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>{restoreMsg}</span>
+              <div className="p-3.5 bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-200 rounded-2xl border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center justify-between space-x-2 animate-in fade-in">
+                <div className="flex items-center space-x-2">
+                  <Info className="w-4 h-4 text-purple-600 shrink-0" />
+                  <span>{restoreMsg}</span>
+                </div>
+                <button onClick={() => setRestoreMsg(null)} className="text-purple-500 hover:text-purple-700 cursor-pointer">✕</button>
               </div>
             )}
 
-            {/* Section 1: AUTOMATIC SCHEDULED BACKUP & CUSTOM PATH CONFIG */}
-            <div className="p-5 bg-gradient-to-r from-pink-500/5 via-purple-500/5 to-blue-500/5 rounded-3xl border border-pink-100 dark:border-pink-900/30 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-pink-600 text-white flex items-center justify-center font-black text-xs">
-                    01
+            {/* SECTION 1: GOOGLE DRIVE CLOUD ACCOUNT INTEGRATION */}
+            <div className="p-5 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl border border-blue-200/80 dark:border-blue-900/40 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-500/20 shrink-0">
+                    <Cloud className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-xs text-slate-800 dark:text-white flex items-center gap-2">
-                      Automatic Scheduled Database Backup
-                      <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 text-[10px] font-black uppercase">
-                        Zero Data Loss Safe
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Guarantees complete safety by automatically creating a 100% full snapshot of all products, barcodes, bills, and customers according to your chosen schedule.
+                    <div className="flex items-center space-x-2.5">
+                      <h3 className="font-bold text-sm text-slate-800 dark:text-white">
+                        Google Account & Google Drive Cloud Backup
+                      </h3>
+                      {googleDriveStatus.connected ? (
+                        <span className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <span>Connected</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                          <span>Not Connected</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Daily and on-close snapshots are uploaded straight to your private Google Drive in the <b className="text-blue-600 dark:text-blue-400">DollyPOS_Cloud_Backups</b> folder.
                     </p>
                   </div>
+                </div>
+
+                {/* Connect / Disconnect / Single Primary Sync Button */}
+                <div>
+                  {googleDriveStatus.connected ? (
+                    <div className="flex items-center space-x-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsCredentialsModalOpen(true)}
+                        className="px-3.5 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                        title="View or update Google OAuth Client ID & Secret"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-blue-500" />
+                        <span>API Credentials</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSyncToGoogleDriveNow}
+                        disabled={isSyncingCloud}
+                        className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl flex items-center space-x-2 shadow-md shadow-blue-500/20 transition cursor-pointer"
+                        title="Upload fresh snapshot to Google Drive immediately"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                        <span>{isSyncingCloud ? 'Syncing to Drive...' : 'Sync to Google Drive Now'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDisconnectGoogleDrive}
+                        className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 font-bold text-xs rounded-xl border border-rose-200 dark:border-rose-900/40 transition cursor-pointer"
+                      >
+                        Disconnect Account
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsCredentialsModalOpen(true)}
+                        className="px-3.5 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                        title="Configure custom Google OAuth Client ID & Secret"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-blue-500" />
+                        <span>API Credentials Setup</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleConnectGoogleDrive}
+                        disabled={isConnectingGoogle}
+                        className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl flex items-center space-x-2 shadow-md shadow-blue-500/20 transition cursor-pointer"
+                      >
+                        <Cloud className="w-4 h-4" />
+                        <span>{isConnectingGoogle ? 'Opening Google Sign-In...' : 'Connect Google Account'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status Details Grid */}
+              {googleDriveStatus.connected && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-1 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Connected Account</span>
+                    <span className="font-bold text-slate-800 dark:text-white truncate block">{googleDriveStatus.email || 'Google User'}</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-1 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Target Google Drive Folder</span>
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400 truncate block">📁 DollyPOS_Cloud_Backups</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-1 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Last Cloud Backup</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 block flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      {googleDriveStatus.last_cloud_backup_at ? new Date(googleDriveStatus.last_cloud_backup_at).toLocaleString() : 'Not yet synced'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: AUTOMATION, DESTINATION & RETENTION POLICY */}
+            <div className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-pink-500" />
+                  Backup Automation, Destination & Retention Rules
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Configure where snapshots are saved, automatic on-close execution, and safe auto-cleanup policy for older files.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                {/* Destination Dropdown */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300">
+                    📍 Backup Destination:
+                  </label>
+                  <select
+                    value={googleDriveStatus.backup_destination || 'BOTH'}
+                    onChange={(e) => handleSaveBackupPreferences({ backup_destination: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 cursor-pointer"
+                  >
+                    <option value="BOTH">Both (Local Disk + Google Drive Cloud) — [Recommended]</option>
+                    <option value="GOOGLE_DRIVE_ONLY">Google Drive Cloud Only</option>
+                    <option value="LOCAL_ONLY">Local Folder Only (No Cloud)</option>
+                  </select>
+                  <span className="text-[11px] text-slate-400 block leading-snug">
+                    {googleDriveStatus.backup_destination === 'BOTH' ? '✓ Highest safety: Saves on your laptop and uploads to Google Drive.' : googleDriveStatus.backup_destination === 'GOOGLE_DRIVE_ONLY' ? '✓ Directly saved to your Google Drive cloud.' : '✓ Stored on this computer only.'}
+                  </span>
+                </div>
+
+                {/* On-Close Backup Toggle */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      🚪 On-App-Close Safety Backup:
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={googleDriveStatus.backup_on_app_close}
+                        onChange={(e) => handleSaveBackupPreferences({ backup_on_app_close: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-pink-600"></div>
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                    When exiting Dolly POS (via [X], Header Exit or Ctrl+W/Q), automatically saves today's billing and transactions safely.
+                  </p>
+                </div>
+
+                {/* Retention Policy Dropdown */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300">
+                    🗑️ Retention Policy (Auto-Delete Old):
+                  </label>
+                  <select
+                    value={googleDriveStatus.backup_retention_days ?? 30}
+                    onChange={(e) => handleSaveBackupPreferences({ backup_retention_days: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 cursor-pointer"
+                  >
+                    <option value={7}>7 Days (Keep latest 1 week)</option>
+                    <option value={15}>15 Days (Keep latest 15 days)</option>
+                    <option value={30}>30 Days (Keep latest 1 month) — [Recommended]</option>
+                    <option value={60}>60 Days (Keep latest 2 months)</option>
+                    <option value={90}>90 Days (Keep latest 3 months)</option>
+                    <option value={180}>180 Days (Keep latest 6 months)</option>
+                    <option value={365}>365 Days (Keep latest 1 Year)</option>
+                    <option value={0}>Never Delete (Keep All Backups Forever)</option>
+                  </select>
+                  <span className="text-[11px] text-slate-400 block leading-snug">
+                    Automatically purges snapshots older than the selected timeframe from both Local Disk & Google Drive.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3: LOCAL STARTUP SCHEDULE & CUSTOM BACKUP FOLDER */}
+            <div className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h3 className="font-bold text-xs text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-pink-500" />
+                    Startup Scheduled Backup & Local Directory
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Configure startup automatic checks and local disk destination folder.
+                  </p>
                 </div>
 
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -2702,184 +3356,383 @@ export const SettingsPage: React.FC = () => {
                     onChange={(e) => setBackupConfig({ ...backupConfig, auto_backup: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                  <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-pink-600"></div>
                   <span className="ml-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                    {backupConfig.auto_backup ? 'Active (Enabled)' : 'Disabled'}
+                    {backupConfig.auto_backup ? 'Scheduled Auto-Backup: ON' : 'Scheduled Auto-Backup: OFF'}
                   </span>
                 </label>
               </div>
 
-              {/* Schedule Frequency Selector */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                      ⏰ Backup Schedule Frequency:
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
+                {/* Schedule Frequency Selector */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      ⏰ Startup Backup Frequency:
                     </label>
-                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                      Auto-Saves on Selection
-                    </span>
+                    <p className="text-[11px] text-slate-400 mb-2">Automated snapshot schedule on launch</p>
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={backupConfig.backup_frequency || 'DAILY'}
+                        onChange={(e) => {
+                          const newFreq = e.target.value;
+                          setBackupConfig({ ...backupConfig, backup_frequency: newFreq });
+                          handleSaveBackupFrequency(newFreq);
+                        }}
+                        className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 cursor-pointer"
+                      >
+                        <option value="DAILY">📅 Daily on startup</option>
+                        <option value="WEEKLY_MONDAY">📆 Weekly (Monday)</option>
+                        <option value="MONTHLY_FIRST">🗓️ Monthly (1st of month)</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveBackupFrequency()}
+                        className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Save</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <select
-                      value={backupConfig.backup_frequency || 'DAILY'}
-                      onChange={(e) => {
-                        const newFreq = e.target.value;
-                        setBackupConfig({ ...backupConfig, backup_frequency: newFreq });
-                        handleSaveBackupFrequency(newFreq);
-                      }}
-                      className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl font-bold text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 cursor-pointer"
-                    >
-                      <option value="DAILY">📅 Daily — Automatic backup everyday on POS launch / startup</option>
-                      <option value="WEEKLY_MONDAY">📆 Weekly — Automatic backup every Monday</option>
-                      <option value="MONTHLY_FIRST">🗓️ Monthly — Automatic backup on the 1st of every month</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveBackupFrequency()}
-                      className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
-                      title="Save Selected Frequency"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Save</span>
-                    </button>
+                  <span className="text-[10px] text-slate-400 mt-2 block">
+                    Triggered automatically when Dolly POS opens
+                  </span>
+                </div>
+
+                {/* Custom Backup Filename Prefix (First Part) */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        🏷️ Backup File Prefix:
+                      </label>
+                      <span className="text-[10px] font-bold text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/50 px-2 py-0.5 rounded-md border border-pink-200 dark:border-pink-900/40">
+                        First Part Only
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      Customizes starting name. Suffixes (<span className="font-mono text-[10px]">_Backup_... .json</span>) stay intact.
+                    </p>
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1 flex items-center">
+                        <input
+                          type="text"
+                          value={backupConfig.backup_filename_prefix}
+                          onChange={(e) => setBackupConfig({ ...backupConfig, backup_filename_prefix: e.target.value })}
+                          placeholder="e.g. DollyToys"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveBackupPrefix}
+                        disabled={isSavingPrefix}
+                        className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0 disabled:opacity-50"
+                        title="Save custom backup filename prefix"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{isSavingPrefix ? 'Saving...' : 'Save'}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-2 bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800 font-mono">
+                    Preview: <b className="text-pink-600 dark:text-pink-400">{(backupConfig.backup_filename_prefix || 'DollyToys').replace(/[^a-zA-Z0-9_-]/g, '') || 'DollyToys'}_Backup_Daily_YYYY-MM-DD.json</b>
                   </div>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border space-y-1.5 flex flex-col justify-center">
-                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    🛡️ Verification Guarantee:
+                {/* Directory Input */}
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      📁 Local Storage Directory:
+                    </label>
+                    <p className="text-[11px] text-slate-400 mb-2">Folder on this PC where files are saved</p>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={backupConfig.backup_path}
+                        onChange={(e) => setBackupConfig({ ...backupConfig, backup_path: e.target.value })}
+                        placeholder="e.g. C:\DollyPos_Backups"
+                        className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveBackupPath}
+                        disabled={isSavingBackupPath}
+                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center space-x-1 shadow-xs transition cursor-pointer shrink-0 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5 text-pink-400" />
+                        <span>{isSavingBackupPath ? 'Saving...' : 'Set Path'}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-2 block truncate">
+                    Saved directly to: <span className="font-mono">{backupConfig.backup_path || 'Default folder'}</span>
                   </span>
-                  <p className="text-[11px] text-slate-500 leading-snug">
-                    Full backup exports all 23 database tables (Products, Barcodes, Pricing History, Invoices, Khata Ledgers, Expenses, Purchases, Vendors & Audit Logs).
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 4: UNIFIED BACKUPS & 1-CLICK DISASTER RECOVERY HUB */}
+            <div className="space-y-3.5 pt-2">
+              {/* Hub Header & Filters */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                    <Database className="w-4 h-4 text-pink-600" />
+                    Unified Backups & 1-Click Disaster Recovery Hub
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    All backups across Google Drive Cloud and Local Disk in one place ({unifiedBackups.length} snapshots total). Click <b>Restore</b> on any item to recover 100% of data.
                   </p>
                 </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchBackupStatus();
+                      fetchCloudFiles();
+                    }}
+                    disabled={isFetchingCloudFiles}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Refresh all local and cloud files"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isFetchingCloudFiles ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Path Selection Input */}
-              <div className="space-y-2 pt-1">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  📁 Automatic Backup Destination Folder / Path:
-                </label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={backupConfig.backup_path}
-                    onChange={(e) => setBackupConfig({ ...backupConfig, backup_path: e.target.value })}
-                    placeholder="e.g. C:\DollyPos_Backups or D:\Store_Backups or E:\USB_Backup"
-                    className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border rounded-2xl font-mono text-xs font-bold text-slate-800 dark:text-white shadow-xs focus:ring-2 focus:ring-pink-500 focus:outline-none"
-                  />
+              {/* Filter Pills & Search Bar */}
+              <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center space-x-1.5">
                   <button
-                    onClick={handleSaveBackupPath}
-                    disabled={isSavingBackupPath}
-                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl flex items-center space-x-1.5 shadow-sm transition-all"
+                    type="button"
+                    onClick={() => setBackupFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      backupFilter === 'ALL'
+                        ? 'bg-pink-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700'
+                    }`}
                   >
-                    <Save className="w-4 h-4 text-pink-400" />
-                    <span>{isSavingBackupPath ? 'Saving...' : 'Save Config & Test'}</span>
+                    All Backups ({unifiedBackups.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBackupFilter('CLOUD')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      backupFilter === 'CLOUD'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Cloud className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Google Drive ({cloudBackupsCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBackupFilter('LOCAL')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      backupFilter === 'LOCAL'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <HardDrive className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Local Disk ({localBackupsCount})</span>
                   </button>
                 </div>
 
-                {/* Quick Directory Presets */}
-                <div className="flex items-center space-x-2 pt-1 text-xs">
-                  <span className="text-[11px] font-bold text-slate-400">Quick Path Presets:</span>
-                  {['C:\\DollyPos_Backups', 'D:\\DollyPos_Backups', 'C:\\Users\\SomeshBang\\Desktop\\Dolly_Backups'].map((preset) => (
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={backupSearch}
+                    onChange={(e) => setBackupSearch(e.target.value)}
+                    placeholder="Search by filename..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-pink-500 shadow-xs"
+                  />
+                  {backupSearch && (
                     <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setBackupConfig({ ...backupConfig, backup_path: preset })}
-                      className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border hover:border-pink-500 text-[11px] font-mono text-slate-600 dark:text-slate-300 font-semibold"
+                      onClick={() => setBackupSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
                     >
-                      {preset}
+                      ✕
                     </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Section 2: RESTORE / IMPORT AREA */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-xs text-slate-800 dark:text-white flex items-center gap-1.5">
-                  <Upload className="w-4 h-4 text-pink-500" />
-                  Restore Database from Any Previous Backup (.JSON)
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Moving to a new laptop or recovering data? Select your `.json` backup file to restore 100% of products, barcodes, customers, and suppliers instantly.
+                  )}
                 </div>
               </div>
 
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportJsonBackup}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isRestoring}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-xs"
-                >
-                  {isRestoring ? 'Restoring Database...' : 'Select Backup File (.JSON) to Restore'}
-                </button>
-              </div>
-            </div>
-
-            {/* Section 3: EXISTING LOCAL BACKUPS TABLE */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-pink-500" />
-                  Saved Backups in Destination Folder ({existingBackups.length} Files)
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  Folder: {backupConfig.backup_path}
-                </span>
-              </div>
-
-              <div className="max-h-[300px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl custom-scrollbar shadow-inner">
+              {/* Scrollable Unified Table */}
+              <div className="max-h-[380px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl custom-scrollbar shadow-inner bg-white dark:bg-slate-900">
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-400 uppercase sticky top-0 z-10 shadow-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase sticky top-0 z-10 shadow-xs border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-4">Backup Filename</th>
-                      <th className="py-2.5 px-3">Type</th>
-                      <th className="py-2.5 px-3">Size</th>
-                      <th className="py-2.5 px-4 text-right">Action</th>
+                      <th className="py-3 px-4">Backup Filename & Method</th>
+                      <th className="py-3 px-3">Storage Location</th>
+                      <th className="py-3 px-3">Size</th>
+                      <th className="py-3 px-3">Date & Time</th>
+                      <th className="py-3 px-4 text-right w-[370px] min-w-[370px]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {existingBackups.length === 0 ? (
+                    {filteredBackups.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center py-6 text-slate-400">
-                          No backup files found in this folder yet. Click "Save Path & Test Backup" above.
+                        <td colSpan={5} className="text-center py-10 text-slate-400">
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <Database className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                            <p className="font-bold text-xs text-slate-500">
+                              {backupSearch
+                                ? `No backup matches "${backupSearch}"`
+                                : `No backups available under ${backupFilter === 'ALL' ? 'any storage' : backupFilter === 'CLOUD' ? 'Google Drive' : 'Local Disk'}`}
+                            </p>
+                            <span className="text-[11px] text-slate-400">
+                              Click "Save Local Backup Now" or "Sync to Google Drive Now" above to generate a new snapshot.
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ) : (
-                      existingBackups.map((b, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                          <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-white">
-                            {b.filename}
+                      filteredBackups.map((b) => (
+                        <tr key={b.key} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          {/* Filename & Type */}
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col space-y-1">
+                              <span className="font-mono font-bold text-slate-800 dark:text-white text-xs select-all">
+                                {b.filename}
+                              </span>
+                              <div>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                  b.method === 'DAILY'
+                                    ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300'
+                                    : b.method === 'ON_CLOSE'
+                                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                                    : b.method === 'WEEKLY'
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                    : b.method === 'MONTHLY'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}>
+                                  {b.method === 'DAILY' && '📅 Auto-Daily'}
+                                  {b.method === 'ON_CLOSE' && '🚪 On-Close'}
+                                  {b.method === 'WEEKLY' && '📆 Auto-Weekly'}
+                                  {b.method === 'MONTHLY' && '🗓️ Auto-Monthly'}
+                                  {b.method === 'MANUAL' && '💾 Manual Snapshot'}
+                                </span>
+                              </div>
+                            </div>
                           </td>
+
+                          {/* Storage Location Badge */}
                           <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              b.is_auto_monthly || b.filename.includes('AutoMonthly')
-                                ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300'
-                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                            }`}>
-                              {b.is_auto_monthly || b.filename.includes('AutoMonthly') ? '🗓️ Auto-Monthly' : '💾 Manual Snapshot'}
-                            </span>
+                            {b.location === 'BOTH' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <Cloud className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                <HardDrive className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Cloud + Local Disk</span>
+                              </span>
+                            ) : b.location === 'GOOGLE_DRIVE' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                <Cloud className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                <span>Google Drive Cloud</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                <HardDrive className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                                <span>Local Disk Storage</span>
+                              </span>
+                            )}
                           </td>
-                          <td className="py-3 px-3 font-mono text-slate-500">
-                            {b.size_kb} KB
+
+                          {/* File Size */}
+                          <td className="py-3 px-3 font-mono text-slate-500 dark:text-slate-400 font-medium">
+                            {b.size_kb > 0 ? `${b.size_kb} KB` : 'N/A'}
                           </td>
-                          <td className="py-3 px-4 text-right space-x-2">
-                            <button
-                              onClick={() => handleDownloadBackupFile(b.filename)}
-                              className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-pink-50 hover:text-pink-600 font-bold rounded-lg text-[11px] transition-colors"
-                            >
-                              Download ⬇
-                            </button>
+
+                          {/* Date & Time */}
+                          <td className="py-3 px-3 text-slate-600 dark:text-slate-300 font-medium text-[11px]">
+                            {b.dateStr}
+                          </td>
+
+                          {/* Actions: Fixed-width 3-slot layout for perfect alignment */}
+                          <td className="py-3 px-4 text-right whitespace-nowrap w-[370px] min-w-[370px]">
+                            <div className="flex items-center justify-end space-x-2">
+                              {/* Slot 1: 1-Click Restore Button (Fixed w-36) */}
+                              {b.location === 'GOOGLE_DRIVE' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreFromCloud(b.cloudFileId!, b.filename)}
+                                  disabled={restoringFile !== null}
+                                  className="w-36 shrink-0 py-1.5 px-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-[11px] shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  title="Restore database directly from this Google Drive cloud snapshot"
+                                >
+                                  {restoringFile === b.filename ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{restoringFile === b.filename ? 'Restoring...' : 'Restore Cloud'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreFromLocal(b.filename)}
+                                  disabled={restoringFile !== null}
+                                  className="w-36 shrink-0 py-1.5 px-2 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-xl text-[11px] shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  title="Restore database directly from this local snapshot"
+                                >
+                                  {restoringFile === b.filename ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{restoringFile === b.filename ? 'Restoring...' : 'Restore Local'}</span>
+                                </button>
+                              )}
+
+                              {/* Slot 2: Download Button (Fixed w-24) */}
+                              {b.location === 'GOOGLE_DRIVE' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadCloudBackupFile(b.cloudFileId!, b.filename)}
+                                  className="w-24 shrink-0 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                  title="Download cloud backup snapshot JSON to PC"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadBackupFile(b.filename)}
+                                  className="w-24 shrink-0 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                  title="Download backup snapshot file to PC"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download</span>
+                                </button>
+                              )}
+
+                              {/* Slot 3: Google Drive External Link (Fixed w-20) */}
+                              {b.cloudWebLink ? (
+                                <a
+                                  href={b.cloudWebLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-20 shrink-0 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300 text-blue-600 font-bold rounded-xl text-[11px] transition flex items-center justify-center gap-1"
+                                  title="Open this backup file in Google Drive web interface"
+                                >
+                                  <span>Drive</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <div className="w-20 shrink-0 flex items-center justify-center text-slate-300 dark:text-slate-700 text-xs font-mono select-none" title="Local only — not in cloud">
+                                  —
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -2888,7 +3741,136 @@ export const SettingsPage: React.FC = () => {
                 </table>
               </div>
             </div>
+
           </div>
+
+          {/* GOOGLE OAUTH CREDENTIALS SETUP MODAL */}
+          {isCredentialsModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 select-none">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 animate-in fade-in zoom-in duration-150 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                      <KeyRound className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800 dark:text-white">
+                        Google Cloud OAuth 2.0 Setup (100% Free)
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Link your Google Cloud Project to enable Google Drive Cloud Backups
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsCredentialsModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* 2-Minute Setup Checklist */}
+                <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-2xl border border-blue-200 dark:border-blue-900/40 space-y-2 text-[11px] text-slate-700 dark:text-slate-300">
+                  <span className="font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 text-xs">
+                    📋 Quick 2-Minute Google Cloud Guide:
+                  </span>
+                  <ol className="list-decimal list-inside space-y-1 pl-1 leading-relaxed">
+                    <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-blue-600 font-bold underline">Google Cloud Console</a> & create a free project.</li>
+                    <li>Enable <b>Google Drive API</b> in <b>APIs & Services → Library</b>.</li>
+                    <li>In <b>Credentials</b> → Click <b>Create Credentials → OAuth Client ID</b>.</li>
+                    <li>Set Application Type to <b>Web application</b>.</li>
+                    <li>Add Authorized Redirect URI:
+                      <div className="mt-1 flex items-center space-x-1.5">
+                        <code className="px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg font-mono text-[10px] text-blue-600 select-all">
+                          http://localhost:8000/api/v1/google-drive/callback
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText('http://localhost:8000/api/v1/google-drive/callback');
+                            alert('Copied redirect URI to clipboard!');
+                          }}
+                          className="px-2 py-1 bg-blue-600 text-white rounded-lg font-bold text-[10px] cursor-pointer"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </li>
+                    <li>Copy your <b>Client ID</b> and <b>Client Secret</b> and paste below:</li>
+                  </ol>
+                </div>
+
+                {/* Form Inputs */}
+                <form onSubmit={handleSaveGoogleCredentials} className="space-y-3 pt-1">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Google Client ID: <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type={showClientId ? "text" : "password"}
+                        value={customClientId}
+                        onChange={(e) => setCustomClientId(e.target.value)}
+                        placeholder="e.g. 123456789-xxxxxxxx.apps.googleusercontent.com"
+                        className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs text-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowClientId(!showClientId)}
+                        className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                        title={showClientId ? "Hide Client ID" : "Show Client ID"}
+                      >
+                        {showClientId ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Google Client Secret: <span className="text-slate-400 font-normal">(Optional / if provided)</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type={showClientSecret ? "text" : "password"}
+                        value={customClientSecret}
+                        onChange={(e) => setCustomClientSecret(e.target.value)}
+                        placeholder="e.g. GOCSPX-xxxxxxxxxxxxxxxx"
+                        className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs text-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowClientSecret(!showClientSecret)}
+                        className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                        title={showClientSecret ? "Hide Client Secret" : "Show Client Secret"}
+                      >
+                        {showClientSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsCredentialsModalOpen(false)}
+                      className="px-4 py-2 border rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingCredentials}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer transition flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingCredentials ? 'Saving...' : 'Save & Enable Google Drive'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3279,6 +4261,166 @@ export const SettingsPage: React.FC = () => {
                 <span>{factoryPurgeResult}</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 8: MOBILE COMPANION APP CONNECT */}
+      {activeTab === 'MOBILE' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header Card */}
+          <div className="bg-gradient-to-r from-pink-600 to-rose-700 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="space-y-2 text-center md:text-left">
+              <div className="inline-flex items-center space-x-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase">
+                <Smartphone className="w-3.5 h-3.5 text-white" />
+                <span>Multi-Device Synchronization</span>
+              </div>
+              <h2 className="text-2xl font-black tracking-tight">Mobile Companion Setup</h2>
+              <p className="text-pink-100 text-xs max-w-xl">
+                Monitor your store live from your smartphone. View real-time sales, export Excel & PDF reports with custom dates, send 1-click WhatsApp payment reminders, and check inventory.
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-center min-w-[180px]">
+              <div className="flex items-center justify-center space-x-2 text-emerald-300 font-bold text-xs mb-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>API Server Active</span>
+              </div>
+              <p className="text-[11px] text-pink-100 font-mono">
+                {mobileNetworkInfo ? `${mobileNetworkInfo.local_ip}:${mobileNetworkInfo.port}` : 'Checking...'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* CARD 1: PAIRING QR CODE & KEY */}
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center text-center space-y-4">
+              <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-extrabold text-base">
+                <QrCode className="w-5 h-5 text-pink-600" />
+                <span>Scan QR Code to Pair</span>
+              </div>
+              <p className="text-xs text-slate-500 max-w-sm">
+                Open the <strong>Dolly POS Mobile Companion</strong> app on your mobile phone and scan this code to link instantly.
+              </p>
+
+              {/* Dynamic QR Code Box */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-inner flex flex-col items-center">
+                {mobileNetworkInfo ? (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=190x190&margin=8&data=${encodeURIComponent(
+                      customTunnelUrl.trim() || mobileNetworkInfo.api_base_url
+                    )}`}
+                    alt="Pairing QR Code"
+                    className="w-48 h-48 rounded-xl bg-white p-2 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs">
+                    <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
+                  </div>
+                )}
+                <div className="mt-3 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  Target: <span className="font-mono text-pink-600">{customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || 'Detecting...'}</span>
+                </div>
+              </div>
+
+              {/* One-Click Copy Pairing Key */}
+              <div className="w-full space-y-2 pt-2">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
+                  Quick Pairing Key (Or enter manually):
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || 'Detecting...'}
+                    className="flex-1 px-3.5 py-2 text-xs font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textToCopy = customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || '';
+                      navigator.clipboard.writeText(textToCopy);
+                      setCopyCodeSuccess(true);
+                      setTimeout(() => setCopyCodeSuccess(false), 2500);
+                    }}
+                    className="px-3.5 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
+                  >
+                    {copyCodeSuccess ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{copyCodeSuccess ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 2: REMOTE ACCESS (OUTSIDE SHOP) & INSTRUCTIONS */}
+            <div className="space-y-6">
+              {/* Remote Tunnel URL Setup */}
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-extrabold text-base">
+                  <Globe className="w-5 h-5 text-indigo-600" />
+                  <span>Remote Access (Outside Shop on 4G/5G)</span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  When you are away from the store on cellular mobile data, your phone connects via a secure HTTPS tunnel URL.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                    Remote Tunnel URL:
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. https://dolly-pos-tunnel.loca.lt"
+                      value={customTunnelUrl}
+                      onChange={(e) => handleSaveTunnelUrl(e.target.value)}
+                      className="flex-1 px-3.5 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-pink-500"
+                    />
+                    {customTunnelUrl && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveTunnelUrl('')}
+                        className="px-2 py-2 text-slate-400 hover:text-rose-500 text-xs"
+                        title="Reset to local Wi-Fi"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Run <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-pink-600">Start_Backend_Tunnel.bat</code> in the project root to generate a live HTTPS tunnel anytime.
+                  </p>
+                </div>
+              </div>
+
+              {/* Multi-Device Support & Zero Slowdown Guarantee */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-bold text-sm">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Zero POS Counter Slowdown Guarantee</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Mobile requests use in-memory RAM caching and read-only transactions. Even with 10 phones refreshing simultaneously, the billing counter will never slow down.
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Unlimited Phones</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Excel & PDF Exports</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>WhatsApp Reminders</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Live Stock Lookup</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,3 +1,5 @@
+import { OWNER_SIGNATURE_FOOTER } from '../config/branding';
+
 /**
  * Standard Default WhatsApp Bill / Receipt Template
  */
@@ -24,7 +26,7 @@ _{tag_line}_
 ------------------------------------
 ✨ {bill_footer}
 {social_links}
-_Software powered by Dolly POS | Since 2002_`;
+_${OWNER_SIGNATURE_FOOTER.replace(/©/g, '')}_`;
 
 /**
  * Normalizes text and generates clean WhatsApp web & desktop URLs

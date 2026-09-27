@@ -21,6 +21,7 @@ import {
   Share2
 } from 'lucide-react';
 import { formatINR, playSuccessChime, formatISTDate } from '../utils/formatters';
+import { OWNER_SIGNATURE_FOOTER } from '../config/branding';
 
 interface ReturnItemState {
   product_id: number;
@@ -978,9 +979,7 @@ export const ReturnsPage: React.FC = () => {
                       WebkitTextStroke: settings?.is_power_footer_bold ? '0.3px #000' : 'none'
                     }}
                   >
-                    <span>Software powered by Dolly POS©</span>
-                    <span>|</span>
-                    <span className="font-black">Since 2002</span>
+                    <span>{OWNER_SIGNATURE_FOOTER}</span>
                   </p>
                 </div>
               </div>

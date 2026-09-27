@@ -198,17 +198,32 @@ if (-not $connected) {
 Write-Host ""
 Write-Host "[STEP 5/5] Configuring Database: $dbName..." -ForegroundColor Cyan
 
-# Clean up accidental alias database if present
-$null = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "DROP DATABASE IF EXISTS dollytoysandkidswear WITH (FORCE);" 2>&1
-
 $checkDb = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$dbName';" 2>&1
 if ($checkDb -match "1") {
-    Write-Host "  [OK] Database '$dbName' already exists and is ready." -ForegroundColor Green
+    Write-Host "  [OK] Database '$dbName' already exists on PostgreSQL server!" -ForegroundColor Green
+    Write-Host "       Connecting safely (all existing tables, products, and data preserved)." -ForegroundColor Gray
 } else {
     Write-Host "  [*] Creating database '$dbName' with UTF-8 encoding..." -ForegroundColor Yellow
-    $createRes = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "CREATE DATABASE $dbName WITH OWNER $dbUser ENCODING 'UTF8';" 2>&1
+    $createRes = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d postgres -c "CREATE DATABASE `"$dbName`" WITH OWNER `"$dbUser`" ENCODING 'UTF8';" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [SUCCESS] Database '$dbName' created successfully!" -ForegroundColor Green
+        
+        # Check if existing backup files exist in DollyPOS_Backups
+        $backupDir = "$env:USERPROFILE\DollyPOS_Backups"
+        if (Test-Path $backupDir) {
+            $latestSql = Get-ChildItem -Path $backupDir -Filter "*.sql" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($latestSql) {
+                Write-Host ""
+                Write-Host "  [BACKUP FOUND] Detected existing database backup file:" -ForegroundColor Yellow
+                Write-Host "                 $($latestSql.Name) ($([math]::Round($latestSql.Length / 1KB, 1)) KB)" -ForegroundColor White
+                $restoreChoice = Read-Host "  Would you like to restore this backup into '$dbName' now? (Y/N) [Default: N]"
+                if ($restoreChoice -and $restoreChoice.Trim().ToUpper() -eq "Y") {
+                    Write-Host "  [*] Restoring backup data into '$dbName'..." -ForegroundColor Cyan
+                    $restoreOut = & "$psqlExe" -U "$dbUser" -h 127.0.0.1 -p $dbPort -d "$dbName" -f "$($latestSql.FullName)" 2>&1
+                    Write-Host "  [SUCCESS] Backup restored successfully into database '$dbName'!" -ForegroundColor Green
+                }
+            }
+        }
     } else {
         Write-Host "  [NOTICE] Create DB response: $createRes" -ForegroundColor Gray
     }

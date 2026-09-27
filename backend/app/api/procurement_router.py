@@ -78,6 +78,9 @@ def get_low_stock_procurement_sheet(
         "items": []
     })
 
+    ordered_notes = db.query(ProcurementNote.item_name).filter(ProcurementNote.status == 'ORDERED').all()
+    ordered_titles = {n[0] for n in ordered_notes if n[0]}
+
     total_units_needed = 0
     total_budget_needed = 0.0
 
@@ -96,6 +99,9 @@ def get_low_stock_procurement_sheet(
         suggested_qty = max(6, (p.min_stock_alert * 3) - p.stock_quantity)
         est_cost = suggested_qty * p.purchase_price
 
+        item_title = f"{p.name} (Barcode: {p.barcode or p.sku or p.id})"
+        is_ordered = (item_title in ordered_titles) or (p.name in ordered_titles)
+
         item_entry = {
             "product_id": p.id,
             "name": p.name,
@@ -108,9 +114,11 @@ def get_low_stock_procurement_sheet(
             "min_stock_alert": p.min_stock_alert,
             "purchase_price": p.purchase_price,
             "selling_price": p.selling_price,
+            "mrp": p.mrp,
             "suggested_reorder_qty": suggested_qty,
             "estimated_cost": round(est_cost, 2),
-            "vendor_code": v_code or "N/A"
+            "vendor_code": v_code or "N/A",
+            "is_ordered": is_ordered
         }
 
         group["items"].append(item_entry)
@@ -365,23 +373,51 @@ def get_procurement_notes(
     all_vendors = db.query(ProcurementNote.vendor_name).filter(ProcurementNote.vendor_name != None).distinct().all()
     vendor_list = sorted([v[0] for v in all_vendors if v[0]])
 
+    # Map active products for quick linked restock
+    prods = db.query(Product).filter(Product.is_active == True).all()
+    prod_by_barcode = {p.barcode.lower(): p for p in prods if p.barcode}
+    prod_by_sku = {p.sku.lower(): p for p in prods if p.sku}
+    prod_by_name = {p.name.lower(): p for p in prods if p.name}
+    prod_by_id = {p.id: p for p in prods}
+
+    notes_result = []
+    for n in notes:
+        matched_prod = None
+        if "(Barcode: " in n.item_name:
+            try:
+                bc = n.item_name.split("(Barcode: ")[1].split(")")[0].strip().lower()
+                matched_prod = prod_by_barcode.get(bc) or prod_by_sku.get(bc)
+                if not matched_prod and bc.isdigit():
+                    matched_prod = prod_by_id.get(int(bc))
+            except Exception:
+                pass
+        if not matched_prod:
+            clean_name = n.item_name.split(" (Barcode:")[0].strip().lower()
+            matched_prod = prod_by_name.get(clean_name)
+
+        notes_result.append({
+            "id": n.id,
+            "item_name": n.item_name,
+            "quantity": n.quantity,
+            "description": n.description or "",
+            "vendor_name": n.vendor_name or "",
+            "estimated_price": n.estimated_price or 0.0,
+            "total_estimated_cost": round(n.quantity * (n.estimated_price or 0.0), 2),
+            "priority": n.priority,
+            "status": n.status,
+            "product_id": matched_prod.id if matched_prod else None,
+            "product_name": matched_prod.name if matched_prod else n.item_name,
+            "barcode": matched_prod.barcode if matched_prod else "",
+            "current_stock": matched_prod.stock_quantity if matched_prod else 0,
+            "purchase_price": (matched_prod.purchase_price if matched_prod and matched_prod.purchase_price else n.estimated_price) or 0.0,
+            "selling_price": matched_prod.selling_price if matched_prod else 0.0,
+            "mrp": matched_prod.mrp if matched_prod else 0.0,
+            "created_at": n.created_at.strftime("%d-%m-%Y %I:%M %p") if n.created_at else "",
+            "updated_at": n.updated_at.strftime("%d-%m-%Y %I:%M %p") if n.updated_at else ""
+        })
+
     return {
-        "notes": [
-            {
-                "id": n.id,
-                "item_name": n.item_name,
-                "quantity": n.quantity,
-                "description": n.description or "",
-                "vendor_name": n.vendor_name or "",
-                "estimated_price": n.estimated_price or 0.0,
-                "total_estimated_cost": round(n.quantity * (n.estimated_price or 0.0), 2),
-                "priority": n.priority,
-                "status": n.status,
-                "created_at": n.created_at.strftime("%d-%m-%Y %I:%M %p") if n.created_at else "",
-                "updated_at": n.updated_at.strftime("%d-%m-%Y %I:%M %p") if n.updated_at else ""
-            }
-            for n in notes
-        ],
+        "notes": notes_result,
         "vendor_options": vendor_list,
         "summary": {
             "total_count": total_notes,
@@ -505,4 +541,126 @@ def clear_completed_procurement_notes(
     ).delete(synchronize_session=False)
     db.commit()
     return {"success": True, "deleted_count": deleted_count, "message": f"Cleared {deleted_count} completed buying notes"}
+
+
+class MarkOrderedRequest(BaseModel):
+    product_id: int
+    quantity: Optional[int] = 1
+    vendor_name: Optional[str] = None
+    estimated_price: Optional[float] = 0.0
+    description: Optional[str] = None
+
+
+@router.post("/mark-ordered")
+def mark_product_ordered(
+    req: MarkOrderedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Adds or updates a product in Buying Notes & Purchase Wishlist with status ORDERED.
+    """
+    product = db.query(Product).filter(Product.id == req.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    item_title = f"{product.name} (Barcode: {product.barcode or product.sku or product.id})"
+    note = db.query(ProcurementNote).filter(
+        ProcurementNote.item_name == item_title,
+        ProcurementNote.status.in_(["PENDING", "ORDERED"])
+    ).first()
+
+    order_qty = max(1, req.quantity or 1)
+    est_price = req.estimated_price if (req.estimated_price is not None and req.estimated_price > 0) else (product.purchase_price or 0.0)
+
+    if note:
+        note.status = "ORDERED"
+        note.quantity = order_qty
+        if req.vendor_name:
+            note.vendor_name = req.vendor_name
+        if est_price:
+            note.estimated_price = est_price
+        note.updated_at = datetime.utcnow()
+    else:
+        note = ProcurementNote(
+            item_name=item_title,
+            quantity=order_qty,
+            description=req.description or f"Size: {product.size or 'N/A'}, Color: {product.color or 'N/A'}, Current Stock: {product.stock_quantity}",
+            vendor_name=req.vendor_name or product.vendor_code or None,
+            estimated_price=est_price,
+            priority="HIGH",
+            status="ORDERED",
+            created_at=datetime.utcnow()
+        )
+        db.add(note)
+
+    db.commit()
+    db.refresh(note)
+    return {
+        "success": True,
+        "message": f"'{product.name}' (Qty: {order_qty}) marked as ORDERED in Buying Notes",
+        "note_id": note.id
+    }
+
+
+class QuickRestockRequest(BaseModel):
+    product_id: int
+    add_quantity: int
+    purchase_price: Optional[float] = None
+    selling_price: Optional[float] = None
+    mrp: Optional[float] = None
+    note_id: Optional[int] = None
+
+
+@router.post("/quick-restock")
+def quick_restock_product(
+    req: QuickRestockRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Directly adds restocked quantity to a product's inventory in the database,
+    and optionally updates purchase price, selling price, and MRP.
+    """
+    if req.add_quantity <= 0:
+        raise HTTPException(status_code=400, detail="Restock quantity must be greater than 0")
+
+    product = db.query(Product).filter(Product.id == req.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    product.stock_quantity += req.add_quantity
+    if req.purchase_price is not None and req.purchase_price >= 0:
+        product.purchase_price = req.purchase_price
+    if req.selling_price is not None and req.selling_price >= 0:
+        product.selling_price = req.selling_price
+    if req.mrp is not None and req.mrp >= 0:
+        product.mrp = req.mrp
+    product.updated_at = datetime.utcnow()
+
+    # If a specific note_id is provided, mark it COMPLETED
+    if req.note_id:
+        target_note = db.query(ProcurementNote).filter(ProcurementNote.id == req.note_id).first()
+        if target_note:
+            target_note.status = "COMPLETED"
+            target_note.updated_at = datetime.utcnow()
+
+    # If any buying note was ORDERED or PENDING for this product, mark it COMPLETED
+    item_title = f"{product.name} (Barcode: {product.barcode or product.sku or product.id})"
+    notes = db.query(ProcurementNote).filter(
+        ProcurementNote.item_name == item_title,
+        ProcurementNote.status.in_(["PENDING", "ORDERED"])
+    ).all()
+    for n in notes:
+        n.status = "COMPLETED"
+        n.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(product)
+    return {
+        "success": True,
+        "message": f"Successfully restocked +{req.add_quantity} units of '{product.name}'. New stock: {product.stock_quantity}",
+        "product_id": product.id,
+        "new_stock": product.stock_quantity
+    }
 

@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 
 let mainWindow: BrowserWindow | null = null;
+let isAppQuitting = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,6 +28,22 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  // Intercept Windows (X) close button and ask for on-close backup
+  mainWindow.on('close', (e) => {
+    if (!isAppQuitting) {
+      e.preventDefault();
+      mainWindow?.webContents.send('trigger-app-close-backup');
+    }
+  });
+
+  // Intercept Ctrl+W and Ctrl+Q keyboard shortcuts
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if ((input.control || input.meta) && (input.key.toLowerCase() === 'w' || input.key.toLowerCase() === 'q')) {
+      event.preventDefault();
+      mainWindow?.webContents.send('trigger-app-close-backup');
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -47,6 +64,20 @@ ipcMain.handle('print-thermal-receipt', async (event, options) => {
   });
 });
 
+// Clean termination confirmed after backup completes
+ipcMain.on('app-close-confirmed', () => {
+  isAppQuitting = true;
+  if (mainWindow) {
+    mainWindow.destroy();
+    mainWindow = null;
+  }
+  app.exit(0);
+});
+
+app.on('before-quit', () => {
+  isAppQuitting = true;
+});
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -59,6 +90,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit();
+    app.exit(0);
   }
 });

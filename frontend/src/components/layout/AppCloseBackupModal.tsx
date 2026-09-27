@@ -1,0 +1,306 @@
+import React, { useState, useEffect } from 'react';
+import api from '../../utils/api';
+import { 
+  Cloud, 
+  Check, 
+  AlertCircle, 
+  Loader2, 
+  HardDrive, 
+  Trash2, 
+  X, 
+  Power, 
+  ShieldCheck 
+} from 'lucide-react';
+
+interface AppCloseBackupModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  googleConnected?: boolean;
+  googleEmail?: string | null;
+  destination?: string;
+  retentionDays?: number;
+}
+
+export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
+  isOpen,
+  onClose,
+  googleConnected = false,
+  googleEmail = null,
+  destination = 'BOTH',
+  retentionDays = 30
+}) => {
+  const [step, setStep] = useState<'CONFIRM' | 'IN_PROGRESS' | 'DONE' | 'ERROR'>('CONFIRM');
+  const [statusLog, setStatusLog] = useState<{
+    snapshot: 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR';
+    cloud: 'PENDING' | 'RUNNING' | 'DONE' | 'SKIPPED' | 'ERROR';
+    retention: 'PENDING' | 'RUNNING' | 'DONE';
+  }>({
+    snapshot: 'PENDING',
+    cloud: 'PENDING',
+    retention: 'PENDING'
+  });
+  const [summaryMsg, setSummaryMsg] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setStep('CONFIRM');
+      setStatusLog({ snapshot: 'PENDING', cloud: 'PENDING', retention: 'PENDING' });
+      setErrorMessage(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleStartBackupAndExit = async () => {
+    setStep('IN_PROGRESS');
+    setStatusLog({ snapshot: 'RUNNING', cloud: 'PENDING', retention: 'PENDING' });
+
+    try {
+      // Step 1 & 2: Call backend on-close handler
+      setStatusLog(prev => ({ ...prev, snapshot: 'RUNNING', cloud: googleConnected && destination !== 'LOCAL_ONLY' ? 'RUNNING' : 'SKIPPED' }));
+      
+      const res = await api.post('/backup/on-close', {}, { timeout: 15000 });
+      const details = res.data?.details;
+
+      setStatusLog({
+        snapshot: 'DONE',
+        cloud: details?.cloud_synced ? 'DONE' : (googleConnected && destination !== 'LOCAL_ONLY' ? 'ERROR' : 'SKIPPED'),
+        retention: 'DONE'
+      });
+
+      const fileName = details?.local_file?.file_name || 'Today\'s Backup';
+      const cloudMsg = details?.cloud_synced ? ' & Google Drive' : '';
+      setSummaryMsg(`✓ Successfully saved ${fileName} to local disk${cloudMsg}. Purged expired backups (${retentionDays > 0 ? retentionDays + 'd' : 'None'}).`);
+      setStep('DONE');
+
+      // Step 3: Trigger shutdown & clean exit after 1.5 seconds
+      setTimeout(() => {
+        triggerActualExit();
+      }, 1500);
+
+    } catch (err: any) {
+      setStatusLog({
+        snapshot: 'ERROR',
+        cloud: 'ERROR',
+        retention: 'DONE'
+      });
+      setErrorMessage(err.response?.data?.detail || err.message || 'Backup failed or timed out.');
+      setStep('ERROR');
+    }
+  };
+
+  const triggerActualExit = async () => {
+    try {
+      await api.post('/backup/shutdown');
+    } catch (e) {
+      // Ignored
+    }
+    if ((window as any).electronAPI?.confirmAppClose) {
+      (window as any).electronAPI.confirmAppClose();
+    } else {
+      window.close();
+    }
+  };
+
+  const handleDirectShutdown = () => {
+    triggerActualExit();
+  };
+
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 select-none">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-5 animate-in fade-in zoom-in duration-200">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-md shadow-pink-500/20">
+              <Power className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-slate-800 dark:text-white">
+                Closing Dolly POS
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                End-of-Day Database Backup & Cloud Sync
+              </p>
+            </div>
+          </div>
+
+          {step === 'CONFIRM' && (
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* STEP 1: CONFIRMATION */}
+        {step === 'CONFIRM' && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3.5 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-blue-500/10 rounded-2xl border border-pink-200 dark:border-pink-900/40 space-y-2">
+              <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-bold">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Zero Data Loss Protection</span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                Before closing, Dolly POS will create a full snapshot of all products, invoices, customer ledgers, and expenses.
+              </p>
+              
+              <div className="pt-1 flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 border-t border-pink-200/40 dark:border-pink-900/30">
+                <span>Destination: <b>{destination === 'BOTH' ? 'Local + Google Drive' : destination === 'GOOGLE_DRIVE_ONLY' ? 'Google Drive' : 'Local Disk'}</b></span>
+                <span>Retention: <b>{retentionDays > 0 ? `${retentionDays} Days` : 'Forever'}</b></span>
+              </div>
+            </div>
+
+            {googleConnected ? (
+              <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
+                <Cloud className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                <span>Google Drive Connected: {googleEmail}</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[11px] font-bold">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                <span>Google Drive not connected (Saving to local folder only)</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleDirectShutdown}
+                  className="px-3 py-2.5 rounded-xl text-[11px] font-bold text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                  title="Close without creating a backup snapshot"
+                >
+                  Exit Without Backup
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartBackupAndExit}
+                  className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold rounded-xl shadow-md shadow-pink-500/20 transition cursor-pointer flex items-center space-x-1.5"
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>Backup & Exit App</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: IN PROGRESS / RUNNING */}
+        {step === 'IN_PROGRESS' && (
+          <div className="space-y-4 py-2 text-xs">
+            <div className="space-y-3">
+              {/* Snapshot Step */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-2.5">
+                  <HardDrive className="w-4 h-4 text-pink-500 shrink-0" />
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    1. Generating database snapshot...
+                  </span>
+                </div>
+                {statusLog.snapshot === 'RUNNING' && <Loader2 className="w-4 h-4 text-pink-500 animate-spin" />}
+                {statusLog.snapshot === 'DONE' && <Check className="w-4 h-4 text-emerald-500" />}
+              </div>
+
+              {/* Cloud Upload Step */}
+              {destination !== 'LOCAL_ONLY' && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center space-x-2.5">
+                    <Cloud className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                      2. Uploading to Google Drive (DollyPOS_Cloud_Backups)...
+                    </span>
+                  </div>
+                  {statusLog.cloud === 'PENDING' && <span className="text-[10px] text-slate-400 font-bold">Waiting...</span>}
+                  {statusLog.cloud === 'RUNNING' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+                  {statusLog.cloud === 'DONE' && <Check className="w-4 h-4 text-emerald-500" />}
+                  {statusLog.cloud === 'SKIPPED' && <span className="text-[10px] text-slate-400 font-bold">Skipped</span>}
+                  {statusLog.cloud === 'ERROR' && <span className="text-[10px] text-amber-500 font-bold">Offline (Queued)</span>}
+                </div>
+              )}
+
+              {/* Retention Cleanup Step */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-2.5">
+                  <Trash2 className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    3. Purging backups older than {retentionDays > 0 ? `${retentionDays} days` : 'configured retention'}...
+                  </span>
+                </div>
+                {statusLog.retention === 'PENDING' && <span className="text-[10px] text-slate-400 font-bold">Waiting...</span>}
+                {statusLog.retention === 'RUNNING' && <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />}
+                {statusLog.retention === 'DONE' && <Check className="w-4 h-4 text-emerald-500" />}
+              </div>
+            </div>
+
+            <div className="text-center text-[11px] text-slate-400 animate-pulse pt-2">
+              Saving data securely. App will close automatically in a moment...
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: DONE */}
+        {step === 'DONE' && (
+          <div className="text-center py-4 space-y-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 flex items-center justify-center mx-auto shadow-md">
+              <Check className="w-6 h-6" />
+            </div>
+            <h4 className="font-bold text-sm text-slate-800 dark:text-white">
+              Backup Complete & Secure!
+            </h4>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              {summaryMsg}
+            </p>
+            <p className="text-[11px] text-slate-400 animate-pulse">
+              Closing application...
+            </p>
+          </div>
+        )}
+
+        {/* STEP 4: ERROR / OFFLINE FALLBACK */}
+        {step === 'ERROR' && (
+          <div className="space-y-4 py-2 text-xs">
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 space-y-1">
+              <span className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4" />
+                Backup Warning / Timeout
+              </span>
+              <p className="text-[11px] text-rose-600/90">{errorMessage}</p>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+              >
+                Return to POS
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectShutdown}
+                className="px-5 py-2 bg-rose-600 text-white font-bold rounded-xl shadow-sm cursor-pointer"
+              >
+                Force Exit App
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};

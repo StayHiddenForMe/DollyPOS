@@ -5,10 +5,36 @@ export interface VersionRelease {
   highlights: string[];
 }
 
-export const APP_VERSION = 'v1.3.0';
-export const RELEASE_DATE = '2026-09-23';
+export const APP_VERSION = 'v1.5.0';
+export const RELEASE_DATE = '2026-09-27';
 
 export const VERSION_HISTORY: VersionRelease[] = [
+  {
+    version: 'v1.5.0',
+    date: '2026-09-27',
+    title: 'Google Drive Cloud Sync, 1-Click Cloud Restore & Unified Backups Studio',
+    highlights: [
+      'Single consolidated "Sync to Google Drive" button inside the Google Drive Studio card',
+      '1-Click Direct "Restore from Google Drive" for all cloud snapshots with instant table restore',
+      'Unified Scrollable Backups Hub merging Cloud and Local snapshots with Location & Method badges',
+      'Windows (X) button & Ctrl+W/Q shortcut interception triggering the On-Close Safety Backup modal',
+      'Clean background process termination eliminating Vite zombie processes and dev port hangs',
+      'Complete CSS and UX redesign of the Backup & Disaster Recovery Studio'
+    ]
+  },
+  {
+    version: 'v1.4.0',
+    date: '2026-09-26',
+    title: 'Interactive Database Configuration, Service Healer & Offline Emergency Sync Engine',
+    highlights: [
+      'Interactive PostgreSQL Setup Wizard with custom database name, password, port, and summary confirmation',
+      '1-Click PostgreSQL Service Doctor (Heal_and_Restart_PostgreSQL.bat) fixing stale lock files & zombie processes in 3s',
+      '1-Click Database Switcher (Change_Database_Connection.bat) to connect to existing databases (e.g. database1) in 5s',
+      'Emergency Offline Billing & Sync Engine automatically syncing offline SQLite bills, payments, customers & stock into PostgreSQL',
+      'URL encoding for complex database passwords containing special characters (@, #, $, %, &)',
+      'Master System File & Utility Dictionary PDF Manual generated in docs/ and dist_installer/'
+    ]
+  },
   {
     version: 'v1.3.0',
     date: '2026-09-23',

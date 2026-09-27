@@ -241,6 +241,18 @@ export interface StoreSettings {
   auto_backup: boolean;
   backup_frequency: string;
   backup_path?: string;
+  backup_filename_prefix?: string;
+
+  // Google Drive Cloud Sync & Retention
+  google_drive_connected?: boolean;
+  google_drive_email?: string;
+  google_drive_folder_id?: string;
+  google_client_id?: string;
+  google_client_secret?: string;
+  backup_destination?: 'BOTH' | 'GOOGLE_DRIVE_ONLY' | 'LOCAL_ONLY';
+  backup_on_app_close?: boolean;
+  backup_retention_days?: number;
+  last_cloud_backup_at?: string;
 
   // Extra Charges & Surcharges (5 Configurable Templates)
   extra_charge_enabled_1?: boolean;

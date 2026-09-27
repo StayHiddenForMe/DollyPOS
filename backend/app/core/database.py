@@ -13,9 +13,13 @@ def init_engine():
         if h not in hosts_to_try:
             hosts_to_try.append(h)
 
+    import urllib.parse
+    enc_user = urllib.parse.quote_plus(settings.DB_USER)
+    enc_pass = urllib.parse.quote_plus(settings.DB_PASSWORD)
+
     for host in hosts_to_try:
         try:
-            db_url = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{host}:{settings.DB_PORT}/{settings.DB_NAME}"
+            db_url = f"postgresql://{enc_user}:{enc_pass}@{host}:{settings.DB_PORT}/{settings.DB_NAME}"
             pg_engine = create_engine(
                 db_url,
                 pool_pre_ping=True,
