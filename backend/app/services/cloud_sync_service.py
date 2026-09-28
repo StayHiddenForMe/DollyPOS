@@ -9,6 +9,7 @@ from sqlalchemy import func, desc
 from app.models.settings import StoreSettings
 from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode
 from app.models.product import Product
+from app.models.category import Category
 from app.models.expense import Expense
 from app.models.customer import Customer
 from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency
@@ -129,7 +130,66 @@ class CloudSyncService:
                 else:
                     payment_modes["CASH"] += amt
 
-        # Low stock count
+        for k in payment_modes:
+            payment_modes[k] = round(payment_modes[k], 2)
+
+        # Hourly Sales Velocity (IST local hour conversion)
+        hourly_map: Dict[int, Dict[str, Any]] = {}
+        for h in range(9, 23):
+            label = datetime.strptime(str(h), "%H").strftime("%I %p")
+            hourly_map[h] = {"hour": label, "amount": 0.0, "bills": 0}
+
+        for inv in invoices:
+            ist_dt = inv.created_at + IST_OFFSET
+            h = ist_dt.hour
+            if h in hourly_map:
+                hourly_map[h]["amount"] = round(hourly_map[h]["amount"] + float(inv.grand_total), 2)
+                hourly_map[h]["bills"] += 1
+
+        hourly_velocity = list(hourly_map.values())
+
+        # Top Selling Products
+        top_items = []
+        if invoice_ids:
+            top_query = (
+                db.query(
+                    InvoiceItem.item_name,
+                    func.sum(InvoiceItem.quantity).label("total_qty"),
+                    func.sum(InvoiceItem.total_price).label("total_rev")
+                )
+                .filter(InvoiceItem.invoice_id.in_(invoice_ids))
+                .group_by(InvoiceItem.item_name)
+                .order_by(desc("total_qty"))
+                .limit(5)
+                .all()
+            )
+            for name, qty, rev in top_query:
+                top_items.append({
+                    "product_name": name,
+                    "quantity": int(qty or 0),
+                    "revenue": round(float(rev or 0.0), 2)
+                })
+
+        # Low Stock Alerts (top 10 items)
+        low_stock_query = (
+            db.query(Product.id, Product.name, Product.stock_quantity, Product.min_stock_alert, Product.barcode)
+            .filter(Product.is_active == True, Product.stock_quantity <= Product.min_stock_alert)
+            .order_by(Product.stock_quantity.asc())
+            .limit(10)
+            .all()
+        )
+        low_stock_items = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "stock": p.stock_quantity,
+                "min_stock": p.min_stock_alert,
+                "barcode": p.barcode or "—"
+            }
+            for p in low_stock_query
+        ]
+
+        # Low stock count total
         low_stock_count = db.query(Product).filter(
             Product.is_active == True,
             Product.stock_quantity <= Product.min_stock_alert
@@ -159,9 +219,235 @@ class CloudSyncService:
             },
             "period_expenses": period_expenses_val,
             "payment_breakdown": payment_modes,
+            "hourly_velocity": hourly_velocity,
+            "top_products": top_items,
             "low_stock_count": low_stock_count,
-            "khata_outstanding": float(khata_total or 0.0)
+            "low_stock_items": low_stock_items,
+            "khata_outstanding": round(float(khata_total or 0.0), 2)
         }
+
+    @classmethod
+    def build_all_snapshots(cls, db: Session) -> Dict[str, Any]:
+        """Precomputes snapshots for all 5 dashboard periods."""
+        periods = ["TODAY", "YESTERDAY", "WEEK", "MONTH", "YEAR"]
+        snapshots = {}
+        for p in periods:
+            snapshots[p] = cls.build_overview_snapshot(db, p)
+        return snapshots
+
+    @staticmethod
+    def build_inventory_payload(db: Session) -> Dict[str, Any]:
+        """Builds lightweight inventory catalog for cloud replication."""
+        cats = db.query(Category.id, Category.name).all()
+        cat_map = {c.id: c.name for c in cats}
+
+        prods = db.query(
+            Product.id,
+            Product.name,
+            Product.barcode,
+            Product.category_id,
+            Product.stock_quantity,
+            Product.selling_price,
+            Product.mrp,
+            Product.purchase_price,
+            Product.min_stock_alert
+        ).filter(Product.is_active == True).order_by(Product.name.asc()).all()
+
+        items = []
+        for p in prods:
+            items.append({
+                "id": p.id,
+                "name": p.name,
+                "barcode": p.barcode or "—",
+                "category": cat_map.get(p.category_id, "General"),
+                "category_id": p.category_id,
+                "current_stock": p.stock_quantity or 0,
+                "selling_price": round(float(p.selling_price or 0.0), 2),
+                "mrp": round(float(p.mrp or p.selling_price or 0.0), 2),
+                "purchase_price": round(float(p.purchase_price or 0.0), 2),
+                "min_stock": p.min_stock_alert or 3,
+                "is_low_stock": (p.stock_quantity or 0) <= (p.min_stock_alert or 3)
+            })
+
+        return {
+            "total_count": len(items),
+            "products": items
+        }
+
+    @staticmethod
+    def build_khata_payload(db: Session) -> Dict[str, Any]:
+        """Builds customer khata ledger with WhatsApp links."""
+        st = db.query(StoreSettings).first()
+        shop_title = st.shop_name if st and st.shop_name else "Dolly Toys & Kids Wear"
+        upi_id = st.upi_id if st else ""
+
+        customers = db.query(Customer).filter(Customer.credit_balance > 0).order_by(Customer.credit_balance.desc()).all()
+        rows = []
+        for c in customers:
+            clean_phone = "".join(filter(str.isdigit, c.phone or ""))
+            if clean_phone.startswith("91") and len(clean_phone) > 10:
+                clean_phone = clean_phone[2:]
+
+            bal = round(float(c.credit_balance), 2)
+            wa_text = (
+                f"Dear {c.name},\n"
+                f"Greetings from *{shop_title}*!\n\n"
+                f"This is a gentle reminder that your pending balance is *₹{bal:,.2f}*.\n"
+                f"{f'You can pay via UPI to: *{upi_id}*' if upi_id else ''}\n\n"
+                f"Thank you for your valued patronage! 🙏"
+            )
+            wa_url = f"https://wa.me/91{clean_phone}?text={wa_text}" if clean_phone else None
+
+            rows.append({
+                "id": c.id,
+                "name": c.name,
+                "phone": c.phone or "—",
+                "clean_phone": clean_phone,
+                "balance": bal,
+                "whatsapp_url": wa_url
+            })
+
+        total_outstanding = sum(c["balance"] for c in rows)
+        return {
+            "total_customers": len(rows),
+            "total_outstanding": round(total_outstanding, 2),
+            "customers": rows
+        }
+
+    @staticmethod
+    def build_reports_payload(db: Session) -> Dict[str, Any]:
+        """Packages 60-day historical data for remote mobile Reports Studio queries."""
+        ist_now = get_ist_now()
+        start_60 = ist_now - timedelta(days=60)
+        start_60_utc = start_60 - IST_OFFSET
+
+        # 1. Sales Invoices
+        invs = (
+            db.query(Invoice)
+            .filter(Invoice.created_at >= start_60_utc, Invoice.is_cancelled == False)
+            .order_by(Invoice.created_at.desc())
+            .all()
+        )
+        sales_invoices = []
+        for inv in invs:
+            ist_dt = inv.created_at + IST_OFFSET
+            mode_str = str(inv.payment_mode.value if hasattr(inv.payment_mode, "value") else inv.payment_mode).upper()
+            sales_invoices.append({
+                "date_ymd": ist_dt.strftime("%Y-%m-%d"),
+                "date": ist_dt.strftime("%d %b %Y"),
+                "time": ist_dt.strftime("%I:%M %p"),
+                "bill_number": inv.bill_number or f"#{inv.id}",
+                "customer": inv.customer_name or "Walk-in Customer",
+                "payment_mode": mode_str,
+                "gross_amount": round(float(inv.subtotal or inv.grand_total), 2),
+                "discount": round(float(inv.discount_amount or 0.0), 2),
+                "tax": round(float(inv.tax_amount or 0.0), 2),
+                "net_amount": round(float(inv.grand_total), 2)
+            })
+
+        # 2. Payments
+        pmts = db.query(Payment).filter(Payment.created_at >= start_60_utc).all()
+        payments = []
+        for p in pmts:
+            ist_dt = p.created_at + IST_OFFSET
+            payments.append({
+                "date_ymd": ist_dt.strftime("%Y-%m-%d"),
+                "payment_mode": str(p.payment_mode.value if hasattr(p.payment_mode, "value") else p.payment_mode).upper(),
+                "amount": round(float(p.amount), 2)
+            })
+
+        # 3. Expenses
+        exps = db.query(Expense).filter(Expense.expense_date >= start_60_utc).all()
+        expenses = []
+        for e in exps:
+            ist_dt = (e.expense_date + IST_OFFSET) if e.expense_date else ist_now
+            cat_name = (
+                e.category.value if hasattr(e.category, "value")
+                else (e.category.name if hasattr(e.category, "name") else str(e.category))
+            ) if e.category else "General"
+            expenses.append({
+                "date_ymd": ist_dt.strftime("%Y-%m-%d"),
+                "date": ist_dt.strftime("%d %b %Y"),
+                "category": cat_name,
+                "description": e.title or e.notes or "—",
+                "payment_mode": e.payment_mode or "CASH",
+                "amount": round(float(e.amount), 2)
+            })
+
+        # 4. Damaged Products
+        dmgs = db.query(Product).filter(Product.damaged_quantity > 0, Product.is_active == True).all()
+        damaged = []
+        for p in dmgs:
+            qty = p.damaged_quantity
+            c_loss = round(float(p.purchase_price or 0.0) * qty, 2)
+            damaged.append({
+                "product_name": p.name,
+                "barcode": p.barcode or "—",
+                "damaged_quantity": qty,
+                "purchase_price": round(float(p.purchase_price or 0.0), 2),
+                "selling_price": round(float(p.selling_price or 0.0), 2),
+                "total_loss": c_loss
+            })
+
+        # 5. Planner
+        lows = (
+            db.query(Product)
+            .filter(Product.is_active == True, Product.stock_quantity <= Product.min_stock_alert)
+            .order_by(Product.stock_quantity.asc())
+            .limit(100)
+            .all()
+        )
+        planner = []
+        for p in lows:
+            cur = p.stock_quantity
+            min_s = p.min_stock_alert
+            suggested = max((min_s * 3) - cur, min_s)
+            planner.append({
+                "product_name": p.name,
+                "barcode": p.barcode or "—",
+                "current_stock": cur,
+                "min_alert": min_s,
+                "suggested_order": suggested,
+                "est_cost": round(suggested * float(p.purchase_price or 0.0), 2)
+            })
+
+        # 6. Categories revenue
+        cats_query = (
+            db.query(
+                Category.name,
+                func.sum(InvoiceItem.quantity).label("total_qty"),
+                func.sum(InvoiceItem.total_price).label("total_rev")
+            )
+            .join(Product, Product.id == InvoiceItem.product_id)
+            .join(Category, Category.id == Product.category_id)
+            .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+            .filter(Invoice.created_at >= start_60_utc, Invoice.is_cancelled == False)
+            .group_by(Category.name)
+            .order_by(desc("total_rev"))
+            .all()
+        )
+        cat_stats = []
+        for cname, qty, rev in cats_query:
+            cat_stats.append({
+                "category": cname,
+                "items_sold": int(qty or 0),
+                "revenue": round(float(rev or 0.0), 2)
+            })
+
+        return {
+            "sales_invoices": sales_invoices,
+            "payments": payments,
+            "expenses": expenses,
+            "damaged": damaged,
+            "planner": planner,
+            "categories": cat_stats
+        }
+
+    @staticmethod
+    def build_categories_payload(db: Session) -> List[Dict[str, Any]]:
+        """Returns categories for remote product creation dropdown."""
+        cats = db.query(Category).order_by(Category.name.asc()).all()
+        return [{"id": c.id, "name": c.name} for c in cats]
 
     @classmethod
     def sync_to_cloud(cls, db: Session, force: bool = False) -> Dict[str, Any]:
@@ -187,9 +473,13 @@ class CloudSyncService:
             }
 
         try:
-            # Build current today snapshot
-            snapshot_today = cls.build_overview_snapshot(db, "TODAY")
-            
+            # Build full data payload
+            snapshots = cls.build_all_snapshots(db)
+            inventory = cls.build_inventory_payload(db)
+            khata = cls.build_khata_payload(db)
+            reports = cls.build_reports_payload(db)
+            categories = cls.build_categories_payload(db)
+
             payload = {
                 "store_id": getattr(st, "store_id", "default"),
                 "store_token": store_token,
@@ -199,7 +489,12 @@ class CloudSyncService:
                 "mobile": st.mobile,
                 "address": st.address,
                 "upi_id": st.upi_id,
-                "overview": snapshot_today,
+                "overview": snapshots.get("TODAY", {}),
+                "snapshots": snapshots,
+                "inventory": inventory,
+                "khata": khata,
+                "reports": reports,
+                "categories": categories,
                 "synced_at": datetime.utcnow().isoformat()
             }
 
@@ -207,13 +502,13 @@ class CloudSyncService:
             response = requests.post(
                 sync_endpoint,
                 json=payload,
-                timeout=6.0,
+                timeout=10.0,
                 headers={"Content-Type": "application/json"}
             )
 
             if response.status_code in [200, 201]:
                 res_data = response.json()
-                
+
                 # Check for pending demands logged from mobile app to pull down to local DB
                 pending_demands = res_data.get("pending_demands", [])
                 pulled_demands_count = 0
@@ -237,7 +532,7 @@ class CloudSyncService:
                             )
                             db.add(new_demand)
                             pulled_demands_count += 1
-                
+
                 if pulled_demands_count > 0:
                     db.commit()
 

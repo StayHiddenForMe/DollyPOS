@@ -264,6 +264,36 @@ export const api = {
     endDate: string,
     reportType: string = 'SALES'
   ): Promise<ReportResponse> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<ReportResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/reports`,
+          {
+            params: {
+              start_date: startDate,
+              end_date: endDate,
+              report_type: reportType,
+            },
+            timeout: 8000,
+          }
+        );
+        return res.data;
+      } catch (hubErr) {
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.get<ReportResponse>('/mobile/reports', {
+            params: {
+              start_date: startDate,
+              end_date: endDate,
+              report_type: reportType,
+            },
+          });
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
     const client = getClient();
     const res = await client.get<ReportResponse>('/mobile/reports', {
       params: {
@@ -277,6 +307,28 @@ export const api = {
 
   // 5. Customer Khata
   async getKhata(search?: string): Promise<KhataResponse> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<KhataResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/khata`,
+          {
+            params: { search: search || undefined },
+            timeout: 7000,
+          }
+        );
+        return res.data;
+      } catch (hubErr) {
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.get<KhataResponse>('/mobile/customers/khata', {
+            params: { search: search || undefined },
+          });
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
     const client = getClient();
     const res = await client.get<KhataResponse>('/mobile/customers/khata', {
       params: { search: search || undefined },
@@ -292,6 +344,40 @@ export const api = {
     page: number = 1,
     limit: number = 50
   ): Promise<InventoryResponse> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<InventoryResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/inventory`,
+          {
+            params: {
+              search: search || undefined,
+              category_id: categoryId || undefined,
+              low_stock_only: lowStockOnly || undefined,
+              page,
+              limit,
+            },
+            timeout: 8000,
+          }
+        );
+        return res.data;
+      } catch (hubErr) {
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.get<InventoryResponse>('/mobile/inventory', {
+            params: {
+              search: search || undefined,
+              category_id: categoryId || undefined,
+              low_stock_only: lowStockOnly || undefined,
+              page,
+              limit,
+            },
+          });
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
     const client = getClient();
     const res = await client.get<InventoryResponse>('/mobile/inventory', {
       params: {
@@ -323,6 +409,23 @@ export const api = {
 
   // 8. Categories List
   async getCategories(): Promise<CategoryItem[]> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<CategoryItem[]>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/categories`,
+          { timeout: 6000 }
+        );
+        return res.data || [];
+      } catch (hubErr) {
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.get<CategoryItem[]>('/mobile/categories');
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
     const client = getClient();
     const res = await client.get<CategoryItem[]>('/mobile/categories');
     return res.data;
