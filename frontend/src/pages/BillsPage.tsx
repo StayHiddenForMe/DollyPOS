@@ -16,7 +16,8 @@ import {
   RotateCcw,
   CreditCard,
   Banknote,
-  Smartphone
+  Smartphone,
+  Loader2
 } from 'lucide-react';
 import { formatINR, formatISTDate } from '../utils/formatters';
 import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
@@ -36,8 +37,10 @@ export const BillsPage: React.FC = () => {
   // Date Range & Export State (Item 14)
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [exportingType, setExportingType] = useState<'RANGE' | 'ALL' | null>(null);
 
   const handleExportExcel = async (allTime: boolean = false) => {
+    if (exportingType) return;
     try {
       let url = `/billing/export-excel?all_time=${allTime}`;
       if (!allTime) {
@@ -47,7 +50,9 @@ export const BillsPage: React.FC = () => {
         }
         url += `&start_date=${filterStartDate}&end_date=${filterEndDate}`;
       }
-      const res = await api.get(url, { responseType: 'blob' });
+
+      setExportingType(allTime ? 'ALL' : 'RANGE');
+      const res = await api.get(url, { responseType: 'blob', timeout: 180000 });
       const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -56,8 +61,10 @@ export const BillsPage: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch (e) {
-      alert('Failed to export invoices to Excel');
+    } catch (e: any) {
+      alert(e.response?.data?.detail || 'Failed to export invoices to Excel. Please retry.');
+    } finally {
+      setExportingType(null);
     }
   };
 
@@ -198,20 +205,30 @@ export const BillsPage: React.FC = () => {
           {/* Export Buttons */}
           <button
             onClick={() => handleExportExcel(false)}
-            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95"
+            disabled={exportingType !== null}
+            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95"
             title="Export bills matching current date range or recent 500"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Export Excel</span>
+            {exportingType === 'RANGE' ? (
+              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            )}
+            <span>{exportingType === 'RANGE' ? 'Generating Excel...' : 'Export Excel'}</span>
           </button>
 
           <button
             onClick={() => handleExportExcel(true)}
-            className="px-3 py-2 bg-pink-50 hover:bg-pink-100 text-pink-800 dark:bg-pink-950/40 dark:text-pink-300 border border-pink-300 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95"
+            disabled={exportingType !== null}
+            className="px-3 py-2 bg-pink-50 hover:bg-pink-100 disabled:opacity-50 text-pink-800 dark:bg-pink-950/40 dark:text-pink-300 border border-pink-300 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-xs transition-all active:scale-95"
             title="Export all-time historical bills from inception"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-pink-600" />
-            <span>All-Time Excel</span>
+            {exportingType === 'ALL' ? (
+              <Loader2 className="w-3.5 h-3.5 text-pink-600 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-3.5 h-3.5 text-pink-600" />
+            )}
+            <span>{exportingType === 'ALL' ? 'Generating 90,000+ Records...' : 'All-Time Excel'}</span>
           </button>
         </div>
       </div>

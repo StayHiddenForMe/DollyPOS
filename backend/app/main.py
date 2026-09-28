@@ -130,6 +130,7 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS last_cloud_sync_at TIMESTAMP",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_status VARCHAR(50) DEFAULT 'IDLE'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_error TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments (invoice_id)",
         ]
         for stmt in migration_statements:
             try:
@@ -241,21 +242,35 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[OfflineSync Warning] Startup offline sync check: {e}")
 
-    # Launch silent background Cloud Sync worker (every 30 seconds)
+    # Launch silent background Cloud Sync worker in a dedicated thread (every 3 minutes, non-blocking)
     import asyncio
+    import threading
+
+    _sync_lock = threading.Lock()
+
+    def run_background_cloud_sync():
+        if not _sync_lock.acquire(blocking=False):
+            return  # Previous sync still processing, skip
+        try:
+            from app.services.cloud_sync_service import cloud_sync_service
+            bg_db = SessionLocal()
+            try:
+                cloud_sync_service.sync_to_cloud(bg_db, force=False)
+            finally:
+                bg_db.close()
+        except Exception:
+            pass
+        finally:
+            _sync_lock.release()
+
     async def periodic_cloud_sync():
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
         while True:
             try:
-                from app.services.cloud_sync_service import cloud_sync_service
-                bg_db = SessionLocal()
-                try:
-                    cloud_sync_service.sync_to_cloud(bg_db, force=False)
-                finally:
-                    bg_db.close()
+                await asyncio.to_thread(run_background_cloud_sync)
             except Exception:
                 pass
-            await asyncio.sleep(30)
+            await asyncio.sleep(180)
 
     sync_task = asyncio.create_task(periodic_cloud_sync())
     yield

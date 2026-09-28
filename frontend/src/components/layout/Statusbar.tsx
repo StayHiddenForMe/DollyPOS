@@ -21,17 +21,22 @@ export const StatusBar: React.FC = () => {
     }, 1000);
 
     // Heartbeat check every 10s via unauthenticated health endpoint
+    let failCount = 0;
     const checkConnection = async () => {
       const start = Date.now();
       try {
-        const res = await axios.get('http://127.0.0.1:8000/health', { timeout: 3000 });
+        const res = await axios.get('http://127.0.0.1:8000/health', { timeout: 6000 });
         setLatency(Math.max(1, Date.now() - start));
+        failCount = 0;
         setIsConnected(true);
         if (res.data?.database) {
           setDbStatus(res.data.database);
         }
       } catch (e) {
-        setIsConnected(false);
+        failCount++;
+        if (failCount >= 2) {
+          setIsConnected(false);
+        }
       }
     };
 

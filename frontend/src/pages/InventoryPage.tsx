@@ -22,7 +22,8 @@ import {
   Copy,
   Check,
   Upload,
-  Download
+  Download,
+  Loader2
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
@@ -71,7 +72,8 @@ export const InventoryPage: React.FC = () => {
     try {
       const urlParam = selectedCategory ? `?category_id=${selectedCategory}` : '';
       const res = await api.get(`/inventory/export-excel${urlParam}`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 120000
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
@@ -263,7 +265,11 @@ export const InventoryPage: React.FC = () => {
                 disabled={isExporting}
                 className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
               >
-                <Download className="w-4 h-4" />
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
                 <span>{isExporting ? 'Exporting...' : 'Export Stock (.xlsx)'}</span>
               </button>
             </>

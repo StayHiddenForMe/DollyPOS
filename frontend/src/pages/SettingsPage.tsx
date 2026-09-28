@@ -344,6 +344,8 @@ export const SettingsPage: React.FC = () => {
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const [isExportingJson, setIsExportingJson] = useState(false);
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
 
   // Google Drive Cloud Sync & Retention State
   const [googleDriveStatus, setGoogleDriveStatus] = useState<{
@@ -924,8 +926,9 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleExportFullJsonBackup = async () => {
+    setIsExportingJson(true);
     try {
-      const res = await api.get('/backup/export-full-json', { responseType: 'blob' });
+      const res = await api.get('/backup/export-full-json', { responseType: 'blob', timeout: 300000 });
       const blob = new Blob([res.data], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -935,7 +938,9 @@ export const SettingsPage: React.FC = () => {
       link.click();
       link.remove();
     } catch (e) {
-      alert('Failed to export full database backup');
+      alert('Failed to export full database backup. The database is large (>150MB), please ensure backend is connected and try again.');
+    } finally {
+      setIsExportingJson(false);
     }
   };
 
@@ -943,7 +948,7 @@ export const SettingsPage: React.FC = () => {
     setIsCreatingBackup(true);
     setBackupMsg(null);
     try {
-      const res = await api.post('/backup/create');
+      const res = await api.post('/backup/create', {}, { timeout: 180000 });
       setBackupMsg(res.data.message || 'Full database backup created successfully in folder!');
       fetchBackupStatus();
     } catch (err: any) {
@@ -954,8 +959,9 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleDownloadBackupFile = async (filename: string) => {
+    setDownloadingFile(filename);
     try {
-      const res = await api.get(`/backup/download/${filename}`, { responseType: 'blob' });
+      const res = await api.get(`/backup/download/${filename}`, { responseType: 'blob', timeout: 300000 });
       const blob = new Blob([res.data], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -965,7 +971,9 @@ export const SettingsPage: React.FC = () => {
       link.click();
       link.remove();
     } catch (e) {
-      alert('Failed to download backup file');
+      alert('Failed to download backup file. The backup file is large, please retry.');
+    } finally {
+      setDownloadingFile(null);
     }
   };
 
@@ -3218,11 +3226,16 @@ export const SettingsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleExportFullJsonBackup}
-                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-sm transition cursor-pointer"
+                  disabled={isExportingJson}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-sm transition cursor-pointer"
                   title="Export portable database JSON archive to download folder"
                 >
-                  <Download className="w-4 h-4 text-emerald-400" />
-                  <span>Download .JSON</span>
+                  {isExportingJson ? (
+                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 text-emerald-400" />
+                  )}
+                  <span>{isExportingJson ? 'Exporting (160MB)...' : 'Download .JSON'}</span>
                 </button>
 
                 <button
@@ -3830,11 +3843,16 @@ export const SettingsPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleDownloadBackupFile(b.filename)}
-                                  className="w-24 shrink-0 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                  disabled={downloadingFile === b.filename}
+                                  className="w-24 shrink-0 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
                                   title="Download backup snapshot file to PC"
                                 >
-                                  <Download className="w-3.5 h-3.5" />
-                                  <span>Download</span>
+                                  {downloadingFile === b.filename ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-500" />
+                                  ) : (
+                                    <Download className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>{downloadingFile === b.filename ? 'Saving...' : 'Download'}</span>
                                 </button>
                               )}
 
@@ -4223,20 +4241,24 @@ export const SettingsPage: React.FC = () => {
                         start_date: purgeStartDate,
                         end_date: purgeEndDate,
                         confirmation: purgeConfirmText.trim().toUpperCase()
-                      });
+                      }, { timeout: 180000 });
                       setPurgeResult(res.data.message);
                       setPurgeConfirmText('');
                       alert(res.data.message);
                     } catch (err: any) {
-                      alert(err.response?.data?.detail || 'Failed to purge data');
+                      alert(err.response?.data?.detail || 'Failed to purge data. Please check connection and retry.');
                     } finally {
                       setIsPurging(false);
                     }
                   }}
                   disabled={isPurging || purgeConfirmText.trim().toUpperCase() !== 'DELETE'}
-                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-600/30 flex items-center space-x-2 transition-all active:scale-95"
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-600/30 flex items-center space-x-2 transition-all active:scale-95 cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {isPurging ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                   <span>{isPurging ? 'Purging Records...' : `Purge Range (${purgeStartDate} to ${purgeEndDate})`}</span>
                 </button>
               </div>

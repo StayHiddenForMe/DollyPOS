@@ -853,29 +853,46 @@ def export_sales_excel(
         _, end_dt = get_ist_day_bounds_in_utc(e_date)
         query = query.filter(Invoice.created_at >= start_dt, Invoice.created_at <= end_dt)
 
-    invoices = query.order_by(desc(Invoice.created_at)).all()
+    invoices = query.with_entities(
+        Invoice.bill_number,
+        Invoice.created_at,
+        Invoice.customer_name,
+        Invoice.customer_phone,
+        Invoice.subtotal,
+        Invoice.discount_amount,
+        Invoice.tax_amount,
+        Invoice.grand_total,
+        Invoice.paid_amount,
+        Invoice.due_amount,
+        Invoice.payment_mode
+    ).order_by(desc(Invoice.created_at)).all()
 
-    data = []
+    wb = openpyxl.Workbook(write_only=True)
+    ws = wb.create_sheet(title='Sales Report')
+    ws.append([
+        "Bill Number", "Date & Time (IST)", "Customer Name", "Customer Phone",
+        "Subtotal (₹)", "Discount (₹)", "Tax (₹)", "Grand Total (₹)",
+        "Paid Amount (₹)", "Due Amount (₹)", "Payment Mode"
+    ])
+
     for inv in invoices:
-        ist_dt = convert_utc_to_ist(inv.created_at)
-        data.append({
-            "Bill Number": inv.bill_number,
-            "Date & Time (IST)": ist_dt.strftime("%d-%m-%Y %I:%M %p") if ist_dt else "-",
-            "Customer Name": inv.customer_name or "Walk-in Customer",
-            "Customer Phone": inv.customer_phone or "-",
-            "Subtotal (₹)": inv.subtotal,
-            "Discount (₹)": inv.discount_amount,
-            "Tax (₹)": inv.tax_amount,
-            "Grand Total (₹)": inv.grand_total,
-            "Paid Amount (₹)": inv.paid_amount,
-            "Due Amount (₹)": inv.due_amount,
-            "Payment Mode": inv.payment_mode.value if hasattr(inv.payment_mode, 'value') else str(inv.payment_mode)
-        })
+        ist_dt = convert_utc_to_ist(inv[1])
+        ws.append([
+            inv[0],
+            ist_dt.strftime("%d-%m-%Y %I:%M %p") if ist_dt else "-",
+            inv[2] or "Walk-in Customer",
+            inv[3] or "-",
+            float(inv[4] or 0),
+            float(inv[5] or 0),
+            float(inv[6] or 0),
+            float(inv[7] or 0),
+            float(inv[8] or 0),
+            float(inv[9] or 0),
+            str(inv[10].value if hasattr(inv[10], 'value') else inv[10] or "")
+        ])
 
-    df = pd.DataFrame(data)
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sales Report')
+    wb.save(output)
     output.seek(0)
 
     filename = f"DollyToys_SalesReport_{period}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"

@@ -30,7 +30,8 @@ import {
   Filter,
   ShoppingBag,
   Wallet,
-  UserCheck
+  UserCheck,
+  Loader2
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 
@@ -43,6 +44,7 @@ export const CustomerPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [creditOnly, setCreditOnly] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // 3-State Column Sorting State (Item 12)
   type SortField = 'name' | 'phone' | 'city' | 'total_spend' | 'visit_count' | 'credit_balance';
@@ -204,8 +206,9 @@ export const CustomerPage: React.FC = () => {
   };
 
   const handleExportExcel = async () => {
+    setIsExporting(true);
     try {
-      const res = await api.get('/customers/export/excel', { responseType: 'blob' });
+      const res = await api.get('/customers/export/excel', { responseType: 'blob', timeout: 120000 });
       const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -215,7 +218,9 @@ export const CustomerPage: React.FC = () => {
       link.click();
       link.remove();
     } catch (e) {
-      alert('Failed to export customer excel');
+      alert('Failed to export customer excel. Please retry.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -264,11 +269,16 @@ export const CustomerPage: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleExportExcel}
-            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 font-bold text-xs flex items-center space-x-1.5 shadow-xs transition-all active:scale-95"
+            disabled={isExporting}
+            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 font-bold text-xs flex items-center space-x-1.5 shadow-xs transition-all active:scale-95"
             title="Download Customer Database as Excel"
           >
-            <Download className="w-4 h-4 text-emerald-600" />
-            <span>Export Excel</span>
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-600" />
+            )}
+            <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
 
           {isOwner() && (

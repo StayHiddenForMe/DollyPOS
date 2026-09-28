@@ -555,6 +555,13 @@ export function printBarcodeStickers(
             window.print();
           }, 350);
         });
+
+        // Automatically close print tab when user finishes or cancels printing
+        window.addEventListener('afterprint', () => {
+          setTimeout(() => {
+            window.close();
+          }, 100);
+        });
       </script>
     </body>
     </html>

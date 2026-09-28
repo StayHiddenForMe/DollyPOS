@@ -18,7 +18,8 @@ import {
   History,
   FileText,
   ArrowRightLeft,
-  Share2
+  Share2,
+  Loader2
 } from 'lucide-react';
 import { formatINR, playSuccessChime, formatISTDate } from '../utils/formatters';
 import { OWNER_SIGNATURE_FOOTER } from '../config/branding';
@@ -50,6 +51,8 @@ export const ReturnsPage: React.FC = () => {
     fetchSettings();
   }, []);
 
+  const currentPrefix = (settings?.bill_prefix?.trim() || 'DLY').toUpperCase();
+
   // Compute dynamic today's date formatted placeholder and monthly prefix
   const getTodayDateStr = () => {
     const now = new Date();
@@ -59,16 +62,33 @@ export const ReturnsPage: React.FC = () => {
     return `${year}${month}${day}`;
   };
 
-  const getMonthPrefix = () => {
+  const getMonthPrefix = (pfx: string = currentPrefix) => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `DLY-${year}${month}`;
+    return `${pfx}-${year}${month}-`;
   };
 
-  const todayPlaceholder = `DLY-${getTodayDateStr()}-0001`;
+  const todayPlaceholder = `${currentPrefix}-${getTodayDateStr()}-0001`;
 
   const [billSearch, setBillSearch] = useState(getMonthPrefix());
+
+  // Automatically update search prefix whenever store settings change or load
+  useEffect(() => {
+    if (settings?.bill_prefix) {
+      const pfx = settings.bill_prefix.trim().toUpperCase();
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      setBillSearch(prev => {
+        // If empty or still default prefix without a full bill number, update to new prefix
+        if (!prev || prev.includes('-202') || prev.startsWith('DLY-') || prev.startsWith('BILL-')) {
+          return `${pfx}-${year}${month}-`;
+        }
+        return prev;
+      });
+    }
+  }, [settings?.bill_prefix]);
   const [loadingBill, setLoadingBill] = useState(false);
   const [billData, setBillData] = useState<any | null>(null);
   const [returnItems, setReturnItems] = useState<ReturnItemState[]>([]);
@@ -390,9 +410,16 @@ export const ReturnsPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loadingBill}
-                className="px-4 py-2 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors flex items-center justify-center min-w-[110px]"
               >
-                {loadingBill ? 'Searching...' : 'Search Bill'}
+                {loadingBill ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    <span>Searching...</span>
+                  </>
+                ) : (
+                  <span>Search Bill</span>
+                )}
               </button>
             </form>
 
@@ -595,9 +622,10 @@ export const ReturnsPage: React.FC = () => {
             <button
               onClick={handleProcessExchange}
               disabled={isProcessing || (selectedReturns.length === 0 && exchangeItems.length === 0)}
-              className="w-full py-3 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-lg shadow-pink-600/30 transition-all active:scale-95 disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-lg shadow-pink-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
             >
-              {isProcessing ? 'Processing Exchange...' : 'Complete Exchange & Print Bill'}
+              {isProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{isProcessing ? 'Processing Exchange...' : 'Complete Exchange & Print Bill'}</span>
             </button>
           </div>
         </div>

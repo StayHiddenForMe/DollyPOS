@@ -25,7 +25,8 @@ import {
   Activity,
   AlertCircle,
   Plus,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 
@@ -197,7 +198,7 @@ export const ReportsPage: React.FC = () => {
       if (period === 'custom' && customStartDate) {
         url += `&start_date=${customStartDate}&end_date=${customEndDate}`;
       }
-      const response = await api.get(url, { responseType: 'blob' });
+      const response = await api.get(url, { responseType: 'blob', timeout: 180000 });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -207,7 +208,7 @@ export const ReportsPage: React.FC = () => {
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
-      alert('Failed to download Sales Excel report.');
+      alert('Failed to download Sales Excel report. Please retry.');
     } finally {
       setExportingSales(false);
     }
@@ -220,7 +221,7 @@ export const ReportsPage: React.FC = () => {
       if (invExportCategory) {
         url += `?category_id=${invExportCategory}`;
       }
-      const response = await api.get(url, { responseType: 'blob' });
+      const response = await api.get(url, { responseType: 'blob', timeout: 180000 });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -350,8 +351,12 @@ export const ReportsPage: React.FC = () => {
                   disabled={exportingSales}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center space-x-1 transition-all disabled:opacity-50 text-xs shadow-xs"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{exportingSales ? 'Exporting...' : 'Export Sales Excel (.xlsx)'}</span>
+                  {exportingSales ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>{exportingSales ? 'Generating Sales Report...' : 'Export Sales Excel (.xlsx)'}</span>
                 </button>
               </div>
             </div>
