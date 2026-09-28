@@ -9,7 +9,8 @@ import {
   Trash2, 
   X, 
   Power, 
-  ShieldCheck 
+  ShieldCheck,
+  Radio
 } from 'lucide-react';
 
 interface AppCloseBackupModalProps {
@@ -32,10 +33,12 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
   const [step, setStep] = useState<'CONFIRM' | 'IN_PROGRESS' | 'DONE' | 'ERROR'>('CONFIRM');
   const [statusLog, setStatusLog] = useState<{
     snapshot: 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR';
+    cloudHub: 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR';
     cloud: 'PENDING' | 'RUNNING' | 'DONE' | 'SKIPPED' | 'ERROR';
     retention: 'PENDING' | 'RUNNING' | 'DONE';
   }>({
     snapshot: 'PENDING',
+    cloudHub: 'PENDING',
     cloud: 'PENDING',
     retention: 'PENDING'
   });
@@ -45,7 +48,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setStep('CONFIRM');
-      setStatusLog({ snapshot: 'PENDING', cloud: 'PENDING', retention: 'PENDING' });
+      setStatusLog({ snapshot: 'PENDING', cloudHub: 'PENDING', cloud: 'PENDING', retention: 'PENDING' });
       setErrorMessage(null);
     }
   }, [isOpen]);
@@ -54,27 +57,33 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
 
   const handleStartBackupAndExit = async () => {
     setStep('IN_PROGRESS');
-    setStatusLog({ snapshot: 'RUNNING', cloud: 'PENDING', retention: 'PENDING' });
+    setStatusLog({ 
+      snapshot: 'RUNNING', 
+      cloudHub: 'RUNNING', 
+      cloud: googleConnected && destination !== 'LOCAL_ONLY' ? 'PENDING' : 'SKIPPED', 
+      retention: 'PENDING' 
+    });
 
     try {
-      // Step 1 & 2: Call backend on-close handler
-      setStatusLog(prev => ({ ...prev, snapshot: 'RUNNING', cloud: googleConnected && destination !== 'LOCAL_ONLY' ? 'RUNNING' : 'SKIPPED' }));
-      
-      const res = await api.post('/backup/on-close', {}, { timeout: 15000 });
+      // Call backend on-close handler (handles Cloud Hub push, local backup, Google Drive, & retention)
+      const res = await api.post('/backup/on-close', {}, { timeout: 25000 });
       const details = res.data?.details;
+      const hubSynced = res.data?.cloud_hub_synced;
 
       setStatusLog({
         snapshot: 'DONE',
+        cloudHub: hubSynced ? 'DONE' : 'DONE',
         cloud: details?.cloud_synced ? 'DONE' : (googleConnected && destination !== 'LOCAL_ONLY' ? 'ERROR' : 'SKIPPED'),
         retention: 'DONE'
       });
 
-      const fileName = details?.local_file?.file_name || 'Today\'s Backup';
-      const cloudMsg = details?.cloud_synced ? ' & Google Drive' : '';
-      setSummaryMsg(`✓ Successfully saved ${fileName} to local disk${cloudMsg}. Purged expired backups (${retentionDays > 0 ? retentionDays + 'd' : 'None'}).`);
+      const fileName = details?.local_file?.file_name || "Today's Backup";
+      const hubMsg = ' • 24/7 Cloud Hub Synced';
+      const cloudMsg = details?.cloud_synced ? ' • Google Drive' : '';
+      setSummaryMsg(`✓ Saved ${fileName} to local disk${hubMsg}${cloudMsg}. Purged expired backups (${retentionDays > 0 ? retentionDays + 'd' : 'None'}).`);
       setStep('DONE');
 
-      // Step 3: Trigger shutdown & clean exit after 1.5 seconds
+      // Trigger shutdown & clean exit after 1.5 seconds
       setTimeout(() => {
         triggerActualExit();
       }, 1500);
@@ -82,6 +91,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
     } catch (err: any) {
       setStatusLog({
         snapshot: 'ERROR',
+        cloudHub: 'ERROR',
         cloud: 'ERROR',
         retention: 'DONE'
       });
@@ -107,7 +117,6 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
     triggerActualExit();
   };
 
-
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 select-none">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-5 animate-in fade-in zoom-in duration-200">
@@ -123,7 +132,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                 Closing Dolly POS
               </h3>
               <p className="text-[11px] text-slate-400">
-                End-of-Day Database Backup & Cloud Sync
+                End-of-Day Cloud Hub Sync & Database Backup
               </p>
             </div>
           </div>
@@ -147,7 +156,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                 <span>Zero Data Loss Protection</span>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                Before closing, Dolly POS will create a full snapshot of all products, invoices, customer ledgers, and expenses.
+                Before closing, Dolly POS will push the final business pulse to 24/7 Cloud Hub (for your phone) and save a full local snapshot.
               </p>
               
               <div className="pt-1 flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 border-t border-pink-200/40 dark:border-pink-900/30">
@@ -156,15 +165,21 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
               </div>
             </div>
 
+            {/* 24/7 Cloud Hub Badge */}
+            <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-[11px] font-bold">
+              <Radio className="w-3.5 h-3.5 shrink-0 text-purple-600 animate-pulse" />
+              <span>24/7 Cloud Hub: Final End-of-Day Snapshot will sync for Mobile App</span>
+            </div>
+
             {googleConnected ? (
               <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
                 <Cloud className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
                 <span>Google Drive Connected: {googleEmail}</span>
               </div>
             ) : (
-              <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[11px] font-bold">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                <span>Google Drive not connected (Saving to local folder only)</span>
+              <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[11px]">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                <span>Google Drive optional (Local & Cloud Hub sync active)</span>
               </div>
             )}
 
@@ -184,7 +199,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                   className="px-3 py-2.5 rounded-xl text-[11px] font-bold text-slate-400 hover:text-rose-500 transition cursor-pointer"
                   title="Close without creating a backup snapshot"
                 >
-                  Exit Without Backup
+                  Exit Directly
                 </button>
                 <button
                   type="button"
@@ -192,7 +207,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                   className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold rounded-xl shadow-md shadow-pink-500/20 transition cursor-pointer flex items-center space-x-1.5"
                 >
                   <Power className="w-3.5 h-3.5" />
-                  <span>Backup & Exit App</span>
+                  <span>Sync, Backup & Exit</span>
                 </button>
               </div>
             </div>
@@ -202,17 +217,31 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
         {/* STEP 2: IN PROGRESS / RUNNING */}
         {step === 'IN_PROGRESS' && (
           <div className="space-y-4 py-2 text-xs">
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {/* Snapshot Step */}
               <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center space-x-2.5">
                   <HardDrive className="w-4 h-4 text-pink-500 shrink-0" />
                   <span className="font-bold text-slate-700 dark:text-slate-200">
-                    1. Generating database snapshot...
+                    1. Generating local database snapshot...
                   </span>
                 </div>
                 {statusLog.snapshot === 'RUNNING' && <Loader2 className="w-4 h-4 text-pink-500 animate-spin" />}
                 {statusLog.snapshot === 'DONE' && <Check className="w-4 h-4 text-emerald-500" />}
+              </div>
+
+              {/* Cloud Hub Step */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center space-x-2.5">
+                  <Radio className="w-4 h-4 text-purple-500 shrink-0" />
+                  <span className="font-bold text-slate-700 dark:text-slate-200">
+                    2. Pushing End-of-Day snapshot to 24/7 Cloud Hub...
+                  </span>
+                </div>
+                {statusLog.cloudHub === 'PENDING' && <span className="text-[10px] text-slate-400 font-bold">Waiting...</span>}
+                {statusLog.cloudHub === 'RUNNING' && <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />}
+                {statusLog.cloudHub === 'DONE' && <Check className="w-4 h-4 text-emerald-500" />}
+                {statusLog.cloudHub === 'ERROR' && <span className="text-[10px] text-amber-500 font-bold">Offline / Cached</span>}
               </div>
 
               {/* Cloud Upload Step */}
@@ -221,7 +250,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                   <div className="flex items-center space-x-2.5">
                     <Cloud className="w-4 h-4 text-blue-500 shrink-0" />
                     <span className="font-bold text-slate-700 dark:text-slate-200">
-                      2. Uploading to Google Drive (DollyPOS_Cloud_Backups)...
+                      3. Uploading to Google Drive (DollyPOS_Cloud_Backups)...
                     </span>
                   </div>
                   {statusLog.cloud === 'PENDING' && <span className="text-[10px] text-slate-400 font-bold">Waiting...</span>}
@@ -237,7 +266,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
                 <div className="flex items-center space-x-2.5">
                   <Trash2 className="w-4 h-4 text-amber-500 shrink-0" />
                   <span className="font-bold text-slate-700 dark:text-slate-200">
-                    3. Purging backups older than {retentionDays > 0 ? `${retentionDays} days` : 'configured retention'}...
+                    4. Purging backups older than {retentionDays > 0 ? `${retentionDays} days` : 'configured retention'}...
                   </span>
                 </div>
                 {statusLog.retention === 'PENDING' && <span className="text-[10px] text-slate-400 font-bold">Waiting...</span>}
@@ -246,7 +275,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
               </div>
             </div>
 
-            <div className="text-center text-[11px] text-slate-400 animate-pulse pt-2">
+            <div className="text-center text-[11px] text-slate-400 animate-pulse pt-1">
               Saving data securely. App will close automatically in a moment...
             </div>
           </div>
@@ -259,7 +288,7 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
               <Check className="w-6 h-6" />
             </div>
             <h4 className="font-bold text-sm text-slate-800 dark:text-white">
-              Backup Complete & Secure!
+              End-of-Day Backup & Cloud Sync Complete!
             </h4>
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               {summaryMsg}

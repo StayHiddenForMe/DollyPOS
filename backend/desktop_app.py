@@ -94,7 +94,17 @@ def open_and_monitor_browser(server):
             ])
             # Wait for user to close the app window
             proc.wait()
-            # Once window is closed, cleanly shut down the backend server and exit
+            # Once window is closed, execute end-of-day Cloud Hub sync & backup before shutdown
+            try:
+                from app.core.database import SessionLocal
+                from app.services.backup_service import backup_service
+                exit_db = SessionLocal()
+                try:
+                    backup_service.handle_on_close_backup(exit_db)
+                finally:
+                    exit_db.close()
+            except Exception:
+                pass
             server.should_exit = True
             time.sleep(0.5)
             os._exit(0)

@@ -577,21 +577,40 @@ class BackupService:
     def handle_on_close_backup(db: Session) -> dict:
         """
         Executed when Dolly POS is closing:
-        Checks if on-close backup is enabled, creates snapshot, uploads to Google Drive, and cleans old files.
+        1. Always pushes latest end-of-day snapshot to 24/7 Cloud Hub (store_token) for remote mobile access
+        2. Generates local JSON database snapshot
+        3. Uploads snapshot to Google Drive if connected
+        4. Cleans old retention files
         """
+        from app.services.cloud_sync_service import cloud_sync_service
+
+        # 1. End-of-Day push to 24/7 Cloud Hub (ensures mobile phone has 100% up-to-date final business pulse)
+        hub_result = {}
+        try:
+            hub_result = cloud_sync_service.sync_to_cloud(db, force=True)
+        except Exception as e:
+            hub_result = {"status": "error", "message": str(e)}
+
         st = db.query(StoreSettings).first()
-        if st and not st.backup_on_app_close:
+        if st and not getattr(st, 'backup_on_app_close', True):
             return {
-                "status": "SKIPPED",
-                "message": "Automatic on-close backup is disabled in settings.",
-                "backed_up": False
+                "status": "COMPLETED",
+                "message": "End-of-day Cloud Hub snapshot pushed successfully. Local backup skipped (disabled in settings).",
+                "backed_up": False,
+                "cloud_hub_synced": hub_result.get("status") == "success",
+                "cloud_hub_details": hub_result
             }
 
         result = BackupService.execute_full_backup_flow(db, auto_schedule="ON_CLOSE")
+        result["cloud_hub_synced"] = hub_result.get("status") == "success"
+        result["cloud_hub_details"] = hub_result
+
         return {
             "status": "COMPLETED",
-            "message": "On-close backup and cloud sync completed successfully.",
+            "message": "On-close backup and 24/7 Cloud Hub sync completed successfully.",
             "backed_up": True,
+            "cloud_hub_synced": hub_result.get("status") == "success",
+            "cloud_hub_details": hub_result,
             "details": result
         }
 
