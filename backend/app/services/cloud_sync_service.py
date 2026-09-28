@@ -448,6 +448,32 @@ class CloudSyncService:
         cats = db.query(Category).order_by(Category.name.asc()).all()
         return [{"id": c.id, "name": c.name} for c in cats]
 
+    @staticmethod
+    def build_demands_payload(db: Session) -> List[Dict[str, Any]]:
+        """Returns customer demand / lost sales logs for remote mobile viewing."""
+        from app.models.lost_demand import LostDemand
+        try:
+            logs = db.query(LostDemand).order_by(LostDemand.created_at.desc()).limit(200).all()
+            result = []
+            for d in logs:
+                result.append({
+                    "id": d.id,
+                    "item_description": d.item_description,
+                    "category_name": d.category_name,
+                    "preferred_size": d.preferred_size,
+                    "preferred_color": d.preferred_color,
+                    "customer_name": d.customer_name,
+                    "customer_phone": d.customer_phone,
+                    "request_count": d.request_count,
+                    "urgency": str(d.urgency.value if hasattr(d.urgency, "value") else d.urgency),
+                    "status": str(d.status.value if hasattr(d.status, "value") else d.status),
+                    "notes": d.notes,
+                    "created_at": d.created_at.isoformat() if d.created_at else None
+                })
+            return result
+        except Exception:
+            return []
+
     @classmethod
     def sync_to_cloud(cls, db: Session, force: bool = False) -> Dict[str, Any]:
         """
@@ -478,6 +504,7 @@ class CloudSyncService:
             khata = cls.build_khata_payload(db)
             reports = cls.build_reports_payload(db)
             categories = cls.build_categories_payload(db)
+            demands = cls.build_demands_payload(db)
 
             payload = {
                 "store_id": getattr(st, "store_id", "default"),
@@ -494,6 +521,7 @@ class CloudSyncService:
                 "khata": khata,
                 "reports": reports,
                 "categories": categories,
+                "demands": demands,
                 "synced_at": datetime.utcnow().isoformat()
             }
 

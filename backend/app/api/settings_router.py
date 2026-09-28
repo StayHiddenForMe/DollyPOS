@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func, text
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
@@ -265,22 +266,49 @@ def purge_historical_records(
     deleted_expenses = 0
 
     if req.purge_type in ['INVOICES', 'BOTH']:
-        invoices = db.query(Invoice).filter(
+        deleted_invoices = db.query(func.count(Invoice.id)).filter(
             Invoice.created_at >= start_dt,
             Invoice.created_at <= end_dt
-        ).all()
-        deleted_invoices = len(invoices)
-        for inv in invoices:
-            db.delete(inv)
+        ).scalar() or 0
+
+        if deleted_invoices > 0:
+            db.execute(text("""
+                UPDATE returns SET invoice_id = NULL 
+                WHERE invoice_id IN (
+                    SELECT id FROM invoices WHERE created_at >= :start_dt AND created_at <= :end_dt
+                )
+            """), {"start_dt": start_dt, "end_dt": end_dt})
+
+            db.execute(text("""
+                DELETE FROM invoice_items 
+                WHERE invoice_id IN (
+                    SELECT id FROM invoices WHERE created_at >= :start_dt AND created_at <= :end_dt
+                )
+            """), {"start_dt": start_dt, "end_dt": end_dt})
+
+            db.execute(text("""
+                DELETE FROM payments 
+                WHERE invoice_id IN (
+                    SELECT id FROM invoices WHERE created_at >= :start_dt AND created_at <= :end_dt
+                )
+            """), {"start_dt": start_dt, "end_dt": end_dt})
+
+            db.execute(text("""
+                DELETE FROM invoices 
+                WHERE created_at >= :start_dt AND created_at <= :end_dt
+            """), {"start_dt": start_dt, "end_dt": end_dt})
 
     if req.purge_type in ['EXPENSES', 'BOTH']:
-        expenses = db.query(Expense).filter(
+        deleted_expenses = db.query(func.count(Expense.id)).filter(
             Expense.expense_date >= start_dt,
             Expense.expense_date <= end_dt
-        ).all()
-        deleted_expenses = len(expenses)
-        for exp in expenses:
-            db.delete(exp)
+        ).scalar() or 0
+
+        if deleted_expenses > 0:
+            db.execute(text("""
+                DELETE FROM expenses 
+                WHERE expense_date >= :start_dt AND expense_date <= :end_dt
+            """), {"start_dt": start_dt, "end_dt": end_dt})
 
     db.commit()
     log_action(db, user_id=current_user.id, action_type="DATA_PURGE", entity="SYSTEM", details={

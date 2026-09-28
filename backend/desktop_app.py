@@ -190,24 +190,27 @@ def safe_fast_exit(server=None):
     finally:
         os._exit(0)
 
+BROWSER_MONITORED_BY_PROC = False
+
 def watchdog_monitor(server):
     """
-    Monitors browser heartbeat.
-    If the user closes the Chrome/Edge window (clicking [X], closing the tab, or killing the process),
-    heartbeats stop. If 6 seconds elapse with no heartbeat, cleanly execute end-of-day cloud backup
-    and terminate the process completely.
+    Monitors browser heartbeat if running without dedicated Chrome app process monitor.
+    If dedicated app mode is active, proc.wait() monitors the window exit directly without killing
+    the server during reloads, heavy queries, or data purges.
     """
-    global LAST_HEARTBEAT_TIME, FIRST_HEARTBEAT_RECEIVED
-    # Initial grace period for browser window to launch and begin sending heartbeats
-    time.sleep(18)
+    global LAST_HEARTBEAT_TIME, FIRST_HEARTBEAT_RECEIVED, BROWSER_MONITORED_BY_PROC
+    time.sleep(30)
     while True:
-        time.sleep(1.5)
+        time.sleep(5.0)
+        if BROWSER_MONITORED_BY_PROC:
+            continue
         if FIRST_HEARTBEAT_RECEIVED:
-            if time.time() - LAST_HEARTBEAT_TIME > 6.0:
+            if time.time() - LAST_HEARTBEAT_TIME > 180.0:
                 safe_fast_exit(server)
 
 def open_and_monitor_browser(server):
     """Wait for backend health endpoint, then open Chrome/Edge in app mode and monitor its lifecycle."""
+    global BROWSER_MONITORED_BY_PROC
     for _ in range(40):
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
@@ -233,6 +236,7 @@ def open_and_monitor_browser(server):
                 "--start-maximized",
                 "--app=http://127.0.0.1:8000"
             ])
+            BROWSER_MONITORED_BY_PROC = True
             # Wait for user to close the app window
             proc.wait()
             # Once window is closed, immediately trigger fast shutdown

@@ -68,6 +68,7 @@ def seed_initial_data():
             "CREATE INDEX IF NOT EXISTS idx_products_active ON products (is_active);",
             "CREATE INDEX IF NOT EXISTS idx_products_last_sold ON products (last_sold_at);",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS opening_date VARCHAR(50) DEFAULT '2002-01-01';",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS bill_prefix VARCHAR(20) DEFAULT 'DLY';",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_enabled_1 BOOLEAN DEFAULT FALSE",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_name_1 VARCHAR(100) DEFAULT 'Online / MDR Surcharge'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS extra_charge_condition_1 VARCHAR(50) DEFAULT 'GREATER_THAN'",

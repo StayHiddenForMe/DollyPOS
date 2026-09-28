@@ -10,8 +10,10 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
   ShieldCheck,
   Wifi,
@@ -29,6 +31,8 @@ import {
   AlertCircle,
   RefreshCw,
   LogOut,
+  QrCode,
+  X,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useConnection } from '../context/ConnectionContext';
@@ -74,6 +78,77 @@ export const LoginScreen: React.FC = () => {
 
   // UI Modals
   const [showStoreSwitcher, setShowStoreSwitcher] = useState(false);
+
+  // QR Scanner State
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [scannedRecently, setScannedRecently] = useState(false);
+
+  const handleOpenScanner = async () => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert(
+          'Permission Needed',
+          'Camera access is required to scan the Store Pairing QR code from your laptop screen.'
+        );
+        return;
+      }
+    }
+    setScannedRecently(false);
+    setIsQrScannerOpen(true);
+  };
+
+  const handleBarcodeScanned = async (data: string) => {
+    if (scannedRecently || !data) return;
+    setScannedRecently(true);
+    setIsQrScannerOpen(false);
+
+    let token = data.trim();
+    let hubUrl = hubUrlInput;
+
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.store_token) {
+        token = parsed.store_token;
+      }
+      if (parsed.hub_url) {
+        hubUrl = parsed.hub_url;
+        setHubUrlInput(hubUrl);
+      }
+    } catch {
+      if (token.startsWith('http')) {
+        const parts = token.split('/');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.length > 5) {
+          token = lastPart;
+        }
+      }
+    }
+
+    const cleanToken = token.trim().toUpperCase();
+    setStoreTokenInput(cleanToken);
+    setTokenError(null);
+    clearError();
+
+    setIsVerifyingToken(true);
+    const cleanHub = hubUrl.trim().replace(/\/$/, '') || DEFAULT_HUB_URL;
+    const result = await addStoreByToken(cleanToken, cleanHub);
+    setIsVerifyingToken(false);
+
+    if (result.success && result.store) {
+      await loginWithStore(result.store);
+      Alert.alert(
+        'Store Connected!',
+        `Successfully linked "${result.store.name}". Your store is now paired.`
+      );
+    } else {
+      setTokenError(
+        result.error ||
+          'Could not verify Store Access Token. Please ensure your Cloud Hub is online.'
+      );
+    }
+  };
 
   const hasConnectedStore = Boolean(activeStore && activeStore.token);
 
@@ -330,9 +405,20 @@ export const LoginScreen: React.FC = () => {
             {activeTab === 'CLOUD_TOKEN' ? (
               <View style={styles.formContent}>
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: isDark ? '#E2E8F0' : '#334155' }]}>
-                    Store Access Token:
-                  </Text>
+                  <View style={styles.inputLabelRow}>
+                    <Text style={[styles.inputLabel, { color: isDark ? '#E2E8F0' : '#334155' }]}>
+                      Store Access Token:
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.scanBadgeBtn, { backgroundColor: colors.brand[600] }]}
+                      onPress={handleOpenScanner}
+                      activeOpacity={0.8}
+                    >
+                      <QrCode size={13} color="#FFFFFF" />
+                      <Text style={styles.scanBadgeText}>Scan QR Code</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: isDark ? '#334155' : '#CBD5E1' }]}>
                     <KeyRound size={18} color="#94A3B8" style={styles.inputIcon} />
                     <TextInput
@@ -347,9 +433,16 @@ export const LoginScreen: React.FC = () => {
                       autoCapitalize="characters"
                       autoCorrect={false}
                     />
+                    <TouchableOpacity
+                      onPress={handleOpenScanner}
+                      style={styles.inputScanIconBtn}
+                      activeOpacity={0.7}
+                    >
+                      <QrCode size={20} color={colors.brand[600]} />
+                    </TouchableOpacity>
                   </View>
                   <Text style={[styles.inputHelper, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    💡 Find this token on your laptop POS in <Text style={{ fontWeight: '700' }}>Settings → Mobile Connect</Text>.
+                    💡 Tap <Text style={{ fontWeight: '700' }}>Scan QR Code</Text> to point camera at your laptop screen in <Text style={{ fontWeight: '700' }}>Settings → Mobile Connect</Text>.
                   </Text>
                 </View>
 
@@ -499,6 +592,54 @@ export const LoginScreen: React.FC = () => {
         visible={showStoreSwitcher}
         onClose={() => setShowStoreSwitcher(false)}
       />
+
+      {/* QR Code Scanner Camera Modal */}
+      <Modal
+        visible={isQrScannerOpen}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setIsQrScannerOpen(false)}
+      >
+        <View style={styles.cameraContainer}>
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+            onBarcodeScanned={(result) => handleBarcodeScanned(result.data)}
+          />
+
+          {/* Scanner Overlay UI */}
+          <View style={[styles.cameraOverlay, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.cameraHeader}>
+              <Text style={styles.cameraTitle}>Scan Store Pairing QR</Text>
+              <TouchableOpacity
+                style={styles.cameraCloseBtn}
+                onPress={() => setIsQrScannerOpen(false)}
+              >
+                <X size={22} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.viewfinderBox}>
+              <View style={styles.viewfinderFrame} />
+              <Text style={styles.cameraHint}>
+                Point camera at the QR code in Dolly POS Desktop Settings → Mobile Connect
+              </Text>
+            </View>
+
+            <View style={styles.cameraFooter}>
+              <TouchableOpacity
+                style={styles.cancelScanBtn}
+                onPress={() => setIsQrScannerOpen(false)}
+              >
+                <Text style={styles.cancelScanBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -808,5 +949,85 @@ const styles = StyleSheet.create({
   footerSub: {
     fontSize: 10,
     textAlign: 'center',
+  },
+  inputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scanBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scanBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  inputScanIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  cameraOverlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cameraTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cameraCloseBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  viewfinderBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  viewfinderFrame: {
+    width: 240,
+    height: 240,
+    borderWidth: 2,
+    borderColor: '#db2777',
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+  },
+  cameraHint: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    textAlign: 'center',
+    maxWidth: 260,
+    lineHeight: 17,
+  },
+  cameraFooter: {
+    alignItems: 'center',
+  },
+  cancelScanBtn: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+  },
+  cancelScanBtnText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

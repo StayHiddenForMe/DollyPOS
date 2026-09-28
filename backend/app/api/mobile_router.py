@@ -557,7 +557,7 @@ def get_mobile_reports(
         invoices = (
             db.query(Invoice)
             .filter(Invoice.created_at >= s_utc, Invoice.created_at <= e_utc, Invoice.is_cancelled == False)
-            .order_by(Invoice.created_at.asc())
+            .order_by(Invoice.created_at.desc())
             .all()
         )
 
@@ -566,6 +566,7 @@ def get_mobile_reports(
         total_net = 0.0
         total_discount = 0.0
         total_tax = 0.0
+        unique_dates = set()
 
         for inv in invoices:
             ist_dt = inv.created_at + IST_OFFSET
@@ -573,24 +574,27 @@ def get_mobile_reports(
             n = float(inv.grand_total)
             d = float(inv.discount_amount or 0.0)
             t = float(inv.tax_amount or 0.0)
-            mode_str = str(inv.payment_mode.value if hasattr(inv.payment_mode, "value") else inv.payment_mode).upper()
-
-            rows.append({
-                "date": ist_dt.strftime("%d %b %Y"),
-                "time": ist_dt.strftime("%I:%M %p"),
-                "bill_number": inv.bill_number or f"#{inv.id}",
-                "customer": inv.customer_name or "Walk-in Customer",
-                "payment_mode": mode_str,
-                "gross_amount": round(g, 2),
-                "discount": round(d, 2),
-                "tax": round(t, 2),
-                "net_amount": round(n, 2)
-            })
+            unique_dates.add(ist_dt.strftime("%Y-%m-%d"))
 
             total_gross += g
             total_net += n
             total_discount += d
             total_tax += t
+
+            # Only append first 150 rows for mobile preview to avoid native Android OutOfMemory crash
+            if len(rows) < 150:
+                mode_str = str(inv.payment_mode.value if hasattr(inv.payment_mode, "value") else inv.payment_mode).upper()
+                rows.append({
+                    "date": ist_dt.strftime("%d %b %Y"),
+                    "time": ist_dt.strftime("%I:%M %p"),
+                    "bill_number": inv.bill_number or f"#{inv.id}",
+                    "customer": inv.customer_name or "Walk-in Customer",
+                    "payment_mode": mode_str,
+                    "gross_amount": round(g, 2),
+                    "discount": round(d, 2),
+                    "tax": round(t, 2),
+                    "net_amount": round(n, 2)
+                })
 
         return {
             "report_type": "SALES",
@@ -604,10 +608,12 @@ def get_mobile_reports(
                 "total_discount": round(total_discount, 2),
                 "total_tax": round(total_tax, 2),
                 "total_net": round(total_net, 2),
-                "avg_daily_sales": round(total_net / max(len(set(r['date'] for r in rows)), 1), 2)
+                "avg_daily_sales": round(total_net / max(len(unique_dates), 1), 2)
             },
             "columns": ["Date", "Bill #", "Customer", "Payment Mode", "Gross (₹)", "Discount", "Tax", "Net Amount (₹)"],
-            "rows": rows
+            "rows": rows,
+            "total_rows": len(invoices),
+            "is_truncated": len(invoices) > 150
         }
 
     # ------------------ 2. PAYMENTS BREAKDOWN ------------------

@@ -74,6 +74,7 @@ export const SettingsPage: React.FC = () => {
     show_gst_on_bill: false,
     upi_id: '7972558842@upi',
     show_upi_qr_on_bill: true,
+    bill_prefix: 'DLY',
     bill_header: 'Tax Invoice / Retail Bill',
     bill_footer: 'Thank you for shopping at Dolly Toys! No exchange without original bill.',
     footer_font_size: '10px',
@@ -1343,7 +1344,10 @@ export const SettingsPage: React.FC = () => {
             <span>Mobile Connect</span>
           </button>
           <button
-            onClick={() => setActiveTab('DATABASE')}
+            onClick={() => {
+              setActiveTab('DATABASE');
+              handleFetchLongevityAudit();
+            }}
             className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === 'DATABASE' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' : 'text-slate-500'}`}
           >
             50-Yr Scale
@@ -1469,6 +1473,23 @@ export const SettingsPage: React.FC = () => {
                   onChange={(e) => setSettings({ ...settings, opening_date: e.target.value })}
                   className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-slate-800 dark:text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Bill Number Prefix
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={settings.bill_prefix || 'DLY'}
+                  onChange={(e) => setSettings({ ...settings, bill_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                  placeholder="e.g. DLY or STR2"
+                  className="w-full px-3.5 py-2 uppercase bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono font-bold text-pink-600"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Format: {settings.bill_prefix || 'DLY'}-YYYYMMDD-0001 (e.g. DLY for Store 1, STR2 for Store 2)
+                </span>
               </div>
             </div>
 

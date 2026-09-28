@@ -14,6 +14,19 @@
     user-select: text !important;
     -webkit-user-select: text !important;
   }
+
+  /* High-contrast accessible placeholders across all searchboxes & text inputs */
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748b !important; /* slate-500: crisp, high contrast in light mode */
+    opacity: 1 !important;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #94a3b8 !important; /* slate-400: crisp and readable in dark mode */
+    opacity: 1 !important;
+  }
 }
 
 /* Custom modern scrollbars */

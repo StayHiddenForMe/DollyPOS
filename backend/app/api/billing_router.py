@@ -29,7 +29,9 @@ def generate_bill_number(db: Session) -> str:
     from app.core.timezone import get_ist_now
     ist_now = get_ist_now()
     today_str = ist_now.strftime("%Y%m%d")
-    prefix = f"DLY-{today_str}-"
+    settings = db.query(StoreSettings).first()
+    pfx = (settings.bill_prefix.strip().upper() if settings and settings.bill_prefix and settings.bill_prefix.strip() else "DLY")
+    prefix = f"{pfx}-{today_str}-"
     last_invoice = db.query(Invoice).filter(Invoice.bill_number.like(f"{prefix}%")).order_by(desc(Invoice.id)).first()
     seq = (int(last_invoice.bill_number.split("-")[-1]) + 1) if last_invoice else 1
     return f"{prefix}{seq:04d}"

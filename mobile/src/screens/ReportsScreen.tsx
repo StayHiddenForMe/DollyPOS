@@ -22,11 +22,13 @@ import {
   AlertTriangle,
   PackageCheck,
   IndianRupee,
+  Info,
 } from 'lucide-react-native';
 import { Header } from '../components/Header';
 import { api } from '../services/api';
 import { exportReportToExcel } from '../services/excelService';
 import { exportReportToPDF } from '../services/pdfService';
+import { DatePickerModal } from '../components/DatePickerModal';
 import { ReportResponse } from '../types';
 import { formatINR } from '../utils/formatters';
 import { useTheme } from '../context/ThemeContext';
@@ -59,40 +61,45 @@ export const ReportsScreen: React.FC = () => {
   const [showCustomRange, setShowCustomRange] = useState(false);
 
   const applyPreset = (preset: PresetPeriod) => {
+    if (preset === 'CUSTOM') {
+      setShowCustomRange(true);
+      return;
+    }
     setPeriod(preset);
     const now = new Date();
+    setShowCustomRange(false);
 
     if (preset === 'TODAY') {
       const s = formatDateYMD(now);
       setStartDate(s);
       setEndDate(s);
-      setShowCustomRange(false);
     } else if (preset === 'YESTERDAY') {
       const y = new Date();
       y.setDate(y.getDate() - 1);
       const s = formatDateYMD(y);
       setStartDate(s);
       setEndDate(s);
-      setShowCustomRange(false);
     } else if (preset === 'WEEK') {
       const w = new Date();
       w.setDate(w.getDate() - 7);
       setStartDate(formatDateYMD(w));
       setEndDate(formatDateYMD(now));
-      setShowCustomRange(false);
     } else if (preset === 'MONTH') {
       const m = new Date(now.getFullYear(), now.getMonth(), 1);
       setStartDate(formatDateYMD(m));
       setEndDate(formatDateYMD(now));
-      setShowCustomRange(false);
     } else if (preset === 'YEAR') {
       const yr = new Date(now.getFullYear(), 0, 1);
       setStartDate(formatDateYMD(yr));
       setEndDate(formatDateYMD(now));
-      setShowCustomRange(false);
-    } else if (preset === 'CUSTOM') {
-      setShowCustomRange(true);
     }
+  };
+
+  const handleApplyCustomDates = (s: string, e: string) => {
+    setStartDate(s);
+    setEndDate(e);
+    setPeriod('CUSTOM');
+    setShowCustomRange(false);
   };
 
   const fetchReports = useCallback(async () => {
@@ -199,32 +206,28 @@ export const ReportsScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Custom Date Inputs if Custom selected */}
-      {showCustomRange && (
-        <View style={styles.customDateBox}>
-          <View style={styles.dateField}>
-            <Text style={styles.dateLabel}>From (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.dateInput}
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder="2026-09-01"
-            />
-          </View>
-          <View style={styles.dateField}>
-            <Text style={styles.dateLabel}>To (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.dateInput}
-              value={endDate}
-              onChangeText={setEndDate}
-              placeholder="2026-09-27"
-            />
-          </View>
-          <TouchableOpacity style={styles.applyBtn} onPress={fetchReports}>
-            <Text style={styles.applyBtnText}>Apply</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Active Custom Range Banner */}
+      {period === 'CUSTOM' && (
+        <TouchableOpacity
+          style={styles.customDateBox}
+          onPress={() => setShowCustomRange(true)}
+          activeOpacity={0.8}
+        >
+          <Calendar size={14} color={colors.brand[600]} />
+          <Text style={styles.customRangeDisplayText}>
+            Active Custom Range: <Text style={{ fontWeight: '800', color: colors.brand[600] }}>{startDate} → {endDate}</Text> (Tap to change)
+          </Text>
+        </TouchableOpacity>
       )}
+
+      {/* Interactive Date Picker Modal */}
+      <DatePickerModal
+        visible={showCustomRange}
+        onClose={() => setShowCustomRange(false)}
+        onApply={handleApplyCustomDates}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+      />
 
       {/* 6 Report Type Selector Tabs (Horizontal Scrollable) */}
       <View style={styles.typeTabsWrapper}>
@@ -432,6 +435,14 @@ export const ReportsScreen: React.FC = () => {
           </View>
         ) : (
           <View style={styles.tableCard}>
+            {report.is_truncated && (
+              <View style={styles.truncatedNotice}>
+                <Info size={14} color="#0284c7" />
+                <Text style={styles.truncatedText}>
+                  Showing latest {report.rows.length} of {report.total_rows || (report.summary as any).total_bills} transactions. Tap Export Excel / PDF to download the full archive.
+                </Text>
+              </View>
+            )}
             <ScrollView horizontal showsHorizontalScrollIndicator={true}>
               <View>
                 {/* Table Header */}
@@ -670,12 +681,39 @@ const styles = StyleSheet.create({
   },
   customDateBox: {
     backgroundColor: '#ffffff',
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
+  },
+  customRangeDisplayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  truncatedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  truncatedText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#0369a1',
+    fontWeight: '600',
   },
   dateField: {
     flex: 1,

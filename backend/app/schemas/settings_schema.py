@@ -15,6 +15,7 @@ class StoreSettingsBase(BaseModel):
     upi_id: str = "7972558842@upi"
     show_upi_qr_on_bill: bool = True
     opening_date: Optional[str] = "2002-01-01"
+    bill_prefix: Optional[str] = "DLY"
     bill_header: Optional[str] = "Tax Invoice / Retail Bill"
     bill_footer: Optional[str] = "Thank you for shopping with Dolly Toys! No exchange without original bill."
     footer_font_size: Optional[str] = "10px"
@@ -126,6 +127,7 @@ class StoreSettingsUpdate(BaseModel):
     upi_id: Optional[str] = None
     show_upi_qr_on_bill: Optional[bool] = None
     opening_date: Optional[str] = None
+    bill_prefix: Optional[str] = None
     bill_header: Optional[str] = None
     bill_footer: Optional[str] = None
     footer_font_size: Optional[str] = None

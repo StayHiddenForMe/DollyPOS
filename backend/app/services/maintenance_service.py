@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any, List
 from datetime import datetime
+from app.config import settings
 
 class DatabaseLongevityService:
     """

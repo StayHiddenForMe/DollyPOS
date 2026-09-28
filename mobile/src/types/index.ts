@@ -84,6 +84,8 @@ export interface ReportResponse {
   summary: ReportSummary;
   columns: string[];
   rows: any[];
+  total_rows?: number;
+  is_truncated?: boolean;
 }
 
 export interface KhataCustomer {

@@ -19,6 +19,7 @@ class StoreSettings(Base):
     upi_id = Column(String(100), default="7972558842@upi", nullable=False)
     show_upi_qr_on_bill = Column(Boolean, default=True, nullable=False)
     opening_date = Column(String(50), default="2002-01-01", nullable=True)
+    bill_prefix = Column(String(20), default="DLY", nullable=True)
     
     # Receipts Customization
     bill_header = Column(Text, default="Tax Invoice / Retail Bill", nullable=True)

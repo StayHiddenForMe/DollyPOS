@@ -25,6 +25,7 @@ import { Header } from '../components/Header';
 import { MetricCard } from '../components/MetricCard';
 import { PaymentSplitBar } from '../components/PaymentSplitBar';
 import { HourlyVelocityBar } from '../components/HourlyVelocityBar';
+import { DatePickerModal } from '../components/DatePickerModal';
 import { api } from '../services/api';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme } from '../context/ThemeContext';
@@ -134,6 +135,10 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
   }, [fetchOverview, period, startDate, endDate, checkConnection]);
 
   const handleSelectPeriod = (newPeriod: PeriodType) => {
+    if (newPeriod === 'CUSTOM') {
+      setShowCustomRange(true);
+      return;
+    }
     if (newPeriod === period) return;
     setPeriod(newPeriod);
     const now = new Date();
@@ -166,15 +171,15 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
       setStartDate(formatDateYMD(yr));
       setEndDate(formatDateYMD(now));
       setShowCustomRange(false);
-    } else if (newPeriod === 'CUSTOM') {
-      setShowCustomRange(true);
     }
   };
 
-  const handleApplyCustom = () => {
-    if (startDate && endDate) {
-      fetchOverview('CUSTOM', startDate, endDate);
-    }
+  const handleApplyCustom = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
+    setPeriod('CUSTOM');
+    setShowCustomRange(false);
+    fetchOverview('CUSTOM', start, end);
   };
 
   if (loading && !data) {
@@ -324,34 +329,28 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
         </ScrollView>
       </View>
 
-      {/* Custom Date Input Panel */}
-      {showCustomRange && (
-        <View style={[styles.customDateBox, { backgroundColor: colors.card, borderBottomColor: colors.cardBorder }]}>
-          <View style={styles.dateField}>
-            <Text style={[styles.dateLabel, { color: colors.textMuted }]}>From (YYYY-MM-DD)</Text>
-            <TextInput
-              style={[styles.dateInput, { backgroundColor: colors.surfaceSubtle, borderColor: colors.cardBorder, color: colors.textPrimary }]}
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder="2026-09-01"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-          <View style={styles.dateField}>
-            <Text style={[styles.dateLabel, { color: colors.textMuted }]}>To (YYYY-MM-DD)</Text>
-            <TextInput
-              style={[styles.dateInput, { backgroundColor: colors.surfaceSubtle, borderColor: colors.cardBorder, color: colors.textPrimary }]}
-              value={endDate}
-              onChangeText={setEndDate}
-              placeholder="2026-09-27"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-          <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.brand[600] }]} onPress={handleApplyCustom}>
-            <Text style={styles.applyBtnText}>Apply</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Active Custom Range Banner */}
+      {period === 'CUSTOM' && (
+        <TouchableOpacity
+          style={[styles.customDateBox, { backgroundColor: colors.card, borderBottomColor: colors.cardBorder }]}
+          onPress={() => setShowCustomRange(true)}
+          activeOpacity={0.8}
+        >
+          <Calendar size={14} color={colors.brand[600]} />
+          <Text style={[styles.customRangeDisplayText, { color: colors.textPrimary }]}>
+            Active Custom Range: <Text style={{ fontWeight: '800', color: colors.brand[600] }}>{startDate} → {endDate}</Text> (Tap to change)
+          </Text>
+        </TouchableOpacity>
       )}
+
+      {/* Interactive Date Picker Modal */}
+      <DatePickerModal
+        visible={showCustomRange}
+        onClose={() => setShowCustomRange(false)}
+        onApply={handleApplyCustom}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+      />
 
       <ScrollView
         contentContainerStyle={[
@@ -565,11 +564,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   customDateBox: {
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 8,
     borderBottomWidth: 1,
+  },
+  customRangeDisplayText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   dateField: {
     flex: 1,

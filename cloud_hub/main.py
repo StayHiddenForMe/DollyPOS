@@ -118,6 +118,7 @@ class SyncPayload(BaseModel):
     reports: Optional[Dict[str, Any]] = None
     khata: Optional[Dict[str, Any]] = None
     categories: Optional[List[Dict[str, Any]]] = None
+    demands: Optional[List[Dict[str, Any]]] = None
     synced_at: Optional[str] = None
 
 class DemandCreatePayload(BaseModel):
@@ -280,6 +281,22 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
         else:
             cat_record.data_json = json.dumps(payload.categories)
             cat_record.updated_at = now
+
+    if payload.demands is not None:
+        dem_record = db.query(HubStoreData).filter(
+            HubStoreData.store_token == token,
+            HubStoreData.data_type == "DEMANDS"
+        ).first()
+        if not dem_record:
+            dem_record = HubStoreData(
+                store_token=token,
+                data_type="DEMANDS",
+                data_json=json.dumps(payload.demands)
+            )
+            db.add(dem_record)
+        else:
+            dem_record.data_json = json.dumps(payload.demands)
+            dem_record.updated_at = now
 
     # 6. Fetch unsynced mobile demands for this store to deliver to the desktop
     unsynced_demands = db.query(HubDemand).filter(
@@ -634,6 +651,9 @@ def get_store_reports_for_mobile(
         total_tax = sum(float(inv.get("tax", 0.0)) for inv in invoices)
         unique_dates = len(set(inv.get("date_ymd", "") for inv in invoices)) or 1
 
+        # Cap preview rows to 150 to prevent Android OutOfMemory crashes on large datasets
+        preview_rows = invoices[:150]
+
         return {
             "report_type": "SALES",
             "title": f"Sales Register ({s_str or 'All'} to {e_str or 'All'})",
@@ -649,7 +669,9 @@ def get_store_reports_for_mobile(
                 "avg_daily_sales": round(total_net / unique_dates, 2)
             },
             "columns": ["Date", "Bill #", "Customer", "Payment Mode", "Gross (₹)", "Discount", "Tax", "Net Amount (₹)"],
-            "rows": invoices
+            "rows": preview_rows,
+            "total_rows": len(invoices),
+            "is_truncated": len(invoices) > 150
         }
 
     # 2. PAYMENTS BREAKDOWN
@@ -824,14 +846,31 @@ def get_store_status_for_mobile(token: str, db: Session = Depends(get_db)):
 
 @app.get("/api/v1/hub/stores/{token}/demands")
 def get_store_demands_for_mobile(token: str, db: Session = Depends(get_db)):
-    """Returns demand planner logs for this store."""
+    """Returns demand planner logs for this store, combining desktop POS logs and mobile entries."""
     t_clean = token.strip().upper()
-    demands = db.query(HubDemand).filter(
+
+    # 1. Fetch desktop-synced demands
+    dem_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "DEMANDS"
+    ).first()
+    desktop_demands = []
+    if dem_record and dem_record.data_json:
+        try:
+            desktop_demands = json.loads(dem_record.data_json)
+        except Exception:
+            desktop_demands = []
+
+    # 2. Fetch mobile-created demands
+    mobile_demands = db.query(HubDemand).filter(
         HubDemand.store_token == t_clean
     ).order_by(HubDemand.created_at.desc()).limit(100).all()
 
     items = []
-    for d in demands:
+    seen_keys = set()
+    for d in mobile_demands:
+        key = (d.item_description.strip().lower(), (d.customer_phone or "").strip())
+        seen_keys.add(key)
         items.append({
             "id": d.id,
             "item_description": d.item_description,
@@ -841,10 +880,18 @@ def get_store_demands_for_mobile(token: str, db: Session = Depends(get_db)):
             "customer_name": d.customer_name,
             "customer_phone": d.customer_phone,
             "request_count": d.request_count,
+            "urgency": "NORMAL",
             "status": "ORDERED_WITH_VENDOR" if d.synced_to_pos else "PENDING_PROCUREMENT",
             "notes": d.notes,
-            "created_at": d.created_at.isoformat()
+            "created_at": d.created_at.isoformat() if d.created_at else None
         })
+
+    for dd in desktop_demands:
+        key = (dd.get("item_description", "").strip().lower(), (dd.get("customer_phone") or "").strip())
+        if key not in seen_keys:
+            items.append(dd)
+            seen_keys.add(key)
+
     return {"demands": items}
 
 @app.post("/api/v1/hub/stores/{token}/demands")

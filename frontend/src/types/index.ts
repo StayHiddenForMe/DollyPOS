@@ -199,6 +199,7 @@ export interface StoreSettings {
   upi_id: string;
   show_upi_qr_on_bill?: boolean;
   opening_date?: string;
+  bill_prefix?: string;
   bill_header?: string;
   bill_footer?: string;
   footer_font_size?: string;
