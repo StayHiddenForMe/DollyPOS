@@ -35,7 +35,7 @@ import { DemandItem } from '../types';
 
 export const DemandLogScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { isOnline } = useConnection();
+  const { isOnline, activeStore } = useConnection();
 
   const [demands, setDemands] = useState<DemandItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -80,7 +80,7 @@ export const DemandLogScreen: React.FC = () => {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [isOnline, statusFilter]);
+  }, [isOnline, statusFilter, activeStore?.id]);
 
   useEffect(() => {
     fetchDemands();
@@ -178,8 +178,11 @@ export const DemandLogScreen: React.FC = () => {
     Linking.openURL(`tel:${phone}`);
   };
 
-  // Search filter
+  // Search & tab status filter
   const filteredDemands = demands.filter((d) => {
+    if (statusFilter !== 'ALL' && d.status !== statusFilter) {
+      return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (

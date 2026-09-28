@@ -48,7 +48,7 @@ const formatDateYMD = (d: Date): string => {
 export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const { setLiveShopName, checkConnection } = useConnection();
+  const { setLiveShopName, checkConnection, activeStore } = useConnection();
 
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,25 +63,31 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
   const [endDate, setEndDate] = useState<string>(todayStr);
   const [showCustomRange, setShowCustomRange] = useState(false);
 
-  // 1. Instant Offline Cache Load (Runs in 0ms on startup even if laptop is OFF)
+  // 1. Instant Offline Cache Load (Scoped per active store)
   useEffect(() => {
     const loadCachedSnapshot = async () => {
       try {
-        const cachedJson = await AsyncStorage.getItem('@dolly_pos_cached_overview');
-        const cachedTime = await AsyncStorage.getItem('@dolly_pos_cached_overview_time');
+        const cacheKey = activeStore?.id ? `@dolly_pos_cached_overview_${activeStore.id}` : '@dolly_pos_cached_overview';
+        const cacheTimeKey = activeStore?.id ? `@dolly_pos_cached_overview_time_${activeStore.id}` : '@dolly_pos_cached_overview_time';
+        const cachedJson = await AsyncStorage.getItem(cacheKey);
+        const cachedTime = await AsyncStorage.getItem(cacheTimeKey);
         if (cachedJson) {
           const parsed = JSON.parse(cachedJson);
           setData(parsed);
           setIsOfflineSnapshot(true);
           setOfflineTimestamp(cachedTime);
           setLoading(false);
+        } else {
+          setData(null);
+          setLoading(true);
         }
       } catch (err) {
         console.warn('Failed to load cached overview snapshot:', err);
       }
     };
     loadCachedSnapshot();
-  }, []);
+    fetchOverview(period, startDate, endDate);
+  }, [activeStore?.id]);
 
   const isFetchingRef = useRef(false);
 
@@ -102,9 +108,11 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
           setLiveShopName(res.shop_name);
         }
         if (p === 'TODAY') {
-          AsyncStorage.setItem('@dolly_pos_cached_overview', JSON.stringify(res)).catch(() => {});
+          const cacheKey = activeStore?.id ? `@dolly_pos_cached_overview_${activeStore.id}` : '@dolly_pos_cached_overview';
+          const cacheTimeKey = activeStore?.id ? `@dolly_pos_cached_overview_time_${activeStore.id}` : '@dolly_pos_cached_overview_time';
+          AsyncStorage.setItem(cacheKey, JSON.stringify(res)).catch(() => {});
           const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
-          AsyncStorage.setItem('@dolly_pos_cached_overview_time', timeLabel).catch(() => {});
+          AsyncStorage.setItem(cacheTimeKey, timeLabel).catch(() => {});
           setOfflineTimestamp(timeLabel);
         }
       } catch (err: any) {
@@ -121,12 +129,12 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
         isFetchingRef.current = false;
       }
     },
-    []
+    [activeStore?.id]
   );
 
   useEffect(() => {
     fetchOverview(period, startDate, endDate);
-  }, [period, startDate, endDate, fetchOverview]);
+  }, [period, startDate, endDate, fetchOverview, activeStore?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

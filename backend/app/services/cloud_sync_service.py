@@ -4,7 +4,7 @@ import requests
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, text
 
 from app.models.settings import StoreSettings
 from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode
@@ -316,15 +316,128 @@ class CloudSyncService:
 
     @staticmethod
     def build_reports_payload(db: Session) -> Dict[str, Any]:
-        """Packages complete historical data (1-5+ years) for remote mobile Reports Studio queries."""
+        """Packages complete historical data (1-5+ years) with daily aggregates for 100% accurate remote mobile Reports Studio queries."""
         ist_now = get_ist_now()
 
-        # 1. Sales Invoices - Granular historical register (up to 3,000 recent bills)
+        # 0. Complete Daily Sales Summaries (Covers all 5+ years history in tiny payload, 100% accurate down to the paisa)
+        daily_res = db.execute(text("""
+            SELECT 
+                to_char(created_at + INTERVAL '330 minutes', 'YYYY-MM-DD') as day,
+                count(id) as bills,
+                sum(coalesce(subtotal, grand_total)) as gross,
+                sum(discount_amount) as discount,
+                sum(tax_amount) as tax,
+                sum(grand_total) as net
+            FROM invoices
+            WHERE is_cancelled = false
+            GROUP BY day
+            ORDER BY day DESC
+        """)).fetchall()
+        daily_sales = {}
+        for r in daily_res:
+            if r[0]:
+                daily_sales[r[0]] = {
+                    "bills": int(r[1] or 0),
+                    "gross": round(float(r[2] or 0.0), 2),
+                    "discount": round(float(r[3] or 0.0), 2),
+                    "tax": round(float(r[4] or 0.0), 2),
+                    "net": round(float(r[5] or 0.0), 2)
+                }
+
+        # 0b. Daily Payments Breakdown (Combines payments table and direct invoice payments)
+        daily_payments = {}
+        pmt_res = db.execute(text("""
+            SELECT 
+                to_char(created_at + INTERVAL '330 minutes', 'YYYY-MM-DD') as day,
+                payment_mode,
+                count(id) as bills,
+                sum(amount) as total_amt
+            FROM payments
+            GROUP BY day, payment_mode
+        """)).fetchall()
+        for r in pmt_res:
+            day = r[0]
+            if not day:
+                continue
+            if day not in daily_payments:
+                daily_payments[day] = {"CASH": 0.0, "UPI": 0.0, "CARD": 0.0, "CREDIT": 0.0, "bills": 0}
+            m = str(r[1] or "CASH").upper()
+            amt = float(r[3] or 0.0)
+            daily_payments[day]["bills"] += int(r[2] or 0)
+            if "CASH" in m:
+                daily_payments[day]["CASH"] += amt
+            elif "UPI" in m or "ONLINE" in m:
+                daily_payments[day]["UPI"] += amt
+            elif "CARD" in m:
+                daily_payments[day]["CARD"] += amt
+            else:
+                daily_payments[day]["CREDIT"] += amt
+
+        inv_pmt_res = db.execute(text("""
+            SELECT 
+                to_char(created_at + INTERVAL '330 minutes', 'YYYY-MM-DD') as day,
+                payment_mode,
+                count(id) as bills,
+                sum(coalesce(paid_amount, grand_total)) as total_amt
+            FROM invoices
+            WHERE is_cancelled = false AND id NOT IN (SELECT DISTINCT invoice_id FROM payments)
+            GROUP BY day, payment_mode
+        """)).fetchall()
+        for r in inv_pmt_res:
+            day = r[0]
+            if not day:
+                continue
+            if day not in daily_payments:
+                daily_payments[day] = {"CASH": 0.0, "UPI": 0.0, "CARD": 0.0, "CREDIT": 0.0, "bills": 0}
+            m = str(r[1] or "CASH").upper()
+            amt = float(r[3] or 0.0)
+            daily_payments[day]["bills"] += int(r[2] or 0)
+            if "CASH" in m:
+                daily_payments[day]["CASH"] += amt
+            elif "UPI" in m or "ONLINE" in m:
+                daily_payments[day]["UPI"] += amt
+            elif "CARD" in m:
+                daily_payments[day]["CARD"] += amt
+            else:
+                daily_payments[day]["CREDIT"] += amt
+
+        for d in daily_payments:
+            for k in ["CASH", "UPI", "CARD", "CREDIT"]:
+                daily_payments[d][k] = round(daily_payments[d][k], 2)
+
+        # 0c. Daily Categories Breakdown (Category revenue by date)
+        daily_categories = {}
+        cat_res = db.execute(text("""
+            SELECT 
+                to_char(i.created_at + INTERVAL '330 minutes', 'YYYY-MM-DD') as day,
+                coalesce(c.name, 'General') as cat_name,
+                sum(it.quantity) as qty,
+                sum(it.total_price) as rev
+            FROM invoice_items it
+            JOIN invoices i ON i.id = it.invoice_id
+            LEFT JOIN products p ON p.id = it.product_id
+            LEFT JOIN categories c ON c.id = p.category_id
+            WHERE i.is_cancelled = false AND i.created_at >= '2025-01-01'
+            GROUP BY day, cat_name
+        """)).fetchall()
+        for r in cat_res:
+            day = r[0]
+            if not day:
+                continue
+            if day not in daily_categories:
+                daily_categories[day] = {}
+            cname = r[1]
+            daily_categories[day][cname] = {
+                "qty": int(r[2] or 0),
+                "rev": round(float(r[3] or 0.0), 2)
+            }
+
+        # 1. Sales Invoices - Granular bills (all of current year + recent, up to 15,000)
         invs = (
             db.query(Invoice)
             .filter(Invoice.is_cancelled == False)
             .order_by(Invoice.created_at.desc())
-            .limit(3000)
+            .limit(15000)
             .all()
         )
         sales_invoices = []
@@ -344,8 +457,8 @@ class CloudSyncService:
                 "net_amount": round(float(inv.grand_total), 2)
             })
 
-        # 2. Payments - Granular payments (up to 3,000 recent)
-        pmts = db.query(Payment).order_by(Payment.created_at.desc()).limit(3000).all()
+        # 2. Payments - Granular payments (up to 5,000 recent)
+        pmts = db.query(Payment).order_by(Payment.created_at.desc()).limit(5000).all()
         payments = []
         for p in pmts:
             ist_dt = p.created_at + IST_OFFSET
@@ -355,8 +468,8 @@ class CloudSyncService:
                 "amount": round(float(p.amount), 2)
             })
 
-        # 3. Expenses - Full historical expenses (up to 1,000 recent)
-        exps = db.query(Expense).order_by(Expense.expense_date.desc()).limit(1000).all()
+        # 3. Expenses - Full historical expenses (up to 2,000 recent)
+        exps = db.query(Expense).order_by(Expense.expense_date.desc()).limit(2000).all()
         expenses = []
         for e in exps:
             ist_dt = (e.expense_date + IST_OFFSET) if e.expense_date else ist_now
@@ -410,7 +523,7 @@ class CloudSyncService:
                 "est_cost": round(suggested * float(p.purchase_price or 0.0), 2)
             })
 
-        # 6. Categories revenue - All historical data
+        # 6. Categories revenue - All historical summary
         cats_query = (
             db.query(
                 Category.name,
@@ -434,6 +547,9 @@ class CloudSyncService:
             })
 
         return {
+            "daily_sales": daily_sales,
+            "daily_payments": daily_payments,
+            "daily_categories": daily_categories,
             "sales_invoices": sales_invoices,
             "payments": payments,
             "expenses": expenses,
@@ -560,7 +676,31 @@ class CloudSyncService:
                             db.add(new_demand)
                             pulled_demands_count += 1
 
-                if pulled_demands_count > 0:
+                # Check for pending products added remotely from mobile app to pull into local DB
+                pending_products = res_data.get("pending_products", [])
+                pulled_products_count = 0
+                for p in pending_products:
+                    p_name = p.get("name", "").strip()
+                    p_barcode = p.get("barcode", "").strip()
+                    if p_name and p_barcode:
+                        existing_p = db.query(Product).filter(Product.barcode == p_barcode).first()
+                        if not existing_p:
+                            new_prod = Product(
+                                name=p_name,
+                                barcode=p_barcode,
+                                category_id=p.get("category_id"),
+                                purchase_price=float(p.get("purchase_price", 0.0)),
+                                selling_price=float(p.get("selling_price", 0.0)),
+                                mrp=float(p.get("mrp") or p.get("selling_price", 0.0)),
+                                stock_quantity=int(p.get("stock_quantity", 1)),
+                                min_stock_alert=int(p.get("min_stock_alert", 3)),
+                                is_active=True,
+                                created_at=datetime.utcnow()
+                            )
+                            db.add(new_prod)
+                            pulled_products_count += 1
+
+                if (pulled_demands_count + pulled_products_count) > 0:
                     db.commit()
 
                 st.last_cloud_sync_at = datetime.utcnow()

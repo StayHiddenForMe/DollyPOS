@@ -32,6 +32,7 @@ import { DatePickerModal } from '../components/DatePickerModal';
 import { ReportResponse } from '../types';
 import { formatINR } from '../utils/formatters';
 import { useTheme } from '../context/ThemeContext';
+import { useConnection } from '../context/ConnectionContext';
 import { colors } from '../theme/colors';
 
 type ReportType = 'SALES' | 'PAYMENTS' | 'CATEGORIES' | 'EXPENSES' | 'DAMAGED' | 'PLANNER';
@@ -47,6 +48,7 @@ const formatDateYMD = (d: Date): string => {
 export const ReportsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { colors: themeColors, isDark } = useTheme();
+  const { activeStore } = useConnection();
   const todayStr = formatDateYMD(new Date());
 
   const [period, setPeriod] = useState<PresetPeriod>('TODAY');
@@ -113,7 +115,7 @@ export const ReportsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, reportType]);
+  }, [startDate, endDate, reportType, activeStore?.id]);
 
   useEffect(() => {
     fetchReports();

@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const { isOnline, isPosOnline, latencyMs, networkInfo, checkConnection } = useConnection();
+  const { isOnline, isPosOnline, latencyMs, networkInfo, activeStore, checkConnection } = useConnection();
   const { alertCount: globalAlertCount, lowStockItems: globalLowStockItems } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showStoreSwitcher, setShowStoreSwitcher] = useState(false);
@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   const effectiveAlertCount = alertCount !== undefined ? alertCount : globalAlertCount;
   const effectiveLowStockItems = lowStockItems !== undefined ? lowStockItems : globalLowStockItems;
 
-  const displayStoreName = storeName || networkInfo?.shop_name || 'Dolly POS';
+  const displayStoreName = storeName || activeStore?.name || networkInfo?.shop_name || 'Dolly POS';
 
   const handleNotificationPress = () => {
     if (onNotificationPress) {

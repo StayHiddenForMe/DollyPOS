@@ -67,8 +67,28 @@ export const initializeApiConfig = async (): Promise<{
   return { serverUrl: cachedServerUrl, token: cachedToken, activeStore: cachedActiveStore };
 };
 
+export const normalizeServerUrl = (url: string): string => {
+  let clean = url.trim().replace(/\/$/, '');
+  if (!clean) return DEFAULT_SERVER_URL;
+  if (clean.startsWith('DLY-')) {
+    const parts = clean.replace('DLY-', '').split('-');
+    if (parts.length === 5) {
+      return `http://${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}:${parts[4]}`;
+    }
+  }
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+    clean = `http://${clean}`;
+  }
+  // If IP address without port is provided (e.g. 192.168.0.145), append :8000
+  const hostPart = clean.replace(/^https?:\/\//, '');
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostPart)) {
+    clean = `${clean}:8000`;
+  }
+  return clean;
+};
+
 export const setServerUrl = async (url: string): Promise<void> => {
-  const cleanUrl = url.trim().replace(/\/$/, '');
+  const cleanUrl = normalizeServerUrl(url);
   cachedServerUrl = cleanUrl;
   await AsyncStorage.setItem(STORAGE_KEYS.SERVER_URL, cleanUrl);
 };
@@ -391,7 +411,7 @@ export const api = {
     return res.data;
   },
 
-  // 7. Add Product directly from mobile
+  // 7. Add Product directly from mobile (Cloud Hub & Direct LAN)
   async addProduct(data: {
     name: string;
     barcode?: string;
@@ -402,6 +422,24 @@ export const api = {
     stock_quantity: number;
     min_stock_alert: number;
   }): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.post(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/inventory`,
+          data,
+          { timeout: 15000 }
+        );
+        return res.data;
+      } catch (hubErr) {
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.post('/mobile/inventory', data);
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
     const client = getClient();
     const res = await client.post('/mobile/inventory', data);
     return res.data;
@@ -463,7 +501,8 @@ export const api = {
       const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, {
-          timeout: 6000,
+          params: { status: status || undefined },
+          timeout: 10000,
         });
         return res.data?.demands || [];
       } catch (e) {
@@ -491,7 +530,7 @@ export const api = {
       const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.post(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, data, {
-          timeout: 6000,
+          timeout: 10000,
         });
         return res.data;
       } catch (e) {
@@ -504,12 +543,37 @@ export const api = {
   },
 
   async updateDemandStatus(id: number, status: string): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.put(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands/${id}/status`,
+          { status },
+          { timeout: 10000 }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to local client if available
+      }
+    }
     const client = getClient();
     const res = await client.put(`/procurement/lost-demand/${id}/status`, { status });
     return res.data;
   },
 
   async deleteDemand(id: number): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.delete(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands/${id}`,
+          { timeout: 10000 }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to local client if available
+      }
+    }
     const client = getClient();
     const res = await client.delete(`/procurement/lost-demand/${id}`);
     return res.data;

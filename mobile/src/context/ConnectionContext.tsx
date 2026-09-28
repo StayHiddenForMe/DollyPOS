@@ -198,14 +198,30 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
       setStores(updated);
       setActiveStoreState(target);
 
+      // Immediately update shop_name in networkInfo so Header and other screens update instantly
+      setNetworkInfo((prev) => ({
+        shop_name: target.name,
+        tagline: target.tagline || 'Store Access Token Connected',
+        local_ip: target.url || prev?.local_ip || 'Cloud',
+        port: prev?.port || 443,
+        api_base_url: target.hub_url || prev?.api_base_url || DEFAULT_HUB_URL,
+        server_time: new Date().toISOString(),
+        status: target.is_pos_online ? 'ONLINE' : 'POS_OFFLINE',
+      }));
+
       // Trigger instant check for new store
       if (target.token) {
         api.checkStoreStatus(target.token, target.hub_url).then((statusRes) => {
           setIsPosOnline(Boolean(statusRes.is_pos_online));
           setIsOnline(true);
+          if (statusRes.shop_name) {
+            setNetworkInfo((prev) => prev ? { ...prev, shop_name: statusRes.shop_name } : null);
+          }
         }).catch(() => {
           setIsPosOnline(false);
         });
+      } else if (target.url) {
+        updateServerUrl(target.url);
       }
 
       return true;

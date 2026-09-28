@@ -41,7 +41,7 @@ import { Header } from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme } from '../context/ThemeContext';
-import { api, getSavedBusinesses, saveBusinessesList } from '../services/api';
+import { api, getSavedBusinesses, saveBusinessesList, DEFAULT_HUB_URL } from '../services/api';
 import { BusinessStore } from '../types';
 
 const normalizeServerInput = (input: string): string => {
@@ -71,10 +71,15 @@ export const SettingsScreen: React.FC = () => {
     isChecking,
     networkInfo,
     latencyMs,
+    stores,
+    activeStore,
     updateServerUrl,
     checkConnection,
     switchBusiness,
     switchStore,
+    removeStore,
+    addStoreByToken,
+    refreshStores,
   } = useConnection();
 
   const [inputUrl, setInputUrl] = useState(serverUrl);
@@ -87,21 +92,14 @@ export const SettingsScreen: React.FC = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const [scannedRecently, setScannedRecently] = useState(false);
 
-  // Multi-business stores
-  const [businesses, setBusinesses] = useState<BusinessStore[]>([]);
+  // Add store modal state
   const [isAddStoreModalOpen, setIsAddStoreModalOpen] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
   const [newStoreUrl, setNewStoreUrl] = useState('');
 
   useEffect(() => {
     setInputUrl(serverUrl);
-    loadBusinesses();
   }, [serverUrl]);
-
-  const loadBusinesses = async () => {
-    const list = await getSavedBusinesses();
-    setBusinesses(list);
-  };
 
   const handleSaveAndTest = async () => {
     if (!inputUrl.trim()) {
@@ -149,6 +147,43 @@ export const SettingsScreen: React.FC = () => {
     setScannedRecently(true);
     setIsQrScannerOpen(false);
 
+    let token = data.trim();
+    let hubUrl = DEFAULT_HUB_URL;
+    let isToken = false;
+
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.store_token) {
+        token = parsed.store_token;
+        isToken = true;
+      }
+      if (parsed.hub_url) {
+        hubUrl = parsed.hub_url;
+      }
+    } catch {
+      if (token.startsWith('DLY-STR') || (token.startsWith('DLY-') && token.length < 20 && !token.includes('.'))) {
+        isToken = true;
+      }
+    }
+
+    if (isToken) {
+      setSaving(true);
+      const res = await addStoreByToken(token.toUpperCase(), hubUrl);
+      setSaving(false);
+      if (res.success && res.store) {
+        Alert.alert(
+          'Store Paired via QR Code!',
+          `Successfully connected "${res.store.name}". Switched to this store.`
+        );
+      } else {
+        Alert.alert(
+          'Pairing Failed',
+          res.error || 'Could not verify Store Access Token via Cloud Hub.'
+        );
+      }
+      return;
+    }
+
     const clean = normalizeServerInput(data);
     setInputUrl(clean);
     setSaving(true);
@@ -177,12 +212,6 @@ export const SettingsScreen: React.FC = () => {
     } else {
       ok = await switchBusiness(store.url || serverUrl, store.name);
     }
-    const updated = businesses.map((b) => ({
-      ...b,
-      is_active: b.id === store.id,
-    }));
-    setBusinesses(updated);
-    await saveBusinessesList(updated);
     setSaving(false);
 
     if (ok) {
@@ -199,14 +228,39 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const handleAddStore = async () => {
+    const rawInput = newStoreUrl.trim();
     const name = newStoreName.trim();
-    const rawUrl = newStoreUrl.trim();
-    if (!name || !rawUrl) {
-      Alert.alert('Required', 'Please provide both store name and server URL / pairing key.');
+    if (!rawInput) {
+      Alert.alert('Required', 'Please enter a Store Access Token or Server URL.');
       return;
     }
 
-    const cleanUrl = normalizeServerInput(rawUrl);
+    // 1. If user entered a Store Access Token (e.g. DLY-STR...)
+    if (rawInput.toUpperCase().startsWith('DLY-STR') || (!rawInput.includes('.') && !rawInput.includes('/') && rawInput.length >= 8)) {
+      setSaving(true);
+      const res = await addStoreByToken(rawInput.toUpperCase());
+      setSaving(false);
+      if (res.success && res.store) {
+        setNewStoreName('');
+        setNewStoreUrl('');
+        setIsAddStoreModalOpen(false);
+        Alert.alert(
+          'Store Added Successfully',
+          `"${res.store.name}" was added to your businesses list and is now active.`
+        );
+      } else {
+        Alert.alert('Error', res.error || 'Could not verify Store Access Token.');
+      }
+      return;
+    }
+
+    // 2. Direct LAN IP / URL
+    if (!name) {
+      Alert.alert('Required', 'Please provide a Branch / Store Name.');
+      return;
+    }
+
+    const cleanUrl = normalizeServerInput(rawInput);
     const newStore: BusinessStore = {
       id: `store_${Date.now()}`,
       name,
@@ -214,9 +268,9 @@ export const SettingsScreen: React.FC = () => {
       is_active: false,
     };
 
-    const updated = [...businesses, newStore];
-    setBusinesses(updated);
+    const updated = [...stores, newStore];
     await saveBusinessesList(updated);
+    await refreshStores();
 
     setNewStoreName('');
     setNewStoreUrl('');
@@ -229,7 +283,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const handleDeleteStore = async (store: BusinessStore) => {
-    if (businesses.length <= 1) {
+    if (stores.length <= 1) {
       Alert.alert('Action Denied', 'You must have at least one store registered.');
       return;
     }
@@ -243,9 +297,7 @@ export const SettingsScreen: React.FC = () => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            const updated = businesses.filter((b) => b.id !== store.id);
-            setBusinesses(updated);
-            await saveBusinessesList(updated);
+            await removeStore(store.id);
           },
         },
       ]
@@ -403,8 +455,8 @@ export const SettingsScreen: React.FC = () => {
           </Text>
 
           <View style={styles.storeList}>
-            {businesses.map((b) => {
-              const isActive = b.url === serverUrl;
+            {stores.map((b) => {
+              const isActive = b.id === activeStore?.id;
               return (
                 <View
                   key={b.id}
@@ -440,7 +492,7 @@ export const SettingsScreen: React.FC = () => {
                   </View>
 
                   <Text style={[styles.storeUrl, { color: colors.textMuted }]} numberOfLines={1}>
-                    {b.url}
+                    {b.token ? `Cloud Token: ${b.token}` : (b.url || 'Configured')}
                   </Text>
 
                   <View style={styles.storeCardActions}>
@@ -461,7 +513,7 @@ export const SettingsScreen: React.FC = () => {
                       </View>
                     )}
 
-                    {!isActive && businesses.length > 1 && (
+                    {!isActive && stores.length > 1 && (
                       <TouchableOpacity
                         style={[styles.deleteStoreBtn, { backgroundColor: colors.dangerLight }]}
                         onPress={() => handleDeleteStore(b)}
@@ -744,8 +796,29 @@ export const SettingsScreen: React.FC = () => {
               Add New Business Branch
             </Text>
             <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
-              Enter branch name and server URL or pairing key (e.g. DLY-192-168-0-145-8000).
+              Connect via 1-tap QR code scan or enter your branch Store Access Token / LAN IP.
             </Text>
+
+            {/* 1-Tap QR Scan Button */}
+            <TouchableOpacity
+              style={[styles.modalQrBtn, { backgroundColor: colors.brand[600] }]}
+              onPress={() => {
+                setIsAddStoreModalOpen(false);
+                setTimeout(() => {
+                  handleOpenScanner();
+                }, 300);
+              }}
+              activeOpacity={0.85}
+            >
+              <QrCode size={18} color="#ffffff" />
+              <Text style={styles.modalQrBtnText}>Scan Store Pairing QR Code</Text>
+            </TouchableOpacity>
+
+            <View style={styles.modalOrRow}>
+              <View style={[styles.modalOrLine, { backgroundColor: colors.cardBorder }]} />
+              <Text style={[styles.modalOrText, { color: colors.textMuted }]}>OR ENTER DETAILS</Text>
+              <View style={[styles.modalOrLine, { backgroundColor: colors.cardBorder }]} />
+            </View>
 
             <Text style={[styles.modalLabel, { color: colors.textMuted }]}>Branch / Store Name</Text>
             <TextInput
@@ -756,12 +829,12 @@ export const SettingsScreen: React.FC = () => {
               placeholderTextColor={colors.textMuted}
             />
 
-            <Text style={[styles.modalLabel, { color: colors.textMuted }]}>Server URL or Pairing Key</Text>
+            <Text style={[styles.modalLabel, { color: colors.textMuted }]}>Store Access Token or Laptop LAN IP</Text>
             <TextInput
               style={[styles.modalInput, { backgroundColor: colors.surfaceSubtle, borderColor: colors.cardBorder, color: colors.textPrimary }]}
               value={newStoreUrl}
               onChangeText={setNewStoreUrl}
-              placeholder="http://192.168.1.50:8000 or Cloud Tunnel URL"
+              placeholder="e.g. DLY-STR2-9A3F or 192.168.0.150:8000"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -1257,5 +1330,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  modalQrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  modalQrBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalOrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 8,
+  },
+  modalOrLine: {
+    flex: 1,
+    height: 1,
+  },
+  modalOrText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
 });

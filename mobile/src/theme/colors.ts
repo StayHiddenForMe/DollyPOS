@@ -60,7 +60,7 @@ export const lightColors: ThemeColors = {
   surfaceSubtle: '#f1f5f9',
   textPrimary: '#0f172a',
   textSecondary: '#475569',
-  textMuted: '#94a3b8',
+  textMuted: '#64748b',
   textWhite: '#ffffff',
   success: '#10b981',
   successLight: '#ecfdf5',

@@ -429,7 +429,7 @@ export const LoginScreen: React.FC = () => {
                         setTokenError(null);
                       }}
                       placeholder="e.g. DLY-STR1-9A3F"
-                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
                       autoCapitalize="characters"
                       autoCorrect={false}
                     />
@@ -473,7 +473,7 @@ export const LoginScreen: React.FC = () => {
                       value={hubUrlInput}
                       onChangeText={setHubUrlInput}
                       placeholder="https://store1-hub.onrender.com"
-                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
                       autoCapitalize="none"
                       autoCorrect={false}
                     />
@@ -514,7 +514,7 @@ export const LoginScreen: React.FC = () => {
                       value={localIpInput}
                       onChangeText={setLocalIpInput}
                       placeholder="http://192.168.1.100:8000"
-                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
                       autoCapitalize="none"
                       autoCorrect={false}
                     />
@@ -532,7 +532,7 @@ export const LoginScreen: React.FC = () => {
                       value={username}
                       onChangeText={setUsername}
                       placeholder="e.g. admin or owner"
-                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
                       autoCapitalize="none"
                       autoCorrect={false}
                     />
@@ -550,7 +550,7 @@ export const LoginScreen: React.FC = () => {
                       value={password}
                       onChangeText={setPassword}
                       placeholder="Enter password"
-                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
                       secureTextEntry
                     />
                   </View>

@@ -31,6 +31,7 @@ import {
 import { Header } from '../components/Header';
 import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useConnection } from '../context/ConnectionContext';
 import { InventoryItem, InventoryResponse, CategoryItem } from '../types';
 import { formatINR } from '../utils/formatters';
 import { colors } from '../theme/colors';
@@ -38,6 +39,7 @@ import { colors } from '../theme/colors';
 export const InventoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { colors: themeColors, isDark } = useTheme();
+  const { activeStore } = useConnection();
   const [data, setData] = useState<InventoryResponse | null>(null);
   const [products, setProducts] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState('');
@@ -81,7 +83,8 @@ export const InventoryScreen: React.FC = () => {
         } else {
           setProducts(res.products);
           if (pageNum === 1 && !searchQuery && !lowOnly) {
-            AsyncStorage.setItem('@dolly_pos_cached_inventory', JSON.stringify(res.products)).catch(() => {});
+            const cacheKey = activeStore?.id ? `@dolly_pos_cached_inventory_${activeStore.id}` : '@dolly_pos_cached_inventory';
+            AsyncStorage.setItem(cacheKey, JSON.stringify(res.products)).catch(() => {});
           }
         }
       } catch (err: any) {
@@ -92,7 +95,7 @@ export const InventoryScreen: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [search, lowStockOnly]
+    [search, lowStockOnly, activeStore?.id]
   );
 
   useEffect(() => {
@@ -100,8 +103,9 @@ export const InventoryScreen: React.FC = () => {
   }, [lowStockOnly]);
 
   useEffect(() => {
-    // 1. Instant Offline Load from cache
-    AsyncStorage.getItem('@dolly_pos_cached_inventory')
+    // 1. Instant Offline Load from store-specific cache
+    const cacheKey = activeStore?.id ? `@dolly_pos_cached_inventory_${activeStore.id}` : '@dolly_pos_cached_inventory';
+    AsyncStorage.getItem(cacheKey)
       .then((json) => {
         if (json) {
           const parsed = JSON.parse(json);
@@ -109,13 +113,17 @@ export const InventoryScreen: React.FC = () => {
             setProducts(parsed);
             setLoading(false);
           }
+        } else {
+          setProducts([]);
+          setLoading(true);
         }
       })
       .catch(() => {});
 
     // Load categories for modal dropdown
     api.getCategories().then(setCategories).catch(() => {});
-  }, []);
+    fetchInventory(1, search, lowStockOnly, false);
+  }, [activeStore?.id]);
 
   const handleSearch = (text: string) => {
     setSearch(text);
@@ -269,10 +277,11 @@ export const InventoryScreen: React.FC = () => {
       {/* Search & Filter Bar */}
       <View style={styles.filterSection}>
         <View style={styles.searchContainer}>
-          <Search size={17} color={colors.textMuted} style={styles.searchIcon} />
+          <Search size={17} color={themeColors.textMuted} style={styles.searchIcon} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: themeColors.textPrimary }]}
             placeholder="Search by name, barcode, or code..."
+            placeholderTextColor={themeColors.textMuted}
             value={search}
             onChangeText={handleSearch}
             clearButtonMode="while-editing"
@@ -381,6 +390,7 @@ export const InventoryScreen: React.FC = () => {
                 <TextInput
                   style={styles.inputField}
                   placeholder="e.g. Remote Control Stunt Car"
+                  placeholderTextColor={themeColors.textMuted}
                   value={newProdName}
                   onChangeText={setNewProdName}
                 />
@@ -398,6 +408,7 @@ export const InventoryScreen: React.FC = () => {
                 <TextInput
                   style={styles.inputField}
                   placeholder="Scan or type barcode"
+                  placeholderTextColor={themeColors.textMuted}
                   value={newProdBarcode}
                   onChangeText={setNewProdBarcode}
                 />
@@ -436,6 +447,7 @@ export const InventoryScreen: React.FC = () => {
                   <TextInput
                     style={styles.inputField}
                     placeholder="0"
+                    placeholderTextColor={themeColors.textMuted}
                     keyboardType="numeric"
                     value={newProdPurchase}
                     onChangeText={setNewProdPurchase}
@@ -446,6 +458,7 @@ export const InventoryScreen: React.FC = () => {
                   <TextInput
                     style={styles.inputField}
                     placeholder="0"
+                    placeholderTextColor={themeColors.textMuted}
                     keyboardType="numeric"
                     value={newProdSelling}
                     onChangeText={setNewProdSelling}
@@ -460,6 +473,7 @@ export const InventoryScreen: React.FC = () => {
                   <TextInput
                     style={styles.inputField}
                     placeholder="0"
+                    placeholderTextColor={themeColors.textMuted}
                     keyboardType="numeric"
                     value={newProdMRP}
                     onChangeText={setNewProdMRP}
@@ -470,6 +484,7 @@ export const InventoryScreen: React.FC = () => {
                   <TextInput
                     style={styles.inputField}
                     placeholder="1"
+                    placeholderTextColor={themeColors.textMuted}
                     keyboardType="numeric"
                     value={newProdStock}
                     onChangeText={setNewProdStock}
@@ -483,6 +498,7 @@ export const InventoryScreen: React.FC = () => {
                 <TextInput
                   style={styles.inputField}
                   placeholder="3"
+                  placeholderTextColor={themeColors.textMuted}
                   keyboardType="numeric"
                   value={newProdAlert}
                   onChangeText={setNewProdAlert}
