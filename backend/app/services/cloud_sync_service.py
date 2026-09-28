@@ -319,11 +319,12 @@ class CloudSyncService:
         """Packages complete historical data (1-5+ years) for remote mobile Reports Studio queries."""
         ist_now = get_ist_now()
 
-        # 1. Sales Invoices - Full historical register
+        # 1. Sales Invoices - Granular historical register (up to 3,000 recent bills)
         invs = (
             db.query(Invoice)
             .filter(Invoice.is_cancelled == False)
             .order_by(Invoice.created_at.desc())
+            .limit(3000)
             .all()
         )
         sales_invoices = []
@@ -343,8 +344,8 @@ class CloudSyncService:
                 "net_amount": round(float(inv.grand_total), 2)
             })
 
-        # 2. Payments - Full historical payments
-        pmts = db.query(Payment).order_by(Payment.created_at.desc()).all()
+        # 2. Payments - Granular payments (up to 3,000 recent)
+        pmts = db.query(Payment).order_by(Payment.created_at.desc()).limit(3000).all()
         payments = []
         for p in pmts:
             ist_dt = p.created_at + IST_OFFSET
@@ -354,8 +355,8 @@ class CloudSyncService:
                 "amount": round(float(p.amount), 2)
             })
 
-        # 3. Expenses - Full historical expenses
-        exps = db.query(Expense).order_by(Expense.expense_date.desc()).all()
+        # 3. Expenses - Full historical expenses (up to 1,000 recent)
+        exps = db.query(Expense).order_by(Expense.expense_date.desc()).limit(1000).all()
         expenses = []
         for e in exps:
             ist_dt = (e.expense_date + IST_OFFSET) if e.expense_date else ist_now
@@ -500,7 +501,7 @@ class CloudSyncService:
             response = requests.post(
                 sync_endpoint,
                 json=payload,
-                timeout=10.0,
+                timeout=45.0,
                 headers={"Content-Type": "application/json"}
             )
 
