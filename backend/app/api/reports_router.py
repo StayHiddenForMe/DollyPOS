@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, or_, extract
 from datetime import datetime, timedelta, date
 from typing import Optional, List, Dict, Any
-import pandas as pd
 from collections import defaultdict
 
 from app.core.database import get_db
@@ -867,6 +866,7 @@ def export_sales_excel(
         Invoice.payment_mode
     ).order_by(desc(Invoice.created_at)).all()
 
+    import openpyxl
     wb = openpyxl.Workbook(write_only=True)
     ws = wb.create_sheet(title='Sales Report')
     ws.append([
@@ -936,6 +936,7 @@ def export_inventory_excel(
             "Damaged Qty": p.damaged_quantity
         })
 
+    import pandas as pd
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:

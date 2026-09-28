@@ -4,7 +4,7 @@ from sqlalchemy import or_, and_, desc, func, case
 from typing import List, Optional
 from datetime import datetime
 import io
-import pandas as pd
+import math
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -21,6 +21,7 @@ from app.core.audit import log_action
 from app.services.analytics_service import analytics_service
 
 router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
+
 
 class SpeedDialToggleRequest(BaseModel):
     is_speed_dial: bool
@@ -568,6 +569,7 @@ def export_inventory_excel(
             "GST (%)": p.gst_percent
         })
 
+    import pandas as pd
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -588,6 +590,7 @@ async def import_inventory_excel(
     db: Session = Depends(get_db)
 ):
     """Imports products from Excel (.xlsx / .xls) or CSV into active inventory catalog."""
+    import pandas as pd
     contents = await file.read()
     try:
         if file.filename.endswith('.csv'):
@@ -651,14 +654,14 @@ async def import_inventory_excel(
         def safe_float(v, default=0.0):
             try:
                 val = float(v)
-                return 0.0 if pd.isna(val) else val
+                return 0.0 if math.isnan(val) else val
             except (ValueError, TypeError):
                 return default
 
         def safe_int(v, default=0):
             try:
                 val = int(float(v))
-                return 0 if pd.isna(val) else val
+                return 0 if math.isnan(val) else val
             except (ValueError, TypeError):
                 return default
 

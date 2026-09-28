@@ -66,7 +66,7 @@ export const ReturnsPage: React.FC = () => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${pfx}-${year}${month}-`;
+    return `${pfx}-${year}${month}`;
   };
 
   const todayPlaceholder = `${currentPrefix}-${getTodayDateStr()}-0001`;
@@ -75,19 +75,16 @@ export const ReturnsPage: React.FC = () => {
 
   // Automatically update search prefix whenever store settings change or load
   useEffect(() => {
-    if (settings?.bill_prefix) {
-      const pfx = settings.bill_prefix.trim().toUpperCase();
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      setBillSearch(prev => {
-        // If empty or still default prefix without a full bill number, update to new prefix
-        if (!prev || prev.includes('-202') || prev.startsWith('DLY-') || prev.startsWith('BILL-')) {
-          return `${pfx}-${year}${month}-`;
-        }
-        return prev;
-      });
-    }
+    const pfx = (settings?.bill_prefix?.trim() || 'DLY').toUpperCase();
+    const targetPrefix = getMonthPrefix(pfx);
+    setBillSearch(prev => {
+      // If empty or still default prefix without a full bill number, update to new prefix
+      const isOnlyPrefix = !prev || prev.trim() === '' || (prev.split('-').length <= 2 && prev.length <= (pfx.length + 8));
+      if (isOnlyPrefix || prev.startsWith('DLY-') || prev.startsWith('BILL-')) {
+        return targetPrefix;
+      }
+      return prev;
+    });
   }, [settings?.bill_prefix]);
   const [loadingBill, setLoadingBill] = useState(false);
   const [billData, setBillData] = useState<any | null>(null);

@@ -1,3 +1,18 @@
+import os
+import sys
+import tempfile
+import time
+import traceback
+
+BOOT_LOG = os.path.join(tempfile.gettempdir(), "dollypos_boot.log")
+def log_main(msg):
+    try:
+        with open(BOOT_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [MAIN] {msg}\n")
+            f.flush()
+    except Exception:
+        pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -12,12 +27,15 @@ from app.models.settings import StoreSettings
 from app.models.category import Category, Subcategory
 from app.core.security import get_password_hash
 
+
 def seed_initial_data():
     """Ensures database has default Owner account, store settings, starter categories, and all required columns."""
+    log_main("seed_initial_data() entered")
     db = SessionLocal()
     try:
-        # 1. Create tables if they don't exist
+        log_main("Creating all tables via Base.metadata.create_all...")
         Base.metadata.create_all(bind=engine)
+        log_main("Tables created or verified.")
 
         # 2. Run auto-migrations for newly added columns across tables
         migration_statements = [
@@ -132,12 +150,14 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_error TEXT",
             "CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments (invoice_id)",
         ]
+        log_main(f"Executing {len(migration_statements)} migration statements...")
         for stmt in migration_statements:
             try:
                 db.execute(text(stmt))
                 db.commit()
             except Exception:
                 db.rollback()
+        log_main("Migration statements completed.")
 
         # 3. Check and seed Store Settings
         store_settings = db.query(StoreSettings).first()
@@ -219,16 +239,19 @@ def seed_initial_data():
                     db.add(sub)
 
         db.commit()
+        log_main("seed_initial_data() finished successfully.")
     except Exception as e:
-        print(f"Database bootstrap warning: {e}")
+        log_main(f"Database bootstrap warning: {e}\n{traceback.format_exc()}")
         db.rollback()
     finally:
         db.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log_main("lifespan started")
     # Startup bootstrap
     seed_initial_data()
+    log_main("seed_initial_data completed")
     # Automatic check & sync of offline SQLite bills into PostgreSQL
     try:
         from app.services.offline_sync_service import offline_sync_service
@@ -273,7 +296,9 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(180)
 
     sync_task = asyncio.create_task(periodic_cloud_sync())
+    log_main("lifespan ready, yielding to server...")
     yield
+    log_main("lifespan shutdown triggered")
     sync_task.cancel()
 
 from starlette.middleware.gzip import GZipMiddleware
@@ -318,6 +343,36 @@ def api_v1_health():
 @app.post(f"{settings.API_V1_STR}/system/heartbeat")
 def client_heartbeat_ping():
     return {"status": "alive"}
+
+import os
+import sys
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Setup frontend static dist directory (supports frozen exe and dev environment)
+if getattr(sys, "frozen", False):
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    frontend_dist_dir = os.path.join(base_dir, "frontend", "dist")
+    if not os.path.exists(frontend_dist_dir):
+        frontend_dist_dir = os.path.join(os.path.dirname(sys.executable), "_internal", "frontend", "dist")
+    if not os.path.exists(frontend_dist_dir):
+        frontend_dist_dir = os.path.join(os.path.dirname(sys.executable), "frontend", "dist")
+else:
+    frontend_dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+
+if os.path.exists(frontend_dist_dir):
+    assets_dir = os.path.join(frontend_dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api") or full_path == "health" or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            return None
+        file_path = os.path.join(frontend_dist_dir, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_dist_dir, "index.html"))
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

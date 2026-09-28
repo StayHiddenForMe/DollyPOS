@@ -1,5 +1,4 @@
 import io
-import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -163,6 +162,7 @@ def export_customers_excel(current_user: User = Depends(get_current_user), db: S
             "Notes": c.notes or ""
         })
 
+    import pandas as pd
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -183,6 +183,7 @@ async def import_customers_excel(
     db: Session = Depends(get_db)
 ):
     """Bulk import customer records from Excel with automatic duplicate phone checking."""
+    import pandas as pd
     contents = await file.read()
     try:
         df = pd.read_excel(io.BytesIO(contents))

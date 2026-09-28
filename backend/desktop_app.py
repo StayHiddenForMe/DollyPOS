@@ -11,35 +11,59 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# Ensure sys.stdout and sys.stderr are safe streams in windowed mode
-class SafeNullStream:
-    def write(self, text):
+import multiprocessing
+import traceback
+
+BOOT_LOG = os.path.join(tempfile.gettempdir(), "dollypos_boot.log")
+try:
+    log_fp = open(BOOT_LOG, "a", buffering=1, encoding="utf-8", errors="replace")
+except Exception:
+    log_fp = None
+
+def log_boot(msg):
+    try:
+        if log_fp:
+            log_fp.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+            log_fp.flush()
+    except Exception:
         pass
-    def flush(self):
+
+if log_fp:
+    sys.stdout = log_fp
+    sys.stderr = log_fp
+
+if sys.stdin is None:
+    try:
+        sys.stdin = open(os.devnull, "r")
+    except Exception:
         pass
-    def isatty(self):
-        return False
 
-if sys.stdout is None:
-    sys.stdout = SafeNullStream()
-if sys.stderr is None:
-    sys.stderr = SafeNullStream()
+log_boot(f"=== DollyPOS Starting (frozen={getattr(sys, 'frozen', False)}) ===")
 
-# Setup base directory
-if getattr(sys, "frozen", False):
-    BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-    FRONTEND_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
-    if not os.path.exists(FRONTEND_DIST_DIR):
-        FRONTEND_DIST_DIR = os.path.join(os.path.dirname(sys.executable), "frontend", "dist")
-else:
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-    FRONTEND_DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
+try:
+    log_boot("Resolving BASE_DIR and paths...")
+    if getattr(sys, "frozen", False):
+        BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        FRONTEND_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
+        if not os.path.exists(FRONTEND_DIST_DIR):
+            FRONTEND_DIST_DIR = os.path.join(os.path.dirname(sys.executable), "frontend", "dist")
+    else:
+        BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+        FRONTEND_DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
 
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+    if BASE_DIR not in sys.path:
+        sys.path.insert(0, BASE_DIR)
 
-from app.main import app as api_app
-from app.config import settings
+    log_boot(f"BASE_DIR={BASE_DIR}, sys.path={sys.path[:3]}")
+    log_boot("Importing app.main...")
+    from app.main import app as api_app
+    log_boot("Importing app.config...")
+    from app.config import settings
+    log_boot("Module imports successful.")
+except BaseException as e:
+    log_boot(f"FATAL MODULE IMPORT ERROR ({type(e).__name__}): {e}\n{traceback.format_exc()}")
+    raise
+
 
 # Mount frontend static build
 if os.path.exists(FRONTEND_DIST_DIR):
@@ -118,19 +142,19 @@ def cleanup_stale_zombies():
 
 def check_single_instance_or_focus():
     """
-    Prevents spawning duplicate instances.
-    If Dolly POS is already alive on port 8000:
-    - Launches/focuses the UI window for the user.
-    - Exits the second process immediately (no duplicate PID).
-    If port 8000 is held by an unresponsive zombie process:
-    - Kills the zombie PID and allows this instance to start fresh.
+    Prevents spawning duplicate instances while ensuring stale orphans are cleared.
+    If Dolly POS is already alive on port 8000 AND actively serving the UI:
+    - Focuses the UI window for the user and exits the launcher process.
+    If port 8000 is held by an orphaned terminal or stale zombie:
+    - Kills the zombie on port 8000 so this instance starts cleanly.
     """
     if is_port_in_use(8000):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8000/health", headers={"User-Agent": "DollyPOS-Launcher"})
+            req = urllib.request.Request("http://127.0.0.1:8000/", headers={"User-Agent": "DollyPOS-Launcher"})
             with urllib.request.urlopen(req, timeout=1.5) as resp:
-                if resp.status == 200:
-                    # Dolly POS is ALREADY RUNNING and healthy! Focus window & exit launcher.
+                content = resp.read(200).decode(errors="ignore")
+                if resp.status == 200 and ("<html" in content.lower() or "<!doctype" in content.lower()):
+                    # An active, functional DollyPOS UI is ALREADY running! Focus window and exit.
                     browser_exe = find_browser_exe()
                     if browser_exe:
                         subprocess.Popen([
@@ -146,12 +170,9 @@ def check_single_instance_or_focus():
         except Exception:
             pass
 
-        # Port 8000 is occupied but /health didn't respond (stale zombie process)
+        # Port 8000 is occupied by a stale/broken process or orphan that cannot serve UI. Kill it!
         cleanup_stale_zombies()
         time.sleep(1.0)
-
-IS_SHUTTING_DOWN = False
-SHUTDOWN_LOCK = threading.Lock()
 
 def perform_on_close_sync():
     """Executes on-close Cloud Hub sync and local database snapshot."""
@@ -166,55 +187,13 @@ def perform_on_close_sync():
     except Exception:
         pass
 
-def safe_fast_exit(server=None):
-    """
-    Guarantees instant process shutdown within 2.5 seconds with ZERO zombie PIDs.
-    Runs fast on-close cloud sync in a daemon worker capped at 2.0s,
-    then terminates the process completely via os._exit(0).
-    """
-    global IS_SHUTTING_DOWN
-    with SHUTDOWN_LOCK:
-        if IS_SHUTTING_DOWN:
-            return
-        IS_SHUTTING_DOWN = True
-
-    if server:
-        server.should_exit = True
-
-    try:
-        sync_thread = threading.Thread(target=perform_on_close_sync, daemon=True)
-        sync_thread.start()
-        sync_thread.join(timeout=2.0)
-    except Exception:
-        pass
-    finally:
-        os._exit(0)
-
-BROWSER_MONITORED_BY_PROC = False
-
-def watchdog_monitor(server):
-    """
-    Monitors browser heartbeat if running without dedicated Chrome app process monitor.
-    If dedicated app mode is active, proc.wait() monitors the window exit directly without killing
-    the server during reloads, heavy queries, or data purges.
-    """
-    global LAST_HEARTBEAT_TIME, FIRST_HEARTBEAT_RECEIVED, BROWSER_MONITORED_BY_PROC
-    time.sleep(30)
-    while True:
-        time.sleep(5.0)
-        if BROWSER_MONITORED_BY_PROC:
-            continue
-        if FIRST_HEARTBEAT_RECEIVED:
-            if time.time() - LAST_HEARTBEAT_TIME > 180.0:
-                safe_fast_exit(server)
-
-def open_and_monitor_browser(server):
-    """Wait for backend health endpoint, then open Chrome/Edge in app mode and monitor its lifecycle."""
-    global BROWSER_MONITORED_BY_PROC
-    for _ in range(40):
+def open_browser():
+    """Wait for backend health endpoint, then open Chrome/Edge in app mode."""
+    for _ in range(120):  # Wait up to 24s for PostgreSQL connection & migrations
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1) as resp:
                 if resp.status == 200:
+                    log_boot("open_browser(): Backend is healthy on port 8000.")
                     break
         except Exception:
             time.sleep(0.2)
@@ -224,34 +203,36 @@ def open_and_monitor_browser(server):
         try:
             profile_dir = os.path.join(tempfile.gettempdir(), "DollyPOS_BrowserProfile")
             os.makedirs(profile_dir, exist_ok=True)
-            proc = subprocess.Popen([
+            log_boot(f"open_browser(): Launching browser {browser_exe}...")
+            subprocess.Popen([
                 browser_exe,
                 f"--user-data-dir={profile_dir}",
-                "--disable-background-mode",
-                "--disable-background-networking",
-                "--disable-component-update",
-                "--disable-sync",
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--start-maximized",
                 "--app=http://127.0.0.1:8000"
             ])
-            BROWSER_MONITORED_BY_PROC = True
-            # Wait for user to close the app window
-            proc.wait()
-            # Once window is closed, immediately trigger fast shutdown
-            safe_fast_exit(server)
+            log_boot("open_browser(): Browser launched successfully.")
             return
-        except Exception:
-            pass
+        except Exception as e:
+            log_boot(f"open_browser(): Browser launch error: {e}")
 
+    log_boot("open_browser(): Falling back to webbrowser.open...")
     webbrowser.open("http://127.0.0.1:8000")
 
 def main():
+    log_boot("main() entered")
     # 1. Enforce Single Instance: focus existing if already running, or kill dead zombies on port 8000
+    log_boot("Running check_single_instance_or_focus()...")
     check_single_instance_or_focus()
+    log_boot("Single instance check passed.")
 
-    # 2. Configure Uvicorn server
+    # 2. Start browser opener thread
+    log_boot("Starting open_browser thread...")
+    threading.Thread(target=open_browser, daemon=True).start()
+
+    # 3. Configure Uvicorn server
+    log_boot("Configuring Uvicorn server...")
     log_config = uvicorn.config.LOGGING_CONFIG.copy()
     if "formatters" in log_config:
         if "default" in log_config["formatters"]:
@@ -268,15 +249,24 @@ def main():
     )
     server = uvicorn.Server(config)
 
-    # 3. Start browser opener and process monitor thread
-    threading.Thread(target=open_and_monitor_browser, args=(server,), daemon=True).start()
-
-    # 4. Start watchdog monitor (terminates backend within 6s if UI window closes)
-    threading.Thread(target=watchdog_monitor, args=(server,), daemon=True).start()
-
-    # 5. Run Uvicorn server on main thread
-    server.run()
-    safe_fast_exit()
+    # 4. Run Uvicorn server on main thread - stays permanently running
+    try:
+        log_boot("Calling server.run()...")
+        server.run()
+        log_boot(f"server.run() returned. server.started={server.started}")
+    except BaseException as e:
+        log_boot(f"server.run() exited with {type(e).__name__}: {e}\n{traceback.format_exc()}")
+    finally:
+        log_boot("Running perform_on_close_sync()...")
+        perform_on_close_sync()
+        log_boot("perform_on_close_sync() finished.")
 
 if __name__ == "__main__":
-    main()
+    multiprocessing.freeze_support()
+    try:
+        main()
+    except BaseException as e:
+        log_boot(f"FATAL IN __MAIN__ ({type(e).__name__}): {e}\n{traceback.format_exc()}")
+
+
+

@@ -4,7 +4,6 @@ from sqlalchemy import desc, or_, and_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import io
-import pandas as pd
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -43,6 +42,13 @@ def get_invoice_by_bill_number(bill_number: str, db: Session = Depends(get_db)):
         joinedload(Invoice.items),
         joinedload(Invoice.payments)
     ).filter(Invoice.bill_number.ilike(clean_no)).first()
+
+    if not inv:
+        # Fallback: if user omitted prefix (e.g. entered 20260929-0001 or 29-0001)
+        inv = db.query(Invoice).options(
+            joinedload(Invoice.items),
+            joinedload(Invoice.payments)
+        ).filter(Invoice.bill_number.ilike(f"%{clean_no}%")).order_by(desc(Invoice.id)).first()
 
     if not inv:
         raise HTTPException(status_code=404, detail=f"Bill '{bill_number}' not found")
