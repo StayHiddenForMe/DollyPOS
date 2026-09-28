@@ -4497,7 +4497,11 @@ export const SettingsPage: React.FC = () => {
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Cloud Sync</div>
                     <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200">
                       {cloudSyncInfo?.last_cloud_sync_at 
-                        ? new Date(cloudSyncInfo.last_cloud_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                        ? (() => {
+                            const raw = cloudSyncInfo.last_cloud_sync_at;
+                            const utcStr = raw.endsWith('Z') || raw.includes('+') ? raw : `${raw}Z`;
+                            return new Date(utcStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                          })()
                         : 'Never synced'}
                     </div>
                   </div>

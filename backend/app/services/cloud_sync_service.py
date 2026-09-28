@@ -541,7 +541,7 @@ class CloudSyncService:
 
                 return {
                     "status": "success",
-                    "synced_at": st.last_cloud_sync_at.isoformat(),
+                    "synced_at": (st.last_cloud_sync_at.isoformat() + "Z") if st.last_cloud_sync_at else None,
                     "store_token": store_token,
                     "demands_pulled": pulled_demands_count,
                     "message": "Store data successfully synced to Cloud Hub."

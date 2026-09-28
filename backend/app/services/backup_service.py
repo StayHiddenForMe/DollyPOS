@@ -412,7 +412,6 @@ class BackupService:
                     "estimated_price": n.estimated_price,
                     "priority": n.priority.value if hasattr(n.priority, 'value') else str(n.priority),
                     "status": n.status.value if hasattr(n.status, 'value') else str(n.status),
-                    "notes": n.notes,
                     "created_at": n.created_at.isoformat() if n.created_at else None
                 }
                 for n in db.query(ProcurementNote).all()
@@ -1089,7 +1088,6 @@ class BackupService:
                 estimated_price=float(n_data.get("estimated_price") or 0.0) if n_data.get("estimated_price") is not None else None,
                 priority=str(n_data.get("priority", "NORMAL")),
                 status=str(n_data.get("status", "PENDING")),
-                notes=n_data.get("notes"),
                 created_at=parse_iso_datetime(n_data.get("created_at")) or datetime.utcnow()
             )
             db.add(note)

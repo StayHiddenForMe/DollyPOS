@@ -47,7 +47,7 @@ def get_cloud_sync_status(
         "shop_name": st.shop_name,
         "cloud_hub_url": st.cloud_hub_url,
         "cloud_sync_enabled": st.cloud_sync_enabled,
-        "last_cloud_sync_at": st.last_cloud_sync_at.isoformat() if st.last_cloud_sync_at else None,
+        "last_cloud_sync_at": (st.last_cloud_sync_at.isoformat() + "Z") if st.last_cloud_sync_at else None,
         "cloud_sync_status": st.cloud_sync_status or "IDLE",
         "cloud_sync_error": st.cloud_sync_error,
         "qr_pairing_string": json.dumps(pairing_payload)
