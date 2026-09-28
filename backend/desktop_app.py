@@ -1,9 +1,12 @@
 import os
 import sys
 import time
+import socket
 import urllib.request
 import threading
 import webbrowser
+import subprocess
+import tempfile
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -53,8 +56,18 @@ if os.path.exists(FRONTEND_DIST_DIR):
             return FileResponse(file_path)
         return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
 
-import subprocess
-import tempfile
+# -------------------------------------------------------------
+# Heartbeat & Liveness State
+# -------------------------------------------------------------
+LAST_HEARTBEAT_TIME = time.time()
+FIRST_HEARTBEAT_RECEIVED = False
+
+@api_app.post("/api/v1/system/heartbeat")
+def desktop_heartbeat():
+    global LAST_HEARTBEAT_TIME, FIRST_HEARTBEAT_RECEIVED
+    LAST_HEARTBEAT_TIME = time.time()
+    FIRST_HEARTBEAT_RECEIVED = True
+    return {"status": "alive"}
 
 def find_browser_exe():
     candidates = [
@@ -68,6 +81,91 @@ def find_browser_exe():
         if os.path.exists(p):
             return p
     return None
+
+def is_port_in_use(port=8000) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(('127.0.0.1', port)) == 0
+
+def kill_process_on_port(port=8000):
+    """Terminates stale zombie processes holding port 8000 on Windows."""
+    try:
+        output = subprocess.check_output('netstat -ano -p tcp', shell=True).decode()
+        current_pid = os.getpid()
+        for line in output.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.strip().split()
+                pid = parts[-1]
+                if pid and pid.isdigit() and int(pid) != current_pid:
+                    subprocess.call(f'taskkill /F /PID {pid}', shell=True)
+    except Exception:
+        pass
+
+def check_single_instance_or_focus():
+    """
+    Prevents spawning duplicate instances.
+    If Dolly POS is already alive on port 8000:
+    - Launches/focuses the UI window for the user.
+    - Exits the second process immediately (no duplicate PID).
+    If port 8000 is held by an unresponsive zombie process:
+    - Kills the zombie PID and allows this instance to start fresh.
+    """
+    if is_port_in_use(8000):
+        try:
+            req = urllib.request.Request("http://127.0.0.1:8000/health", headers={"User-Agent": "DollyPOS-Launcher"})
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    # Dolly POS is ALREADY RUNNING and healthy! Focus window & exit launcher.
+                    browser_exe = find_browser_exe()
+                    if browser_exe:
+                        subprocess.Popen([
+                            browser_exe,
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                            "--disable-background-mode",
+                            "--app=http://127.0.0.1:8000"
+                        ])
+                    else:
+                        webbrowser.open("http://127.0.0.1:8000")
+                    sys.exit(0)
+        except Exception:
+            pass
+
+        # Port 8000 is occupied but /health didn't respond (stale zombie process)
+        kill_process_on_port(8000)
+        time.sleep(1.0)
+
+def perform_on_close_sync():
+    """Executes on-close Cloud Hub sync and local database snapshot."""
+    try:
+        from app.core.database import SessionLocal
+        from app.services.backup_service import backup_service
+        exit_db = SessionLocal()
+        try:
+            backup_service.handle_on_close_backup(exit_db)
+        finally:
+            exit_db.close()
+    except Exception:
+        pass
+
+def watchdog_monitor(server):
+    """
+    Monitors browser heartbeat.
+    If the user closes the Chrome/Edge window (clicking [X], closing the tab, or killing the process),
+    heartbeats stop. If 6 seconds elapse with no heartbeat, cleanly execute end-of-day cloud backup
+    and terminate the process completely.
+    """
+    global LAST_HEARTBEAT_TIME, FIRST_HEARTBEAT_RECEIVED
+    # Initial grace period for browser window to launch and begin sending heartbeats
+    time.sleep(18)
+    while True:
+        time.sleep(1.5)
+        if FIRST_HEARTBEAT_RECEIVED:
+            if time.time() - LAST_HEARTBEAT_TIME > 6.0:
+                perform_on_close_sync()
+                server.should_exit = True
+                time.sleep(0.3)
+                os._exit(0)
 
 def open_and_monitor_browser(server):
     """Wait for backend health endpoint, then open Chrome/Edge in app mode and monitor its lifecycle."""
@@ -87,6 +185,10 @@ def open_and_monitor_browser(server):
             proc = subprocess.Popen([
                 browser_exe,
                 f"--user-data-dir={profile_dir}",
+                "--disable-background-mode",
+                "--disable-background-networking",
+                "--disable-component-update",
+                "--disable-sync",
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--start-maximized",
@@ -95,26 +197,21 @@ def open_and_monitor_browser(server):
             # Wait for user to close the app window
             proc.wait()
             # Once window is closed, execute end-of-day Cloud Hub sync & backup before shutdown
-            try:
-                from app.core.database import SessionLocal
-                from app.services.backup_service import backup_service
-                exit_db = SessionLocal()
-                try:
-                    backup_service.handle_on_close_backup(exit_db)
-                finally:
-                    exit_db.close()
-            except Exception:
-                pass
+            perform_on_close_sync()
             server.should_exit = True
-            time.sleep(0.5)
+            time.sleep(0.3)
             os._exit(0)
             return
         except Exception:
             pass
+
     webbrowser.open("http://127.0.0.1:8000")
 
 def main():
-    # 1. Configure Uvicorn server
+    # 1. Enforce Single Instance: focus existing if already running, or kill dead zombies on port 8000
+    check_single_instance_or_focus()
+
+    # 2. Configure Uvicorn server
     log_config = uvicorn.config.LOGGING_CONFIG.copy()
     if "formatters" in log_config:
         if "default" in log_config["formatters"]:
@@ -131,11 +228,16 @@ def main():
     )
     server = uvicorn.Server(config)
 
-    # 2. Start browser opener and process monitor thread
+    # 3. Start browser opener and process monitor thread
     threading.Thread(target=open_and_monitor_browser, args=(server,), daemon=True).start()
 
-    # 3. Run Uvicorn server on main thread
+    # 4. Start watchdog monitor (terminates backend within 6s if UI window closes)
+    threading.Thread(target=watchdog_monitor, args=(server,), daemon=True).start()
+
+    # 5. Run Uvicorn server on main thread
     server.run()
+    perform_on_close_sync()
+    os._exit(0)
 
 if __name__ == "__main__":
     main()

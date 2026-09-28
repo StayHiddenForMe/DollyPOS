@@ -299,5 +299,9 @@ def health_check():
 def api_v1_health():
     return health_check()
 
+@app.post(f"{settings.API_V1_STR}/system/heartbeat")
+def client_heartbeat_ping():
+    return {"status": "alive"}
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

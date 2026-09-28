@@ -78,6 +78,30 @@ const ProtectedLayout: React.FC = () => {
 };
 
 export const App: React.FC = () => {
+  useEffect(() => {
+    // 1. Send periodic heartbeat so desktop backend knows the UI window is alive
+    const pingHeartbeat = () => {
+      fetch('/api/v1/system/heartbeat', { method: 'POST', keepalive: true }).catch(() => {});
+    };
+    pingHeartbeat();
+    const interval = setInterval(pingHeartbeat, 2500);
+
+    // 2. Send instant beacon on browser window close / exit
+    const handleCloseBeacon = () => {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/v1/backup/shutdown');
+      }
+    };
+    window.addEventListener('beforeunload', handleCloseBeacon);
+    window.addEventListener('pagehide', handleCloseBeacon);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleCloseBeacon);
+      window.removeEventListener('pagehide', handleCloseBeacon);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
