@@ -149,8 +149,14 @@ export interface UserProfile {
 export interface BusinessStore {
   id: string;
   name: string;
-  url: string;
+  token?: string;
+  url?: string;
+  hub_url?: string;
+  tagline?: string;
+  address?: string;
   is_active: boolean;
+  is_pos_online?: boolean;
+  last_synced?: string;
 }
 
 export interface DemandItem {

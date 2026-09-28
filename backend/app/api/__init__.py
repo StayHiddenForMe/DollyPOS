@@ -19,6 +19,7 @@ from app.api.whatsapp_router import router as whatsapp_router
 from app.api.procurement_router import router as procurement_router
 from app.api.google_auth_router import router as google_auth_router
 from app.api.mobile_router import router as mobile_router
+from app.api.cloud_sync_router import router as cloud_sync_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -40,3 +41,4 @@ api_router.include_router(whatsapp_router)
 api_router.include_router(procurement_router)
 api_router.include_router(google_auth_router)
 api_router.include_router(mobile_router)
+api_router.include_router(cloud_sync_router)

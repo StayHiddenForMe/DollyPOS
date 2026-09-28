@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RefreshCw, Wifi, WifiOff, Bell, Laptop } from 'lucide-react-native';
+import { RefreshCw, Wifi, WifiOff, Bell, Laptop, Store, ChevronDown } from 'lucide-react-native';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import { NotificationModal } from './NotificationModal';
+import { StoreSwitcherModal } from './StoreSwitcherModal';
 import { LowStockItem } from '../types';
 
 interface HeaderProps {
@@ -33,9 +34,10 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const { isOnline, latencyMs, networkInfo, checkConnection } = useConnection();
+  const { isOnline, isPosOnline, latencyMs, networkInfo, checkConnection } = useConnection();
   const { alertCount: globalAlertCount, lowStockItems: globalLowStockItems } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showStoreSwitcher, setShowStoreSwitcher] = useState(false);
 
   const effectiveAlertCount = alertCount !== undefined ? alertCount : globalAlertCount;
   const effectiveLowStockItems = lowStockItems !== undefined ? lowStockItems : globalLowStockItems;
@@ -64,9 +66,17 @@ export const Header: React.FC<HeaderProps> = ({
       >
         <View style={styles.topRow}>
           <View style={styles.titleContainer}>
-            <Text style={[styles.storeName, { color: colors.brand[600] }]} numberOfLines={1}>
-              {displayStoreName}
-            </Text>
+            <TouchableOpacity
+              style={styles.storeSwitcherPill}
+              onPress={() => setShowStoreSwitcher(true)}
+              activeOpacity={0.7}
+            >
+              <Store size={13} color={colors.brand[600]} />
+              <Text style={[styles.storeName, { color: colors.brand[600] }]} numberOfLines={1}>
+                {displayStoreName}
+              </Text>
+              <ChevronDown size={13} color={colors.brand[600]} />
+            </TouchableOpacity>
             <Text style={[styles.screenTitle, { color: colors.textPrimary }]}>{title}</Text>
             {subtitle ? (
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
@@ -81,31 +91,31 @@ export const Header: React.FC<HeaderProps> = ({
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor: isOnline
+                  backgroundColor: isPosOnline
                     ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
-                    : (isDark ? 'rgba(239, 68, 68, 0.15)' : '#fff1f2'),
-                  borderColor: isOnline ? '#10b981' : '#f43f5e',
+                    : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb'),
+                  borderColor: isPosOnline ? '#10b981' : '#f59e0b',
                 },
               ]}
             >
               <View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: isOnline ? '#10b981' : '#f43f5e' },
+                  { backgroundColor: isPosOnline ? '#10b981' : '#f59e0b' },
                 ]}
               />
-              <Laptop size={11} color={isOnline ? '#10b981' : '#f43f5e'} />
+              <Laptop size={11} color={isPosOnline ? '#10b981' : '#f59e0b'} />
               <Text
                 style={[
                   styles.statusText,
                   {
-                    color: isOnline
+                    color: isPosOnline
                       ? (isDark ? '#6ee7b7' : '#047857')
-                      : (isDark ? '#fda4af' : '#be123c'),
+                      : (isDark ? '#fcd34d' : '#b45309'),
                   },
                 ]}
               >
-                {isOnline ? 'Laptop Online' : 'Laptop Offline'}
+                {isPosOnline ? 'POS Online' : 'POS Offline'}
               </Text>
             </TouchableOpacity>
 
@@ -152,6 +162,12 @@ export const Header: React.FC<HeaderProps> = ({
         alertCount={effectiveAlertCount}
         onNavigateInventory={onNavigateInventory}
       />
+
+      {/* Multi-Store Switcher Modal */}
+      <StoreSwitcherModal
+        visible={showStoreSwitcher}
+        onClose={() => setShowStoreSwitcher(false)}
+      />
     </>
   );
 };
@@ -176,12 +192,18 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
   },
+  storeSwitcherPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+    alignSelf: 'flex-start',
+  },
   storeName: {
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: 2,
   },
   screenTitle: {
     fontSize: 20,

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dollypos-cloud-hub
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: singapore
+    autoDeploy: true

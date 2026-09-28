@@ -170,7 +170,7 @@ export const SettingsPage: React.FC = () => {
   const [factoryPurgeResult, setFactoryPurgeResult] = useState<string | null>(null);
   const purgeFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mobile Connect State
+  // Mobile Connect & Multi-Store Cloud Sync State
   const [mobileNetworkInfo, setMobileNetworkInfo] = useState<{
     shop_name: string;
     local_ip: string;
@@ -179,21 +179,103 @@ export const SettingsPage: React.FC = () => {
     status: string;
     pairing_code: string;
   } | null>(null);
+  const [cloudSyncInfo, setCloudSyncInfo] = useState<{
+    store_id?: string;
+    store_token: string;
+    shop_name: string;
+    cloud_hub_url: string;
+    cloud_sync_enabled: boolean;
+    last_cloud_sync_at: string | null;
+    cloud_sync_status: string;
+    cloud_sync_error: string | null;
+    qr_pairing_string: string;
+  } | null>(null);
+  const [cloudHubUrlInput, setCloudHubUrlInput] = useState<string>('');
+  const [isSavingHubUrl, setIsSavingHubUrl] = useState(false);
+  const [saveHubSuccess, setSaveHubSuccess] = useState(false);
   const [customTunnelUrl, setCustomTunnelUrl] = useState<string>(() => localStorage.getItem('dolly_pos_tunnel_url') || '');
   const [copyCodeSuccess, setCopyCodeSuccess] = useState(false);
   const [copyUrlSuccess, setCopyUrlSuccess] = useState(false);
   const [isLoadingMobileInfo, setIsLoadingMobileInfo] = useState(false);
+  const [isSyncingHub, setIsSyncingHub] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
   const fetchMobileInfo = async () => {
     setIsLoadingMobileInfo(true);
     try {
-      const res = await api.get('/mobile/network-info');
-      setMobileNetworkInfo(res.data);
+      const [netRes, syncRes] = await Promise.allSettled([
+        api.get('/mobile/network-info'),
+        api.get('/cloud-sync/status')
+      ]);
+      if (netRes.status === 'fulfilled') {
+        setMobileNetworkInfo(netRes.value.data);
+      }
+      if (syncRes.status === 'fulfilled') {
+        setCloudSyncInfo(syncRes.value.data);
+        if (syncRes.value.data?.cloud_hub_url) {
+          setCloudHubUrlInput(syncRes.value.data.cloud_hub_url);
+        }
+      }
     } catch (e) {
-      console.error('Failed to fetch mobile network info:', e);
+      console.error('Failed to fetch mobile & cloud sync info:', e);
     } finally {
       setIsLoadingMobileInfo(false);
     }
+  };
+
+  const handleSaveCloudHubUrl = async () => {
+    if (!cloudHubUrlInput.trim()) {
+      alert('Please enter a valid Cloud Hub Gateway URL');
+      return;
+    }
+    const clean = cloudHubUrlInput.trim().replace(/\/$/, '');
+    setIsSavingHubUrl(true);
+    setSaveHubSuccess(false);
+    try {
+      const res = await api.post('/cloud-sync/configure', { cloud_hub_url: clean });
+      if (res.data?.status === 'success') {
+        setSaveHubSuccess(true);
+        setCloudSyncInfo(prev => prev ? { ...prev, cloud_hub_url: clean } : null);
+        setTimeout(() => setSaveHubSuccess(false), 3000);
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Failed to update Cloud Hub URL');
+    } finally {
+      setIsSavingHubUrl(false);
+    }
+  };
+
+  const [isTestingHub, setIsTestingHub] = useState(false);
+  const [testHubResult, setTestHubResult] = useState<{
+    status: 'online' | 'not_found' | 'error' | 'timeout' | 'unreachable';
+    message: string;
+    latency_ms?: number;
+  } | null>(null);
+
+  const handleTestCloudHubConnection = async () => {
+    if (!cloudHubUrlInput.trim()) {
+      alert('Please enter a Cloud Hub URL to test');
+      return;
+    }
+    const clean = cloudHubUrlInput.trim().replace(/\/$/, '');
+    setIsTestingHub(true);
+    setTestHubResult(null);
+    try {
+      const res = await api.post('/cloud-sync/test-connection', { cloud_hub_url: clean });
+      setTestHubResult(res.data);
+    } catch (err: any) {
+      setTestHubResult({
+        status: 'error',
+        message: err?.response?.data?.detail || 'Connection test failed.'
+      });
+    } finally {
+      setIsTestingHub(false);
+    }
+  };
+
+  const handleResetDefaultHubUrl = () => {
+    setCloudHubUrlInput('https://dollypos-hub.onrender.com');
+    setTestHubResult(null);
   };
 
   useEffect(() => {
@@ -201,6 +283,26 @@ export const SettingsPage: React.FC = () => {
       fetchMobileInfo();
     }
   }, [activeTab]);
+
+  const handleTriggerSyncNow = async () => {
+    setIsSyncingHub(true);
+    setSyncStatusMsg(null);
+    try {
+      const res = await api.post('/cloud-sync/trigger');
+      if (res.data?.status === 'success') {
+        setSyncStatusMsg('Synced successfully to Cloud Hub!');
+      } else {
+        setSyncStatusMsg(res.data?.message || 'Sync completed.');
+      }
+      const syncRes = await api.get('/cloud-sync/status');
+      setCloudSyncInfo(syncRes.data);
+    } catch (err: any) {
+      setSyncStatusMsg(err?.response?.data?.detail || 'Sync failed.');
+    } finally {
+      setIsSyncingHub(false);
+      setTimeout(() => setSyncStatusMsg(null), 4000);
+    }
+  };
 
   const handleSaveTunnelUrl = (val: string) => {
     const clean = val.trim().replace(/\/$/, '');
@@ -4292,22 +4394,22 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* CARD 1: PAIRING QR CODE & KEY */}
+            {/* CARD 1: STORE ACCESS TOKEN & QR CODE PAIRING */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center text-center space-y-4">
               <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-extrabold text-base">
                 <QrCode className="w-5 h-5 text-pink-600" />
-                <span>Scan QR Code to Pair</span>
+                <span>Store Access Token & Quick Pairing</span>
               </div>
               <p className="text-xs text-slate-500 max-w-sm">
-                Open the <strong>Dolly POS Mobile Companion</strong> app on your mobile phone and scan this code to link instantly.
+                Open the <strong>Dolly POS Mobile App</strong>, enter this <strong>Store Access Token</strong> or scan the QR code to connect 24/7.
               </p>
 
               {/* Dynamic QR Code Box */}
               <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-inner flex flex-col items-center">
-                {mobileNetworkInfo ? (
+                {cloudSyncInfo?.store_token || mobileNetworkInfo ? (
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=190x190&margin=8&data=${encodeURIComponent(
-                      customTunnelUrl.trim() || mobileNetworkInfo.api_base_url
+                      cloudSyncInfo?.qr_pairing_string || cloudSyncInfo?.store_token || mobileNetworkInfo?.api_base_url || 'DLY-STORE'
                     )}`}
                     alt="Pairing QR Code"
                     className="w-48 h-48 rounded-xl bg-white p-2 shadow-sm"
@@ -4317,77 +4419,189 @@ export const SettingsPage: React.FC = () => {
                     <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
                   </div>
                 )}
-                <div className="mt-3 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  Target: <span className="font-mono text-pink-600">{customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || 'Detecting...'}</span>
+                <div className="mt-3 text-xs font-black text-pink-600 dark:text-pink-400 tracking-wider">
+                  TOKEN: <span className="font-mono text-sm bg-pink-50 dark:bg-pink-950/50 px-2 py-0.5 rounded-lg border border-pink-200 dark:border-pink-800">{cloudSyncInfo?.store_token || 'Generating...'}</span>
                 </div>
               </div>
 
-              {/* One-Click Copy Pairing Key */}
+              {/* One-Click Copy Store Token */}
               <div className="w-full space-y-2 pt-2">
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
-                  Quick Pairing Key (Or enter manually):
+                  Store Access Token:
                 </label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="text"
                     readOnly
-                    value={customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || 'Detecting...'}
-                    className="flex-1 px-3.5 py-2 text-xs font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 select-all"
+                    value={cloudSyncInfo?.store_token || 'Loading token...'}
+                    className="flex-1 px-3.5 py-2.5 text-sm font-black font-mono tracking-wider bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 select-all text-center"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      const textToCopy = customTunnelUrl.trim() || mobileNetworkInfo?.api_base_url || '';
-                      navigator.clipboard.writeText(textToCopy);
-                      setCopyCodeSuccess(true);
-                      setTimeout(() => setCopyCodeSuccess(false), 2500);
+                      const textToCopy = cloudSyncInfo?.store_token || '';
+                      if (textToCopy) {
+                        navigator.clipboard.writeText(textToCopy);
+                        setCopyCodeSuccess(true);
+                        setTimeout(() => setCopyCodeSuccess(false), 2500);
+                      }
                     }}
-                    className="px-3.5 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
+                    className="px-4 py-2.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95"
                   >
                     {copyCodeSuccess ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    <span>{copyCodeSuccess ? 'Copied!' : 'Copy'}</span>
+                    <span>{copyCodeSuccess ? 'Copied!' : 'Copy Token'}</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* CARD 2: REMOTE ACCESS (OUTSIDE SHOP) & INSTRUCTIONS */}
+            {/* CARD 2: 24/7 CLOUD HUB SYNC STATUS & CONTROLS */}
             <div className="space-y-6">
-              {/* Remote Tunnel URL Setup */}
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-                <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-extrabold text-base">
-                  <Globe className="w-5 h-5 text-indigo-600" />
-                  <span>Remote Access (Outside Shop on 4G/5G)</span>
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-800 dark:text-white font-extrabold text-base">
+                    <Cloud className="w-5 h-5 text-indigo-600" />
+                    <span>24/7 Cloud Hub Sync</span>
+                  </div>
+                  <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                    cloudSyncInfo?.cloud_sync_status === 'SUCCESS' 
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                      : cloudSyncInfo?.cloud_sync_status === 'ERROR'
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                      : cloudSyncInfo?.cloud_sync_status === 'OFFLINE'
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                      : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      cloudSyncInfo?.cloud_sync_status === 'SUCCESS' ? 'bg-emerald-500 animate-pulse'
+                      : cloudSyncInfo?.cloud_sync_status === 'ERROR' ? 'bg-rose-500'
+                      : cloudSyncInfo?.cloud_sync_status === 'OFFLINE' ? 'bg-amber-500'
+                      : 'bg-slate-400'
+                    }`}></span>
+                    <span>
+                      {cloudSyncInfo?.cloud_sync_status === 'SUCCESS' ? 'Live & Synced'
+                      : cloudSyncInfo?.cloud_sync_status === 'ERROR' ? 'Sync Error (404 / Unreachable)'
+                      : cloudSyncInfo?.cloud_sync_status === 'OFFLINE' ? 'Cloud Unreachable'
+                      : 'Ready / Standby'}
+                    </span>
+                  </div>
                 </div>
+
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  When you are away from the store on cellular mobile data, your phone connects via a secure HTTPS tunnel URL.
+                  Your store automatically syncs sales summaries, profits, and stock counts to the 24/7 Cloud Hub every 30 seconds. Your mobile app can view today's reports even when this laptop is closed or turned off at night.
                 </p>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Remote Tunnel URL:
-                  </label>
+                {/* Last Sync Info & Manual Trigger */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Cloud Sync</div>
+                    <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200">
+                      {cloudSyncInfo?.last_cloud_sync_at 
+                        ? new Date(cloudSyncInfo.last_cloud_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                        : 'Never synced'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTriggerSyncNow}
+                    disabled={isSyncingHub}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingHub ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingHub ? 'Syncing...' : 'Sync Now'}</span>
+                  </button>
+                </div>
+
+                {syncStatusMsg && (
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center space-x-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>{syncStatusMsg}</span>
+                  </div>
+                )}
+
+                {cloudSyncInfo?.cloud_sync_error && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium text-xs rounded-xl border border-rose-200 dark:border-rose-800 flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-bold">Sync Issue: </span>
+                      <span>{cloudSyncInfo.cloud_sync_error}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cloud Hub Endpoint (Configurable per Store Owner) */}
+                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                      Cloud Hub Server URL (Independent Per Store):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultHubUrl}
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                    >
+                      Reset Default
+                    </button>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
-                      placeholder="e.g. https://dolly-pos-tunnel.loca.lt"
-                      value={customTunnelUrl}
-                      onChange={(e) => handleSaveTunnelUrl(e.target.value)}
-                      className="flex-1 px-3.5 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-pink-500"
+                      value={cloudHubUrlInput}
+                      onChange={(e) => {
+                        setCloudHubUrlInput(e.target.value);
+                        setTestHubResult(null);
+                      }}
+                      placeholder="https://store1-hub.onrender.com"
+                      className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    {customTunnelUrl && (
-                      <button
-                        type="button"
-                        onClick={() => handleSaveTunnelUrl('')}
-                        className="px-2 py-2 text-slate-400 hover:text-rose-500 text-xs"
-                        title="Reset to local Wi-Fi"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleTestCloudHubConnection}
+                      disabled={isTestingHub}
+                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center space-x-1 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                    >
+                      <Zap className={`w-3.5 h-3.5 text-amber-400 ${isTestingHub ? 'animate-pulse' : ''}`} />
+                      <span>{isTestingHub ? 'Pinging...' : 'Test Ping'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveCloudHubUrl}
+                      disabled={isSavingHubUrl}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                    >
+                      {saveHubSuccess ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-white" />
+                          <span>Saved!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>{isSavingHubUrl ? 'Saving...' : 'Save URL'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <p className="text-[11px] text-slate-400">
-                    Run <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-pink-600">Start_Backend_Tunnel.bat</code> in the project root to generate a live HTTPS tunnel anytime.
+
+                  {testHubResult && (
+                    <div className={`p-3 rounded-xl border text-xs flex items-center space-x-2 animate-in fade-in ${
+                      testHubResult.status === 'online'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800'
+                        : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 border-rose-300 dark:border-rose-800'
+                    }`}>
+                      {testHubResult.status === 'online' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                      )}
+                      <div className="flex-1 font-bold">
+                        {testHubResult.message}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    Each store owner can independently host their own Cloud Hub (on Render, Railway, or VPS) and point this laptop here. Click "Test Ping" to confirm your cloud server is online before syncing.
                   </p>
                 </div>
               </div>
@@ -4399,24 +4613,24 @@ export const SettingsPage: React.FC = () => {
                   <span>Zero POS Counter Slowdown Guarantee</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Mobile requests use in-memory RAM caching and read-only transactions. Even with 10 phones refreshing simultaneously, the billing counter will never slow down.
+                  Mobile requests query the Cloud Hub directly and never touch your laptop's local database during billing. Even with multiple phones refreshing continuously, counter billing speed is 100% unaffected.
                 </p>
                 <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] font-bold text-slate-700 dark:text-slate-300">
                   <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Unlimited Phones</span>
+                    <span>Works When Laptop is OFF</span>
                   </div>
                   <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Excel & PDF Exports</span>
+                    <span>No .bat Tunnels Needed</span>
                   </div>
                   <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>WhatsApp Reminders</span>
+                    <span>Multi-Store Switcher</span>
                   </div>
                   <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Live Stock Lookup</span>
+                    <span>Instant Token Pairing</span>
                   </div>
                 </div>
               </div>

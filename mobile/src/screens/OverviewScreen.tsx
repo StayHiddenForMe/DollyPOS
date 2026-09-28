@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -82,14 +82,18 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
     loadCachedSnapshot();
   }, []);
 
+  const isFetchingRef = useRef(false);
+
   const fetchOverview = useCallback(
-    async (p: PeriodType = period, s?: string, e?: string) => {
+    async (p: PeriodType, s?: string, e?: string) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
       try {
         setError(null);
         const res = await api.getOverview(
           p,
-          p === 'CUSTOM' ? s || startDate : undefined,
-          p === 'CUSTOM' ? e || endDate : undefined
+          p === 'CUSTOM' ? s : undefined,
+          p === 'CUSTOM' ? e : undefined
         );
         setData(res);
         setIsOfflineSnapshot(false);
@@ -113,22 +117,24 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
       } finally {
         setLoading(false);
         setRefreshing(false);
+        isFetchingRef.current = false;
       }
     },
-    [period, startDate, endDate, setLiveShopName]
+    []
   );
 
   useEffect(() => {
-    fetchOverview(period);
-  }, [fetchOverview, period]);
+    fetchOverview(period, startDate, endDate);
+  }, [period, startDate, endDate, fetchOverview]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     checkConnection();
-    fetchOverview(period);
-  }, [fetchOverview, period, checkConnection]);
+    fetchOverview(period, startDate, endDate);
+  }, [fetchOverview, period, startDate, endDate, checkConnection]);
 
   const handleSelectPeriod = (newPeriod: PeriodType) => {
+    if (newPeriod === period) return;
     setPeriod(newPeriod);
     const now = new Date();
 
@@ -137,8 +143,6 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
       setStartDate(s);
       setEndDate(s);
       setShowCustomRange(false);
-      setLoading(true);
-      fetchOverview('TODAY', s, s);
     } else if (newPeriod === 'YESTERDAY') {
       const y = new Date();
       y.setDate(y.getDate() - 1);
@@ -146,36 +150,22 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
       setStartDate(s);
       setEndDate(s);
       setShowCustomRange(false);
-      setLoading(true);
-      fetchOverview('YESTERDAY', s, s);
     } else if (newPeriod === 'WEEK') {
       const w = new Date();
       w.setDate(w.getDate() - 7);
-      const s = formatDateYMD(w);
-      const e = formatDateYMD(now);
-      setStartDate(s);
-      setEndDate(e);
+      setStartDate(formatDateYMD(w));
+      setEndDate(formatDateYMD(now));
       setShowCustomRange(false);
-      setLoading(true);
-      fetchOverview('WEEK', s, e);
     } else if (newPeriod === 'MONTH') {
       const m = new Date(now.getFullYear(), now.getMonth(), 1);
-      const s = formatDateYMD(m);
-      const e = formatDateYMD(now);
-      setStartDate(s);
-      setEndDate(e);
+      setStartDate(formatDateYMD(m));
+      setEndDate(formatDateYMD(now));
       setShowCustomRange(false);
-      setLoading(true);
-      fetchOverview('MONTH', s, e);
     } else if (newPeriod === 'YEAR') {
       const yr = new Date(now.getFullYear(), 0, 1);
-      const s = formatDateYMD(yr);
-      const e = formatDateYMD(now);
-      setStartDate(s);
-      setEndDate(e);
+      setStartDate(formatDateYMD(yr));
+      setEndDate(formatDateYMD(now));
       setShowCustomRange(false);
-      setLoading(true);
-      fetchOverview('YEAR', s, e);
     } else if (newPeriod === 'CUSTOM') {
       setShowCustomRange(true);
     }
@@ -183,7 +173,6 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
 
   const handleApplyCustom = () => {
     if (startDate && endDate) {
-      setLoading(true);
       fetchOverview('CUSTOM', startDate, endDate);
     }
   };

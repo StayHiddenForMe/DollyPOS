@@ -121,6 +121,14 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS backup_filename_prefix VARCHAR(100) DEFAULT 'DollyToys'",
             "ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_product_id_fkey, ADD CONSTRAINT purchase_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;",
             "ALTER TABLE purchases DROP CONSTRAINT IF EXISTS purchases_vendor_id_fkey, ADD CONSTRAINT purchases_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE;",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS store_id VARCHAR(50)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS store_token VARCHAR(30)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS store_secret VARCHAR(100)",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_enabled BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_hub_url VARCHAR(255) DEFAULT 'https://dollypos-hub.onrender.com'",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS last_cloud_sync_at TIMESTAMP",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_status VARCHAR(50) DEFAULT 'IDLE'",
+            "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_error TEXT",
         ]
         for stmt in migration_statements:
             try:
@@ -145,6 +153,25 @@ def seed_initial_data():
                 theme_mode="light"
             )
             db.add(store_settings)
+            db.commit()
+            db.refresh(store_settings)
+
+        # 3b. Ensure unique Store Token & Identity for Multi-Store Cloud Sync
+        import uuid
+        import secrets
+        changed = False
+        if not getattr(store_settings, 'store_id', None):
+            store_settings.store_id = str(uuid.uuid4())
+            changed = True
+        if not getattr(store_settings, 'store_token', None):
+            random_part = secrets.token_hex(3).upper()
+            store_settings.store_token = f"DLY-STR1-{random_part}"
+            changed = True
+        if not getattr(store_settings, 'store_secret', None):
+            store_settings.store_secret = secrets.token_urlsafe(32)
+            changed = True
+        if changed:
+            db.commit()
 
         # 3. Check and seed Owner User
         owner_user = db.query(User).filter(User.username == "admin").first()
@@ -212,7 +239,26 @@ async def lifespan(app: FastAPI):
             sync_db.close()
     except Exception as e:
         print(f"[OfflineSync Warning] Startup offline sync check: {e}")
+
+    # Launch silent background Cloud Sync worker (every 30 seconds)
+    import asyncio
+    async def periodic_cloud_sync():
+        await asyncio.sleep(5)
+        while True:
+            try:
+                from app.services.cloud_sync_service import cloud_sync_service
+                bg_db = SessionLocal()
+                try:
+                    cloud_sync_service.sync_to_cloud(bg_db, force=False)
+                finally:
+                    bg_db.close()
+            except Exception:
+                pass
+            await asyncio.sleep(30)
+
+    sync_task = asyncio.create_task(periodic_cloud_sync())
     yield
+    sync_task.cancel()
 
 from starlette.middleware.gzip import GZipMiddleware
 

@@ -74,6 +74,7 @@ export const SettingsScreen: React.FC = () => {
     updateServerUrl,
     checkConnection,
     switchBusiness,
+    switchStore,
   } = useConnection();
 
   const [inputUrl, setInputUrl] = useState(serverUrl);
@@ -169,13 +170,13 @@ export const SettingsScreen: React.FC = () => {
 
   // Switch Business (isolated connection, no merging)
   const handleSwitchStore = async (store: BusinessStore) => {
-    if (store.url === serverUrl) {
-      Alert.alert('Already Active', `You are already connected to "${store.name}".`);
-      return;
-    }
-
     setSaving(true);
-    const ok = await switchBusiness(store.url, store.name);
+    let ok = false;
+    if (store.token) {
+      ok = await switchStore(store.id);
+    } else {
+      ok = await switchBusiness(store.url || serverUrl, store.name);
+    }
     const updated = businesses.map((b) => ({
       ...b,
       is_active: b.id === store.id,

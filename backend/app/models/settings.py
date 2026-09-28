@@ -138,4 +138,14 @@ class StoreSettings(Base):
     extra_charge_value_5 = Column(Float, default=0.0, nullable=True)
     extra_charge_payment_mode_5 = Column(String(50), default="ALL", nullable=True)
 
+    # Multi-Store Hybrid Cloud Sync
+    store_id = Column(String(50), nullable=True)
+    store_token = Column(String(30), nullable=True, index=True)
+    store_secret = Column(String(100), nullable=True)
+    cloud_sync_enabled = Column(Boolean, default=True, nullable=False)
+    cloud_hub_url = Column(String(255), default="https://dollypos-hub.onrender.com", nullable=False)
+    last_cloud_sync_at = Column(DateTime, nullable=True)
+    cloud_sync_status = Column(String(50), default="IDLE", nullable=False)
+    cloud_sync_error = Column(Text, nullable=True)
+
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

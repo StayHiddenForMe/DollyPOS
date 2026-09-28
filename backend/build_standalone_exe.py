@@ -67,6 +67,7 @@ cmd = [
     "--hidden-import=sqlalchemy",
     "--hidden-import=sqlalchemy.dialects.postgresql",
     "--hidden-import=sqlalchemy.dialects.sqlite",
+    "--hidden-import=requests",
     os.path.join(BACKEND_DIR, "desktop_app.py")
 ]
 

@@ -19,16 +19,26 @@ export const STORAGE_KEYS = {
   USER_INFO: '@dolly_pos_user_info',
   BUSINESSES: '@dolly_pos_saved_businesses',
   ACTIVE_THEME: '@dolly_pos_theme_mode',
+  CLOUD_HUB_URL: '@dolly_pos_cloud_hub_url',
+  ACTIVE_STORE_ID: '@dolly_pos_active_store_id',
 };
 
+// Default Cloud Hub Gateway (Render Free Tier / Public Gateway)
+export const DEFAULT_HUB_URL = 'https://dollypos-hub.onrender.com';
 // Default fallback local LAN IP for Dolly POS shop laptop
 export const DEFAULT_SERVER_URL = 'http://192.168.0.145:8000';
 
 let cachedServerUrl: string = DEFAULT_SERVER_URL;
+let cachedHubUrl: string = DEFAULT_HUB_URL;
 let cachedToken: string | null = null;
+let cachedActiveStore: BusinessStore | null = null;
 
 // Initialize from storage
-export const initializeApiConfig = async (): Promise<{ serverUrl: string; token: string | null }> => {
+export const initializeApiConfig = async (): Promise<{
+  serverUrl: string;
+  token: string | null;
+  activeStore: BusinessStore | null;
+}> => {
   try {
     const savedUrl = await AsyncStorage.getItem(STORAGE_KEYS.SERVER_URL);
     if (savedUrl && savedUrl.trim()) {
@@ -37,12 +47,24 @@ export const initializeApiConfig = async (): Promise<{ serverUrl: string; token:
       cachedServerUrl = DEFAULT_SERVER_URL;
     }
 
+    const savedHub = await AsyncStorage.getItem(STORAGE_KEYS.CLOUD_HUB_URL);
+    if (savedHub && savedHub.trim()) {
+      cachedHubUrl = savedHub.trim().replace(/\/$/, '');
+    } else {
+      cachedHubUrl = DEFAULT_HUB_URL;
+    }
+
     const savedToken = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     cachedToken = savedToken;
+
+    // Load active store
+    const businesses = await getSavedBusinesses();
+    const active = businesses.find((b) => b.is_active) || businesses[0] || null;
+    cachedActiveStore = active;
   } catch (err) {
     console.warn('Failed to load API config from AsyncStorage:', err);
   }
-  return { serverUrl: cachedServerUrl, token: cachedToken };
+  return { serverUrl: cachedServerUrl, token: cachedToken, activeStore: cachedActiveStore };
 };
 
 export const setServerUrl = async (url: string): Promise<void> => {
@@ -53,6 +75,16 @@ export const setServerUrl = async (url: string): Promise<void> => {
 
 export const getServerUrl = (): string => {
   return cachedServerUrl;
+};
+
+export const getCloudHubUrl = (): string => {
+  return cachedHubUrl;
+};
+
+export const setCloudHubUrl = async (url: string): Promise<void> => {
+  const clean = url.trim().replace(/\/$/, '');
+  cachedHubUrl = clean;
+  await AsyncStorage.setItem(STORAGE_KEYS.CLOUD_HUB_URL, clean);
 };
 
 export const setAuthToken = async (token: string | null): Promise<void> => {
@@ -73,30 +105,41 @@ export const getSavedBusinesses = async (): Promise<BusinessStore[]> => {
   try {
     const json = await AsyncStorage.getItem(STORAGE_KEYS.BUSINESSES);
     if (json) {
-      return JSON.parse(json);
+      const parsed: BusinessStore[] = JSON.parse(json);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Filter out legacy dummy placeholder so newly installed or updated app starts clean
+        const clean = parsed.filter(
+          (b) => b.token !== 'DLY-STR1-MAIN' && b.id !== 'default'
+        );
+        if (clean.length > 0) {
+          return clean;
+        }
+      }
     }
   } catch (e) {
     console.warn('Error reading saved businesses:', e);
   }
-  return [
-    {
-      id: 'default',
-      name: 'Main Store (Dolly Toys & Kids Wear)',
-      url: cachedServerUrl,
-      is_active: true,
-    },
-  ];
+  return [];
 };
 
 export const saveBusinessesList = async (businesses: BusinessStore[]): Promise<void> => {
   await AsyncStorage.setItem(STORAGE_KEYS.BUSINESSES, JSON.stringify(businesses));
+  const active = businesses.find((b) => b.is_active) || businesses[0] || null;
+  cachedActiveStore = active;
+  if (active?.hub_url) {
+    cachedHubUrl = active.hub_url;
+  }
+};
+
+export const getActiveStore = (): BusinessStore | null => {
+  return cachedActiveStore;
 };
 
 // Create dynamic axios instance
 const getClient = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: `${cachedServerUrl}/api/v1`,
-    timeout: 10000,
+    timeout: 8000,
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -115,11 +158,44 @@ const getClient = (): AxiosInstance => {
 
 // API Methods
 export const api = {
-  // 1. Connection & Pairing Ping
+  // 1. Connection & Pairing Ping (LAN or Direct)
   async checkNetworkInfo(targetUrl?: string): Promise<NetworkInfo> {
     const url = (targetUrl || cachedServerUrl).trim().replace(/\/$/, '');
     const res = await axios.get<NetworkInfo>(`${url}/api/v1/mobile/network-info`, {
-      timeout: 6000,
+      timeout: 5000,
+    });
+    return res.data;
+  },
+
+  // 1b. Pair Store with Access Token via 24/7 Cloud Hub
+  async pairStoreWithToken(token: string, hubUrl?: string): Promise<{
+    store_token: string;
+    shop_name: string;
+    tagline?: string;
+    address?: string;
+    mobile?: string;
+    is_pos_online: boolean;
+    last_seen_at?: string;
+  }> {
+    const hub = (hubUrl || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const cleanToken = token.trim().toUpperCase();
+    const res = await axios.post(`${hub}/api/v1/hub/pair`, {
+      store_token: cleanToken,
+    }, { timeout: 7000 });
+    return res.data;
+  },
+
+  // 1c. Quick Heartbeat Check via Cloud Hub for Store Token
+  async checkStoreStatus(token: string, hubUrl?: string): Promise<{
+    store_token: string;
+    shop_name: string;
+    is_pos_online: boolean;
+    last_seen_at?: string;
+  }> {
+    const hub = (hubUrl || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const cleanToken = token.trim().toUpperCase();
+    const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(cleanToken)}/status`, {
+      timeout: 5000,
     });
     return res.data;
   },
@@ -131,12 +207,46 @@ export const api = {
     return res.data;
   },
 
-  // 3. Live Dashboard Overview (Range aware with profits)
+  // 3. Live Dashboard Overview (Range aware with profits, 24/7 Cloud Hub support)
   async getOverview(
     period: string = 'TODAY',
     startDate?: string,
     endDate?: string
   ): Promise<DashboardOverview> {
+    // Check if active store is connected via Cloud Hub Token
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<DashboardOverview>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/overview`,
+          {
+            params: {
+              period,
+              start_date: startDate || undefined,
+              end_date: endDate || undefined,
+            },
+            timeout: 6000,
+          }
+        );
+        return res.data;
+      } catch (hubErr) {
+        // Fallback to direct local LAN if available
+        if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+          const client = getClient();
+          const res = await client.get<DashboardOverview>('/mobile/overview', {
+            params: {
+              period,
+              start_date: startDate || undefined,
+              end_date: endDate || undefined,
+            },
+          });
+          return res.data;
+        }
+        throw hubErr;
+      }
+    }
+
+    // Standard direct LAN connection
     const client = getClient();
     const res = await client.get<DashboardOverview>('/mobile/overview', {
       params: {
@@ -244,8 +354,19 @@ export const api = {
     return downloadRes.uri;
   },
 
-  // 10. Customer Demand Log / Lost Demand API
+  // 10. Customer Demand Log / Lost Demand API (Cloud Hub & Local Sync)
   async getDemands(status?: string): Promise<DemandItem[]> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, {
+          timeout: 6000,
+        });
+        return res.data?.demands || [];
+      } catch (e) {
+        // Fallback to local client if available
+      }
+    }
     const client = getClient();
     const res = await client.get<DemandItem[]>('/procurement/lost-demand', {
       params: { status: status || undefined },
@@ -263,6 +384,17 @@ export const api = {
     urgency?: 'NORMAL' | 'HIGH' | 'URGENT';
     notes?: string;
   }): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.post(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, data, {
+          timeout: 6000,
+        });
+        return res.data;
+      } catch (e) {
+        // Fallback to local client if available
+      }
+    }
     const client = getClient();
     const res = await client.post('/procurement/lost-demand', data);
     return res.data;
