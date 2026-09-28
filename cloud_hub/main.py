@@ -8,7 +8,9 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./cloud_hub.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_DB = os.path.join(BASE_DIR, "cloud_hub.db").replace("\\", "/")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB}")
 # Fix postgres URL if provided by Render / Heroku (postgres:// -> postgresql://)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -355,30 +357,95 @@ def get_store_overview_for_mobile(
     if not store:
         raise HTTPException(status_code=404, detail="Store not found with this token.")
 
-    req_period = period.strip().upper()
-    snapshot = db.query(HubSnapshot).filter(
-        HubSnapshot.store_token == t_clean,
-        HubSnapshot.period == req_period
-    ).first()
-
-    # Fallback to TODAY if requested period is not found
-    if not snapshot and req_period != "TODAY":
-        snapshot = db.query(HubSnapshot).filter(
-            HubSnapshot.store_token == t_clean,
-            HubSnapshot.period == "TODAY"
-        ).first()
-
     # Determine if POS is currently online
     is_online = False
     if store.last_seen_at:
         is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=90)
 
+    req_period = period.strip().upper()
     overview_data = {}
-    if snapshot and snapshot.data_json:
-        try:
-            overview_data = json.loads(snapshot.data_json)
-        except Exception:
-            overview_data = {}
+
+    if req_period == "CUSTOM" and start_date and end_date:
+        data_row = db.query(HubStoreData).filter(
+            HubStoreData.store_token == t_clean,
+            HubStoreData.data_type == "REPORTS"
+        ).first()
+        if data_row and data_row.data_json:
+            try:
+                rep_data = json.loads(data_row.data_json)
+                all_invs = rep_data.get("sales_invoices", [])
+                filtered_invs = [inv for inv in all_invs if start_date <= inv.get("date_ymd", "") <= end_date]
+                
+                b_count = len(filtered_invs)
+                g_sales = sum(float(inv.get("gross_amount", 0.0)) for inv in filtered_invs)
+                n_sales = sum(float(inv.get("net_amount", 0.0)) for inv in filtered_invs)
+                t_disc = sum(float(inv.get("discount", 0.0)) for inv in filtered_invs)
+                t_tax = sum(float(inv.get("tax", 0.0)) for inv in filtered_invs)
+                avg_b = round(n_sales / b_count, 2) if b_count > 0 else 0.0
+
+                pmt_modes = {"CASH": 0.0, "UPI": 0.0, "CARD": 0.0, "CREDIT": 0.0}
+                for inv in filtered_invs:
+                    m = str(inv.get("payment_mode", "CASH")).upper()
+                    amt = float(inv.get("net_amount", 0.0))
+                    if "CASH" in m: pmt_modes["CASH"] += amt
+                    elif "UPI" in m or "ONLINE" in m: pmt_modes["UPI"] += amt
+                    elif "CARD" in m: pmt_modes["CARD"] += amt
+                    elif "CREDIT" in m or "KHATA" in m: pmt_modes["CREDIT"] += amt
+                    else: pmt_modes["CASH"] += amt
+
+                for k in pmt_modes:
+                    pmt_modes[k] = round(pmt_modes[k], 2)
+
+                all_exps = rep_data.get("expenses", [])
+                filtered_exps = [e for e in all_exps if start_date <= e.get("date_ymd", "") <= end_date]
+                exp_total = sum(float(e.get("amount", 0.0)) for e in filtered_exps)
+
+                overview_data = {
+                    "period": "CUSTOM",
+                    "date_str": f"{start_date} to {end_date}",
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "sales": {
+                        "gross_sales": round(g_sales, 2),
+                        "net_sales": round(n_sales, 2),
+                        "total_cogs": 0.0,
+                        "gross_profit": round(n_sales, 2),
+                        "net_profit": round(n_sales - exp_total, 2),
+                        "margin_percent": 100.0 if n_sales > 0 else 0.0,
+                        "total_tax": round(t_tax, 2),
+                        "total_discount": round(t_disc, 2),
+                        "bill_count": b_count,
+                        "average_bill": avg_b
+                    },
+                    "period_expenses": round(exp_total, 2),
+                    "payment_breakdown": pmt_modes,
+                    "hourly_velocity": [],
+                    "top_products": [],
+                    "low_stock_items": [],
+                    "low_stock_count": 0,
+                    "khata_outstanding": 0.0
+                }
+            except Exception:
+                overview_data = {}
+
+    if not overview_data:
+        snapshot = db.query(HubSnapshot).filter(
+            HubSnapshot.store_token == t_clean,
+            HubSnapshot.period == req_period
+        ).first()
+
+        # Fallback to TODAY if requested period is not found
+        if not snapshot and req_period != "TODAY":
+            snapshot = db.query(HubSnapshot).filter(
+                HubSnapshot.store_token == t_clean,
+                HubSnapshot.period == "TODAY"
+            ).first()
+
+        if snapshot and snapshot.data_json:
+            try:
+                overview_data = json.loads(snapshot.data_json)
+            except Exception:
+                overview_data = {}
 
     # Guarantee essential fields are always present
     overview_data["shop_name"] = store.shop_name

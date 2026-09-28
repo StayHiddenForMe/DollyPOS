@@ -181,7 +181,7 @@ export const api = {
     const cleanToken = token.trim().toUpperCase();
     const res = await axios.post(`${hub}/api/v1/hub/pair`, {
       store_token: cleanToken,
-    }, { timeout: 7000 });
+    }, { timeout: 20000 });
     return res.data;
   },
 
@@ -195,7 +195,7 @@ export const api = {
     const hub = (hubUrl || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
     const cleanToken = token.trim().toUpperCase();
     const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(cleanToken)}/status`, {
-      timeout: 5000,
+      timeout: 15000,
     });
     return res.data;
   },
@@ -225,7 +225,7 @@ export const api = {
               start_date: startDate || undefined,
               end_date: endDate || undefined,
             },
-            timeout: 6000,
+            timeout: 20000,
           }
         );
         return res.data;
@@ -275,7 +275,7 @@ export const api = {
               end_date: endDate,
               report_type: reportType,
             },
-            timeout: 8000,
+            timeout: 20000,
           }
         );
         return res.data;
@@ -314,7 +314,7 @@ export const api = {
           `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/khata`,
           {
             params: { search: search || undefined },
-            timeout: 7000,
+            timeout: 20000,
           }
         );
         return res.data;
@@ -357,7 +357,7 @@ export const api = {
               page,
               limit,
             },
-            timeout: 8000,
+            timeout: 20000,
           }
         );
         return res.data;
@@ -414,7 +414,7 @@ export const api = {
       try {
         const res = await axios.get<CategoryItem[]>(
           `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/categories`,
-          { timeout: 6000 }
+          { timeout: 20000 }
         );
         return res.data || [];
       } catch (hubErr) {

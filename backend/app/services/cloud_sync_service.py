@@ -316,15 +316,13 @@ class CloudSyncService:
 
     @staticmethod
     def build_reports_payload(db: Session) -> Dict[str, Any]:
-        """Packages 60-day historical data for remote mobile Reports Studio queries."""
+        """Packages complete historical data (1-5+ years) for remote mobile Reports Studio queries."""
         ist_now = get_ist_now()
-        start_60 = ist_now - timedelta(days=60)
-        start_60_utc = start_60 - IST_OFFSET
 
-        # 1. Sales Invoices
+        # 1. Sales Invoices - Full historical register
         invs = (
             db.query(Invoice)
-            .filter(Invoice.created_at >= start_60_utc, Invoice.is_cancelled == False)
+            .filter(Invoice.is_cancelled == False)
             .order_by(Invoice.created_at.desc())
             .all()
         )
@@ -345,8 +343,8 @@ class CloudSyncService:
                 "net_amount": round(float(inv.grand_total), 2)
             })
 
-        # 2. Payments
-        pmts = db.query(Payment).filter(Payment.created_at >= start_60_utc).all()
+        # 2. Payments - Full historical payments
+        pmts = db.query(Payment).order_by(Payment.created_at.desc()).all()
         payments = []
         for p in pmts:
             ist_dt = p.created_at + IST_OFFSET
@@ -356,8 +354,8 @@ class CloudSyncService:
                 "amount": round(float(p.amount), 2)
             })
 
-        # 3. Expenses
-        exps = db.query(Expense).filter(Expense.expense_date >= start_60_utc).all()
+        # 3. Expenses - Full historical expenses
+        exps = db.query(Expense).order_by(Expense.expense_date.desc()).all()
         expenses = []
         for e in exps:
             ist_dt = (e.expense_date + IST_OFFSET) if e.expense_date else ist_now
@@ -411,7 +409,7 @@ class CloudSyncService:
                 "est_cost": round(suggested * float(p.purchase_price or 0.0), 2)
             })
 
-        # 6. Categories revenue
+        # 6. Categories revenue - All historical data
         cats_query = (
             db.query(
                 Category.name,
@@ -421,7 +419,7 @@ class CloudSyncService:
             .join(Product, Product.id == InvoiceItem.product_id)
             .join(Category, Category.id == Product.category_id)
             .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
-            .filter(Invoice.created_at >= start_60_utc, Invoice.is_cancelled == False)
+            .filter(Invoice.is_cancelled == False)
             .group_by(Category.name)
             .order_by(desc("total_rev"))
             .all()
