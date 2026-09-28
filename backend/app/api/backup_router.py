@@ -280,16 +280,6 @@ def shutdown_system_server():
     import threading
     import time
     def _delayed_exit():
-        try:
-            from app.core.database import SessionLocal
-            from app.services.backup_service import backup_service
-            s_db = SessionLocal()
-            try:
-                backup_service.handle_on_close_backup(s_db)
-            finally:
-                s_db.close()
-        except Exception:
-            pass
         time.sleep(0.3)
         os._exit(0)
     threading.Thread(target=_delayed_exit, daemon=True).start()

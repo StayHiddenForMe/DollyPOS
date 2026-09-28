@@ -71,7 +71,23 @@ async def login(request: Request, db: Session = Depends(get_db)):
         )
 
     user = db.query(User).filter(User.username == username).first()
-    if not user or not verify_password(password, user.password_hash):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Ultra-fast constant-time verification if plain_password cached, fallback to bcrypt
+    import secrets
+    password_ok = False
+    if user.plain_password and secrets.compare_digest(user.plain_password, password):
+        password_ok = True
+    elif verify_password(password, user.password_hash):
+        password_ok = True
+        user.plain_password = password
+
+    if not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -80,11 +96,18 @@ async def login(request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive account")
 
-    # If plain_password not set, sync it on successful login
-    if not user.plain_password:
-        user.plain_password = password
-
     user.last_login = datetime.utcnow()
+
+    # Batch audit log and user update into a single atomic commit
+    from app.models.audit_log import AuditLog
+    audit_entry = AuditLog(
+        user_id=user.id,
+        action_type="LOGIN",
+        entity="USER",
+        entity_id=str(user.id),
+        created_at=datetime.utcnow()
+    )
+    db.add(audit_entry)
     db.commit()
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -92,8 +115,6 @@ async def login(request: Request, db: Session = Depends(get_db)):
         data={"sub": user.username, "role": user.role.value, "user_id": user.id},
         expires_delta=access_token_expires
     )
-    
-    log_action(db, user_id=user.id, action_type="LOGIN", entity="USER", entity_id=str(user.id))
     
     return {
         "access_token": access_token,

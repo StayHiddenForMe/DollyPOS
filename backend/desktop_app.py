@@ -101,6 +101,21 @@ def kill_process_on_port(port=8000):
     except Exception:
         pass
 
+def cleanup_stale_zombies():
+    """Kills orphan processes holding port 8000 and orphan DollyPOS.exe processes from earlier crashes."""
+    kill_process_on_port(8000)
+    try:
+        current_pid = os.getpid()
+        output = subprocess.check_output('tasklist /FI "IMAGENAME eq DollyPOS.exe" /FO CSV /NH', shell=True).decode()
+        for line in output.splitlines():
+            parts = line.strip().replace('"', '').split(',')
+            if len(parts) >= 2 and parts[0].lower() == 'dollypos.exe':
+                pid_str = parts[1].strip()
+                if pid_str.isdigit() and int(pid_str) != current_pid:
+                    subprocess.call(f'taskkill /F /PID {pid_str}', shell=True)
+    except Exception:
+        pass
+
 def check_single_instance_or_focus():
     """
     Prevents spawning duplicate instances.
@@ -132,8 +147,11 @@ def check_single_instance_or_focus():
             pass
 
         # Port 8000 is occupied but /health didn't respond (stale zombie process)
-        kill_process_on_port(8000)
+        cleanup_stale_zombies()
         time.sleep(1.0)
+
+IS_SHUTTING_DOWN = False
+SHUTDOWN_LOCK = threading.Lock()
 
 def perform_on_close_sync():
     """Executes on-close Cloud Hub sync and local database snapshot."""
@@ -147,6 +165,30 @@ def perform_on_close_sync():
             exit_db.close()
     except Exception:
         pass
+
+def safe_fast_exit(server=None):
+    """
+    Guarantees instant process shutdown within 2.5 seconds with ZERO zombie PIDs.
+    Runs fast on-close cloud sync in a daemon worker capped at 2.0s,
+    then terminates the process completely via os._exit(0).
+    """
+    global IS_SHUTTING_DOWN
+    with SHUTDOWN_LOCK:
+        if IS_SHUTTING_DOWN:
+            return
+        IS_SHUTTING_DOWN = True
+
+    if server:
+        server.should_exit = True
+
+    try:
+        sync_thread = threading.Thread(target=perform_on_close_sync, daemon=True)
+        sync_thread.start()
+        sync_thread.join(timeout=2.0)
+    except Exception:
+        pass
+    finally:
+        os._exit(0)
 
 def watchdog_monitor(server):
     """
@@ -162,10 +204,7 @@ def watchdog_monitor(server):
         time.sleep(1.5)
         if FIRST_HEARTBEAT_RECEIVED:
             if time.time() - LAST_HEARTBEAT_TIME > 6.0:
-                perform_on_close_sync()
-                server.should_exit = True
-                time.sleep(0.3)
-                os._exit(0)
+                safe_fast_exit(server)
 
 def open_and_monitor_browser(server):
     """Wait for backend health endpoint, then open Chrome/Edge in app mode and monitor its lifecycle."""
@@ -196,11 +235,8 @@ def open_and_monitor_browser(server):
             ])
             # Wait for user to close the app window
             proc.wait()
-            # Once window is closed, execute end-of-day Cloud Hub sync & backup before shutdown
-            perform_on_close_sync()
-            server.should_exit = True
-            time.sleep(0.3)
-            os._exit(0)
+            # Once window is closed, immediately trigger fast shutdown
+            safe_fast_exit(server)
             return
         except Exception:
             pass
@@ -236,8 +272,7 @@ def main():
 
     # 5. Run Uvicorn server on main thread
     server.run()
-    perform_on_close_sync()
-    os._exit(0)
+    safe_fast_exit()
 
 if __name__ == "__main__":
     main()

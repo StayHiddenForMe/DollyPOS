@@ -4,7 +4,7 @@ import random
 import subprocess
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from app.config import settings
 from app.models.settings import StoreSettings
 from app.models.product import Product
@@ -192,7 +192,7 @@ class BackupService:
                         for sc in c.subcategories
                     ]
                 }
-                for c in db.query(Category).all()
+                for c in db.query(Category).options(selectinload(Category.subcategories)).all()
             ],
             "products": [
                 {
@@ -220,7 +220,7 @@ class BackupService:
                     "is_speed_dial": p.is_speed_dial,
                     "is_active": p.is_active
                 }
-                for p in db.query(Product).all()
+                for p in db.query(Product).options(joinedload(Product.category), joinedload(Product.subcategory)).all()
             ],
             "customers": [
                 {
@@ -248,7 +248,7 @@ class BackupService:
                         for l in c.ledger_entries
                     ] if hasattr(c, 'ledger_entries') and c.ledger_entries else []
                 }
-                for c in db.query(Customer).all()
+                for c in db.query(Customer).options(selectinload(Customer.ledger_entries)).all()
             ],
             "vendors": [
                 {
@@ -281,7 +281,7 @@ class BackupService:
                         for vl in v.ledger_entries
                     ] if hasattr(v, 'ledger_entries') and v.ledger_entries else []
                 }
-                for v in db.query(Vendor).all()
+                for v in db.query(Vendor).options(selectinload(Vendor.ledger_entries)).all()
             ],
             "purchases": [
                 {
@@ -312,7 +312,7 @@ class BackupService:
                         for item in purch.items
                     ] if purch.items else []
                 }
-                for purch in db.query(Purchase).all()
+                for purch in db.query(Purchase).options(selectinload(Purchase.items), joinedload(Purchase.vendor)).all()
             ],
             "invoices": [
                 {
@@ -364,7 +364,7 @@ class BackupService:
                         for p in inv.payments
                     ] if inv.payments else []
                 }
-                for inv in db.query(Invoice).all()
+                for inv in db.query(Invoice).options(selectinload(Invoice.items), selectinload(Invoice.payments)).all()
             ],
             "returns": [
                 {
@@ -389,7 +389,7 @@ class BackupService:
                         for ritem in ret.items
                     ] if ret.items else []
                 }
-                for ret in db.query(ReturnOrder).all()
+                for ret in db.query(ReturnOrder).options(selectinload(ReturnOrder.items), joinedload(ReturnOrder.invoice), joinedload(ReturnOrder.customer)).all()
             ],
             "expenses": [
                 {
@@ -446,7 +446,7 @@ class BackupService:
                     "changed_by": pph.changed_by,
                     "created_at": pph.created_at.isoformat() if pph.created_at else None
                 }
-                for pph in db.query(ProductPriceHistory).all()
+                for pph in db.query(ProductPriceHistory).options(joinedload(ProductPriceHistory.product)).all()
             ],
             "whatsapp_logs": [
                 {
@@ -572,46 +572,80 @@ class BackupService:
             "retention_days": retention_days
         }
 
+    _on_close_lock = False
+
     @staticmethod
     def handle_on_close_backup(db: Session) -> dict:
         """
         Executed when Dolly POS is closing:
         1. Always pushes latest end-of-day snapshot to 24/7 Cloud Hub (store_token) for remote mobile access
-        2. Generates local JSON database snapshot
+        2. If backup_on_app_close is enabled, checks if today's backup already exists. If not, generates it
         3. Uploads snapshot to Google Drive if connected
         4. Cleans old retention files
         """
         from app.services.cloud_sync_service import cloud_sync_service
 
-        # 1. End-of-Day push to 24/7 Cloud Hub (ensures mobile phone has 100% up-to-date final business pulse)
-        hub_result = {}
-        try:
-            hub_result = cloud_sync_service.sync_to_cloud(db, force=True)
-        except Exception as e:
-            hub_result = {"status": "error", "message": str(e)}
+        # Re-entrancy guard to prevent multiple threads from running simultaneously on close
+        if getattr(BackupService, '_on_close_lock', False):
+            return {"status": "IN_PROGRESS", "message": "On-close sync already in progress."}
+        BackupService._on_close_lock = True
 
-        st = db.query(StoreSettings).first()
-        if st and not getattr(st, 'backup_on_app_close', True):
+        try:
+            # 1. End-of-Day push to 24/7 Cloud Hub (ensures mobile phone has 100% up-to-date final business pulse)
+            hub_result = {}
+            try:
+                hub_result = cloud_sync_service.sync_to_cloud(db, force=True)
+            except Exception as e:
+                hub_result = {"status": "error", "message": str(e)}
+
+            st = db.query(StoreSettings).first()
+            if st and not getattr(st, 'backup_on_app_close', True):
+                return {
+                    "status": "COMPLETED",
+                    "message": "End-of-day Cloud Hub snapshot pushed successfully. Local backup skipped (disabled in settings).",
+                    "backed_up": False,
+                    "cloud_hub_synced": hub_result.get("status") == "success",
+                    "cloud_hub_details": hub_result
+                }
+
+            # 2. Check if today's backup already exists in target directory
+            target_dir = BackupService.get_backup_directory(db)
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            existing_today = []
+            if os.path.exists(target_dir):
+                existing_today = [f for f in os.listdir(target_dir) if today_str in f and f.endswith(".json")]
+
+            if existing_today:
+                retention_days = st.backup_retention_days if st and st.backup_retention_days is not None else 30
+                local_purged = BackupService.purge_old_local_backups(target_dir, retention_days)
+                return {
+                    "status": "COMPLETED",
+                    "message": f"End-of-day Cloud Hub snapshot pushed. Today's database backup already safely exists ({existing_today[0]}).",
+                    "backed_up": True,
+                    "already_exists": True,
+                    "cloud_hub_synced": hub_result.get("status") == "success",
+                    "cloud_hub_details": hub_result,
+                    "details": {
+                        "local_file": {"file_name": existing_today[0]},
+                        "local_purged_count": local_purged
+                    }
+                }
+
+            # 3. If today's backup does not exist, generate it now
+            result = BackupService.execute_full_backup_flow(db, auto_schedule="ON_CLOSE")
+            result["cloud_hub_synced"] = hub_result.get("status") == "success"
+            result["cloud_hub_details"] = hub_result
+
             return {
                 "status": "COMPLETED",
-                "message": "End-of-day Cloud Hub snapshot pushed successfully. Local backup skipped (disabled in settings).",
-                "backed_up": False,
+                "message": "On-close backup and 24/7 Cloud Hub sync completed successfully.",
+                "backed_up": True,
                 "cloud_hub_synced": hub_result.get("status") == "success",
-                "cloud_hub_details": hub_result
+                "cloud_hub_details": hub_result,
+                "details": result
             }
-
-        result = BackupService.execute_full_backup_flow(db, auto_schedule="ON_CLOSE")
-        result["cloud_hub_synced"] = hub_result.get("status") == "success"
-        result["cloud_hub_details"] = hub_result
-
-        return {
-            "status": "COMPLETED",
-            "message": "On-close backup and 24/7 Cloud Hub sync completed successfully.",
-            "backed_up": True,
-            "cloud_hub_synced": hub_result.get("status") == "success",
-            "cloud_hub_details": hub_result,
-            "details": result
-        }
+        finally:
+            BackupService._on_close_lock = False
 
     @staticmethod
     def check_and_run_scheduled_auto_backup(db: Session) -> dict:
