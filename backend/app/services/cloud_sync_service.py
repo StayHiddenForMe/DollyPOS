@@ -590,6 +590,40 @@ class CloudSyncService:
         except Exception:
             return []
 
+    @staticmethod
+    def build_vendors_payload(db: Session) -> List[Dict[str, Any]]:
+        """Returns active vendors list with bank details and outstanding dues for mobile companion."""
+        from app.models.vendor import Vendor
+        try:
+            vendors = db.query(Vendor).filter(Vendor.is_active == True).all()
+            out = []
+            for v in vendors:
+                out.append({
+                    "id": v.id,
+                    "vendor_code": v.vendor_code,
+                    "name": v.name,
+                    "company_name": v.company_name,
+                    "phone": v.phone,
+                    "alt_phone": v.alt_phone,
+                    "email": v.email,
+                    "gstin": v.gstin,
+                    "address": v.address,
+                    "city": v.city,
+                    "state": v.state,
+                    "notes": v.notes,
+                    "bank_name": v.bank_name,
+                    "bank_account_no": v.bank_account_no,
+                    "bank_ifsc": v.bank_ifsc,
+                    "bank_holder_name": v.bank_holder_name,
+                    "vendor_upi_id": v.vendor_upi_id,
+                    "outstanding_due": round(float(v.outstanding_due or 0.0), 2),
+                    "is_active": v.is_active,
+                    "created_at": v.created_at.isoformat() if v.created_at else None
+                })
+            return out
+        except Exception:
+            return []
+
     @classmethod
     def sync_to_cloud(cls, db: Session, force: bool = False) -> Dict[str, Any]:
         """
@@ -621,6 +655,7 @@ class CloudSyncService:
             reports = cls.build_reports_payload(db)
             categories = cls.build_categories_payload(db)
             demands = cls.build_demands_payload(db)
+            vendors = cls.build_vendors_payload(db)
 
             payload = {
                 "store_id": getattr(st, "store_id", "default"),
@@ -638,6 +673,7 @@ class CloudSyncService:
                 "reports": reports,
                 "categories": categories,
                 "demands": demands,
+                "vendors": vendors,
                 "synced_at": datetime.utcnow().isoformat()
             }
 
@@ -652,7 +688,7 @@ class CloudSyncService:
             if response.status_code in [200, 201]:
                 res_data = response.json()
 
-                # Check for pending demands logged from mobile app to pull down to local DB
+                # 1. Process pending demands logged from mobile app to pull down to local DB
                 pending_demands = res_data.get("pending_demands", [])
                 pulled_demands_count = 0
                 for d in pending_demands:
@@ -676,7 +712,7 @@ class CloudSyncService:
                             db.add(new_demand)
                             pulled_demands_count += 1
 
-                # Check for pending products added remotely from mobile app to pull into local DB
+                # 2. Process pending products added remotely from mobile app to pull into local DB
                 pending_products = res_data.get("pending_products", [])
                 pulled_products_count = 0
                 for p in pending_products:
@@ -700,8 +736,86 @@ class CloudSyncService:
                             db.add(new_prod)
                             pulled_products_count += 1
 
-                if (pulled_demands_count + pulled_products_count) > 0:
-                    db.commit()
+                # 3. Process pending demand mutations (status updates & deletions made from mobile)
+                pending_mutations = res_data.get("pending_demand_mutations", [])
+                for m in pending_mutations:
+                    did = m.get("demand_id")
+                    action = m.get("action")
+                    if action == "DELETE":
+                        db.query(LostDemand).filter(LostDemand.id == did).delete()
+                    elif action == "UPDATE_STATUS":
+                        new_st = m.get("status")
+                        demand_row = db.query(LostDemand).filter(LostDemand.id == did).first()
+                        if demand_row and new_st:
+                            try:
+                                demand_row.status = LostDemandStatus(new_st)
+                            except Exception:
+                                pass
+
+                # 4. Process pending vendors created remotely on mobile
+                pending_vendors = res_data.get("pending_vendors", [])
+                from app.models.vendor import Vendor, VendorLedger, VendorLedgerType
+                for pv in pending_vendors:
+                    pv_name = pv.get("name", "").strip()
+                    pv_phone = pv.get("phone", "").strip()
+                    if pv_name and pv_phone:
+                        existing_v = db.query(Vendor).filter(Vendor.name == pv_name, Vendor.phone == pv_phone).first()
+                        if not existing_v:
+                            new_v = Vendor(
+                                name=pv_name,
+                                company_name=pv.get("company_name"),
+                                phone=pv_phone,
+                                alt_phone=pv.get("alt_phone"),
+                                email=pv.get("email"),
+                                gstin=pv.get("gstin"),
+                                address=pv.get("address"),
+                                city=pv.get("city"),
+                                state=pv.get("state") or "Maharashtra",
+                                notes=pv.get("notes"),
+                                bank_name=pv.get("bank_name"),
+                                bank_account_no=pv.get("bank_account_no"),
+                                bank_ifsc=pv.get("bank_ifsc"),
+                                bank_holder_name=pv.get("bank_holder_name"),
+                                vendor_upi_id=pv.get("vendor_upi_id"),
+                                outstanding_due=float(pv.get("opening_due", 0.0)),
+                                is_active=True,
+                                created_at=datetime.utcnow()
+                            )
+                            db.add(new_v)
+                            db.flush()
+                            if new_v.outstanding_due > 0:
+                                ledger = VendorLedger(
+                                    vendor_id=new_v.id,
+                                    entry_type=VendorLedgerType.ADJUSTMENT,
+                                    reference_no="OPENING_BALANCE",
+                                    credit_amount=new_v.outstanding_due,
+                                    debit_amount=0.0,
+                                    balance_after=new_v.outstanding_due,
+                                    notes="Opening balance adjustment from mobile companion"
+                                )
+                                db.add(ledger)
+
+                # 5. Process pending vendor payments recorded remotely on mobile
+                pending_vendor_pmts = res_data.get("pending_vendor_payments", [])
+                for pvp in pending_vendor_pmts:
+                    v_id = pvp.get("vendor_id")
+                    amt = float(pvp.get("amount", 0.0))
+                    vendor_rec = db.query(Vendor).filter(Vendor.id == v_id).first()
+                    if vendor_rec and amt > 0:
+                        vendor_rec.outstanding_due = max(0.0, vendor_rec.outstanding_due - amt)
+                        v_ledger = VendorLedger(
+                            vendor_id=vendor_rec.id,
+                            entry_type=VendorLedgerType.PAYMENT_MADE,
+                            reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
+                            debit_amount=amt,
+                            credit_amount=0.0,
+                            balance_after=vendor_rec.outstanding_due,
+                            payment_mode=pvp.get("payment_mode") or "UPI",
+                            notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
+                        )
+                        db.add(v_ledger)
+
+                db.commit()
 
                 st.last_cloud_sync_at = datetime.utcnow()
                 st.cloud_sync_status = "SUCCESS"

@@ -621,6 +621,7 @@ def get_mobile_reports(
     # ------------------ 2. PAYMENTS BREAKDOWN ------------------
     elif rep_upper == "PAYMENTS":
         payments = db.query(Payment).filter(Payment.created_at >= s_utc, Payment.created_at <= e_utc).all()
+        invoices = db.query(Invoice).filter(Invoice.created_at >= s_utc, Invoice.created_at <= e_utc, Invoice.is_cancelled == False).all()
 
         mode_stats = {
             "CASH": {"mode": "Cash Counter", "bills": 0, "amount": 0.0},
@@ -629,8 +630,10 @@ def get_mobile_reports(
             "CREDIT": {"mode": "Khata Udhar Dues", "bills": 0, "amount": 0.0},
         }
 
+        invoices_with_payments = set()
         total_collected = 0.0
         for p in payments:
+            invoices_with_payments.add(p.invoice_id)
             m = str(p.payment_mode.value if hasattr(p.payment_mode, "value") else p.payment_mode).upper()
             amt = float(p.amount)
             total_collected += amt
@@ -647,6 +650,25 @@ def get_mobile_reports(
                 mode_stats["CREDIT"]["bills"] += 1
                 mode_stats["CREDIT"]["amount"] += amt
 
+        # Add invoices that do not have rows in payments (e.g. CREDIT_KHATA)
+        for inv in invoices:
+            if inv.id not in invoices_with_payments:
+                m = str(inv.payment_mode.value if hasattr(inv.payment_mode, "value") else inv.payment_mode).upper()
+                amt = float(inv.grand_total)
+                total_collected += amt
+                if "CASH" in m:
+                    mode_stats["CASH"]["bills"] += 1
+                    mode_stats["CASH"]["amount"] += amt
+                elif "UPI" in m or "ONLINE" in m:
+                    mode_stats["UPI"]["bills"] += 1
+                    mode_stats["UPI"]["amount"] += amt
+                elif "CARD" in m:
+                    mode_stats["CARD"]["bills"] += 1
+                    mode_stats["CARD"]["amount"] += amt
+                else:
+                    mode_stats["CREDIT"]["bills"] += 1
+                    mode_stats["CREDIT"]["amount"] += amt
+
         rows = []
         for k, v in mode_stats.items():
             pct = round((v["amount"] / total_collected * 100), 1) if total_collected > 0 else 0.0
@@ -657,6 +679,8 @@ def get_mobile_reports(
                 "share_pct": pct
             })
 
+        total_tx = len(payments) + len([inv for inv in invoices if inv.id not in invoices_with_payments])
+
         return {
             "report_type": "PAYMENTS",
             "title": f"Payment Mode Collections ({start_date} to {end_date})",
@@ -665,9 +689,9 @@ def get_mobile_reports(
             "end_date": end_date,
             "summary": {
                 "total_collected": round(total_collected, 2),
-                "total_transactions": len(payments)
+                "total_transactions": total_tx
             },
-            "columns": ["Payment Mode", "Transactions", "Amount Collected (₹)", "Share (%)"],
+            "columns": ["Payment Channel", "Bills", "Amount Collected (₹)", "Share (%)"],
             "rows": rows
         }
 
@@ -770,7 +794,6 @@ def get_mobile_reports(
         for p in damaged_prods:
             qty = p.damaged_quantity
             c_loss = round(float(p.purchase_price or 0.0) * qty, 2)
-            r_loss = round(float(p.selling_price or 0.0) * qty, 2)
             total_dmg_units += qty
             total_cost_loss += c_loss
 
@@ -779,14 +802,11 @@ def get_mobile_reports(
                 "barcode": p.barcode or "—",
                 "damaged_units": qty,
                 "cost_price": round(float(p.purchase_price or 0.0), 2),
-                "selling_price": round(float(p.selling_price or 0.0), 2),
-                "total_cost_loss": c_loss,
-                "retail_loss": r_loss
             })
 
         return {
             "report_type": "DAMAGED",
-            "title": "Damaged Goods & Loss Register",
+            "title": "Damaged Goods Register",
             "store_name": store_title,
             "start_date": start_date,
             "end_date": end_date,
@@ -795,7 +815,7 @@ def get_mobile_reports(
                 "total_damaged_units": total_dmg_units,
                 "total_cost_loss": round(total_cost_loss, 2)
             },
-            "columns": ["Product", "Barcode", "Damaged Qty", "Cost (₹)", "Selling (₹)", "Total Loss (₹)"],
+            "columns": ["Product Name", "Barcode", "Damaged Qty", "Cost Price (₹)"],
             "rows": rows
         }
 
@@ -812,22 +832,18 @@ def get_mobile_reports(
         for p in low_items:
             cur = p.stock_quantity
             min_s = p.min_stock_alert
-            # Suggest reordering enough to reach 3x safety stock
             suggested = max((min_s * 3) - cur, min_s)
             total_suggested_reorder += suggested
 
             rows.append({
                 "product_name": p.name,
-                "barcode": p.barcode or "—",
                 "current_stock": cur,
-                "min_alert": min_s,
                 "suggested_order": suggested,
-                "est_cost": round(suggested * float(p.purchase_price or 0.0), 2)
             })
 
         return {
             "report_type": "PLANNER",
-            "title": "Demand & Reorder Planner",
+            "title": "Smart Stock Replenishment Planner",
             "store_name": store_title,
             "start_date": start_date,
             "end_date": end_date,
@@ -835,7 +851,7 @@ def get_mobile_reports(
                 "critical_items_count": len(rows),
                 "total_suggested_units": total_suggested_reorder
             },
-            "columns": ["Product", "Barcode", "Stock", "Alert Level", "Suggested Order", "Est. Cost (₹)"],
+            "columns": ["Product Name", "Stock Left", "Suggested Order"],
             "rows": rows
         }
 
@@ -930,3 +946,229 @@ def download_database_backup_to_mobile(
         filename=fname,
         media_type="application/json"
     )
+
+
+# -------------------------------------------------------------
+# 9. Vendor Management System for Mobile
+# -------------------------------------------------------------
+class MobileVendorCreate(BaseModel):
+    name: str
+    phone: str
+    company_name: Optional[str] = None
+    alt_phone: Optional[str] = None
+    email: Optional[str] = None
+    gstin: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = "Maharashtra"
+    notes: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_holder_name: Optional[str] = None
+    vendor_upi_id: Optional[str] = None
+    opening_due: Optional[float] = 0.0
+
+class MobileVendorUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    company_name: Optional[str] = None
+    alt_phone: Optional[str] = None
+    email: Optional[str] = None
+    gstin: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    notes: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_holder_name: Optional[str] = None
+    vendor_upi_id: Optional[str] = None
+
+class MobileVendorPayment(BaseModel):
+    amount: float
+    payment_mode: Optional[str] = "UPI"
+    reference_no: Optional[str] = None
+    notes: Optional[str] = None
+
+@router.get("/vendors")
+def get_mobile_vendors(
+    search: Optional[str] = Query(None, description="Search by name, phone or company"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from app.models.vendor import Vendor
+    query = db.query(Vendor).filter(Vendor.is_active == True)
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        query = query.filter(or_(Vendor.name.ilike(s), Vendor.phone.ilike(s), Vendor.company_name.ilike(s)))
+
+    vendors = query.order_by(Vendor.name.asc()).all()
+    total_dues = sum(float(v.outstanding_due or 0.0) for v in vendors)
+
+    rows = []
+    for v in vendors:
+        rows.append({
+            "id": v.id,
+            "vendor_code": v.vendor_code,
+            "name": v.name,
+            "company_name": v.company_name,
+            "phone": v.phone,
+            "alt_phone": v.alt_phone,
+            "email": v.email,
+            "gstin": v.gstin,
+            "address": v.address,
+            "city": v.city,
+            "state": v.state,
+            "notes": v.notes,
+            "bank_name": v.bank_name,
+            "bank_account_no": v.bank_account_no,
+            "bank_ifsc": v.bank_ifsc,
+            "bank_holder_name": v.bank_holder_name,
+            "vendor_upi_id": v.vendor_upi_id,
+            "outstanding_due": round(float(v.outstanding_due or 0.0), 2),
+            "is_active": v.is_active,
+            "created_at": v.created_at.isoformat() if v.created_at else None
+        })
+
+    return {
+        "total_vendors": len(rows),
+        "total_dues": round(total_dues, 2),
+        "vendors": rows
+    }
+
+@router.post("/vendors")
+def create_mobile_vendor(
+    payload: MobileVendorCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from app.models.vendor import Vendor, VendorLedger, VendorLedgerType
+    vendor = Vendor(
+        name=payload.name.strip(),
+        phone=payload.phone.strip(),
+        company_name=payload.company_name,
+        alt_phone=payload.alt_phone,
+        email=payload.email,
+        gstin=payload.gstin,
+        address=payload.address,
+        city=payload.city,
+        state=payload.state or "Maharashtra",
+        notes=payload.notes,
+        bank_name=payload.bank_name,
+        bank_account_no=payload.bank_account_no,
+        bank_ifsc=payload.bank_ifsc,
+        bank_holder_name=payload.bank_holder_name,
+        vendor_upi_id=payload.vendor_upi_id,
+        outstanding_due=payload.opening_due or 0.0,
+        is_active=True,
+        created_at=datetime.utcnow()
+    )
+    db.add(vendor)
+    db.flush()
+
+    if (payload.opening_due or 0.0) > 0:
+        ledger = VendorLedger(
+            vendor_id=vendor.id,
+            entry_type=VendorLedgerType.ADJUSTMENT,
+            reference_no="OPENING_BALANCE",
+            credit_amount=payload.opening_due,
+            debit_amount=0.0,
+            balance_after=payload.opening_due,
+            notes="Opening balance adjustment from mobile companion"
+        )
+        db.add(ledger)
+
+    db.commit()
+    db.refresh(vendor)
+    log_action(db, user_id=current_user.id, action_type="CREATE_VENDOR_MOBILE", entity="VENDOR", entity_id=str(vendor.id))
+
+    return {
+        "id": vendor.id,
+        "name": vendor.name,
+        "phone": vendor.phone,
+        "company_name": vendor.company_name,
+        "outstanding_due": vendor.outstanding_due,
+        "vendor_upi_id": vendor.vendor_upi_id
+    }
+
+@router.put("/vendors/{vendor_id}")
+def update_mobile_vendor(
+    vendor_id: int,
+    payload: MobileVendorUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from app.models.vendor import Vendor
+    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    for k, val in payload.model_dump(exclude_unset=True).items():
+        if val is not None:
+            setattr(vendor, k, val)
+
+    db.commit()
+    db.refresh(vendor)
+    return {"status": "success", "message": "Vendor updated successfully"}
+
+@router.post("/vendors/{vendor_id}/payment")
+def record_mobile_vendor_payment(
+    vendor_id: int,
+    payload: MobileVendorPayment,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from app.models.vendor import Vendor, VendorLedger, VendorLedgerType
+    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    vendor.outstanding_due = max(0.0, float(vendor.outstanding_due or 0.0) - payload.amount)
+
+    ledger = VendorLedger(
+        vendor_id=vendor.id,
+        entry_type=VendorLedgerType.PAYMENT_MADE,
+        reference_no=payload.reference_no or "MOBILE_UPI_PAYMENT",
+        debit_amount=payload.amount,
+        credit_amount=0.0,
+        balance_after=vendor.outstanding_due,
+        payment_mode=payload.payment_mode or "UPI",
+        notes=payload.notes or "Payment via Dolly POS Mobile App"
+    )
+    db.add(ledger)
+    db.commit()
+    db.refresh(ledger)
+    log_action(db, user_id=current_user.id, action_type="VENDOR_PAYMENT_MOBILE", entity="VENDOR", entity_id=str(vendor.id), details={"amount": payload.amount})
+
+    return {
+        "status": "success",
+        "message": f"Payment of ₹{payload.amount:,.2f} recorded! Dues updated.",
+        "new_due": vendor.outstanding_due
+    }
+
+@router.get("/vendors/{vendor_id}/ledger")
+def get_mobile_vendor_ledger(
+    vendor_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from app.models.vendor import VendorLedger
+    entries = db.query(VendorLedger).filter(VendorLedger.vendor_id == vendor_id).order_by(desc(VendorLedger.created_at)).all()
+    rows = []
+    for e in entries:
+        t_str = e.entry_type.value if hasattr(e.entry_type, "value") else str(e.entry_type)
+        rows.append({
+            "id": e.id,
+            "vendor_id": e.vendor_id,
+            "entry_type": t_str,
+            "reference_no": e.reference_no or "—",
+            "debit_amount": round(float(e.debit_amount or 0.0), 2),
+            "credit_amount": round(float(e.credit_amount or 0.0), 2),
+            "balance_after": round(float(e.balance_after or 0.0), 2),
+            "payment_mode": e.payment_mode or "—",
+            "notes": e.notes or "—",
+            "created_at": (e.created_at + IST_OFFSET).strftime("%d %b %Y, %I:%M %p") if e.created_at else None
+        })
+    return rows

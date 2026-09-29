@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  TextInput,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,9 +33,8 @@ import { ReportResponse } from '../types';
 import { formatINR } from '../utils/formatters';
 import { useTheme } from '../context/ThemeContext';
 import { useConnection } from '../context/ConnectionContext';
-import { colors } from '../theme/colors';
 
-type ReportType = 'SALES' | 'PAYMENTS' | 'CATEGORIES' | 'EXPENSES' | 'DAMAGED' | 'PLANNER';
+type ReportType = 'SALES' | 'PAYMENTS' | 'CATEGORIES' | 'EXPENSES' | 'PLANNER' | 'DAMAGED';
 type PresetPeriod = 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 const formatDateYMD = (d: Date): string => {
@@ -62,6 +60,8 @@ export const ReportsScreen: React.FC = () => {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showCustomRange, setShowCustomRange] = useState(false);
+
+  const styles = useMemo(() => createStyles(themeColors, isDark), [themeColors, isDark]);
 
   const applyPreset = (preset: PresetPeriod) => {
     if (preset === 'CUSTOM') {
@@ -113,7 +113,6 @@ export const ReportsScreen: React.FC = () => {
   const fetchReports = useCallback(async () => {
     const cacheKey = getReportCacheKey();
     try {
-      // 1. Try loading cached report instantly
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
         setReport(JSON.parse(cached));
@@ -122,13 +121,11 @@ export const ReportsScreen: React.FC = () => {
         setLoading(true);
       }
 
-      // 2. Fetch fresh live or cloud report
       const res = await api.getReports(startDate, endDate, reportType);
       setReport(res);
       AsyncStorage.setItem(cacheKey, JSON.stringify(res)).catch(() => {});
     } catch (err: any) {
       console.warn('Failed to fetch reports:', err);
-      // Only alert if we have no cached report to display
       const hasCached = await AsyncStorage.getItem(cacheKey);
       if (!hasCached) {
         Alert.alert('Offline Notice', err?.message || 'Could not reach POS server or Cloud Hub.');
@@ -176,69 +173,67 @@ export const ReportsScreen: React.FC = () => {
     <View style={styles.container}>
       <Header
         title="Reports Studio"
-        subtitle={`${startDate} to ${endDate}`}
+        subtitle={reportType === 'DAMAGED' ? 'All-Time Damage Loss' : `${startDate} to ${endDate}`}
         onRefresh={fetchReports}
         isRefreshing={loading}
       />
 
-      {/* Preset Range Filter Chips */}
-      <View style={styles.filterBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-          <TouchableOpacity
-            style={[styles.chip, period === 'TODAY' && styles.chipActive]}
-            onPress={() => applyPreset('TODAY')}
-          >
-            <Text style={[styles.chipText, period === 'TODAY' && styles.chipTextActive]}>Today</Text>
-          </TouchableOpacity>
+      {/* Preset Range Filter Chips - Hidden for Damaged Goods */}
+      {reportType !== 'DAMAGED' && (
+        <View style={styles.filterBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+            <TouchableOpacity
+              style={[styles.chip, period === 'TODAY' && styles.chipActive]}
+              onPress={() => applyPreset('TODAY')}
+            >
+              <Text style={[styles.chipText, period === 'TODAY' && styles.chipTextActive]}>Today</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.chip, period === 'YESTERDAY' && styles.chipActive]}
-            onPress={() => applyPreset('YESTERDAY')}
-          >
-            <Text style={[styles.chipText, period === 'YESTERDAY' && styles.chipTextActive]}>Yesterday</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chip, period === 'YESTERDAY' && styles.chipActive]}
+              onPress={() => applyPreset('YESTERDAY')}
+            >
+              <Text style={[styles.chipText, period === 'YESTERDAY' && styles.chipTextActive]}>Yesterday</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.chip, period === 'WEEK' && styles.chipActive]}
-            onPress={() => applyPreset('WEEK')}
-          >
-            <Text style={[styles.chipText, period === 'WEEK' && styles.chipTextActive]}>Last 7 Days</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chip, period === 'WEEK' && styles.chipActive]}
+              onPress={() => applyPreset('WEEK')}
+            >
+              <Text style={[styles.chipText, period === 'WEEK' && styles.chipTextActive]}>Last 7 Days</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.chip, period === 'MONTH' && styles.chipActive]}
-            onPress={() => applyPreset('MONTH')}
-          >
-            <Text style={[styles.chipText, period === 'MONTH' && styles.chipTextActive]}>This Month</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chip, period === 'MONTH' && styles.chipActive]}
+              onPress={() => applyPreset('MONTH')}
+            >
+              <Text style={[styles.chipText, period === 'MONTH' && styles.chipTextActive]}>This Month</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.chip, period === 'YEAR' && styles.chipActive]}
-            onPress={() => applyPreset('YEAR')}
-          >
-            <Text style={[styles.chipText, period === 'YEAR' && styles.chipTextActive]}>This Year</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chip, period === 'YEAR' && styles.chipActive]}
+              onPress={() => applyPreset('YEAR')}
+            >
+              <Text style={[styles.chipText, period === 'YEAR' && styles.chipTextActive]}>This Year</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.chip, period === 'CUSTOM' && styles.chipActive]}
-            onPress={() => applyPreset('CUSTOM')}
-          >
-            <Calendar size={13} color={period === 'CUSTOM' ? '#ffffff' : colors.textSecondary} />
-            <Text style={[styles.chipText, period === 'CUSTOM' && styles.chipTextActive]}>Custom</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+            <TouchableOpacity
+              style={[styles.chip, period === 'CUSTOM' && styles.chipActive]}
+              onPress={() => setShowCustomRange(true)}
+            >
+              <Calendar size={13} color={period === 'CUSTOM' ? '#ffffff' : themeColors.textSecondary} />
+              <Text style={[styles.chipText, period === 'CUSTOM' && styles.chipTextActive]}>Custom Range</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
-      {/* Active Custom Range Banner */}
-      {period === 'CUSTOM' && (
-        <TouchableOpacity
-          style={styles.customDateBox}
-          onPress={() => setShowCustomRange(true)}
-          activeOpacity={0.8}
-        >
-          <Calendar size={14} color={colors.brand[600]} />
+      {/* Custom Range Indicator Bar */}
+      {reportType !== 'DAMAGED' && period === 'CUSTOM' && (
+        <TouchableOpacity style={styles.customRangeBar} onPress={() => setShowCustomRange(true)} activeOpacity={0.8}>
+          <Calendar size={14} color={themeColors.brand[600]} />
           <Text style={styles.customRangeDisplayText}>
-            Active Custom Range: <Text style={{ fontWeight: '800', color: colors.brand[600] }}>{startDate} → {endDate}</Text> (Tap to change)
+            Active Custom Range: <Text style={{ fontWeight: '800', color: themeColors.brand[600] }}>{startDate} → {endDate}</Text> (Tap to change)
           </Text>
         </TouchableOpacity>
       )}
@@ -252,14 +247,14 @@ export const ReportsScreen: React.FC = () => {
         initialEndDate={endDate}
       />
 
-      {/* 6 Report Type Selector Tabs (Horizontal Scrollable) */}
+      {/* 6 Report Type Selector Tabs: Sales Register, Payments, Categories, Expenses, Stock Planner, Damaged Goods */}
       <View style={styles.typeTabsWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typeTabsScroll}>
           <TouchableOpacity
             style={[styles.typeTab, reportType === 'SALES' && styles.typeTabActive]}
             onPress={() => setReportType('SALES')}
           >
-            <Receipt size={14} color={reportType === 'SALES' ? '#ffffff' : colors.textSecondary} />
+            <Receipt size={14} color={reportType === 'SALES' ? '#ffffff' : themeColors.textSecondary} />
             <Text style={[styles.typeTabText, reportType === 'SALES' && styles.typeTabTextActive]}>
               Sales Register
             </Text>
@@ -269,7 +264,7 @@ export const ReportsScreen: React.FC = () => {
             style={[styles.typeTab, reportType === 'PAYMENTS' && styles.typeTabActive]}
             onPress={() => setReportType('PAYMENTS')}
           >
-            <CreditCard size={14} color={reportType === 'PAYMENTS' ? '#ffffff' : colors.textSecondary} />
+            <CreditCard size={14} color={reportType === 'PAYMENTS' ? '#ffffff' : themeColors.textSecondary} />
             <Text style={[styles.typeTabText, reportType === 'PAYMENTS' && styles.typeTabTextActive]}>
               Payments
             </Text>
@@ -279,7 +274,7 @@ export const ReportsScreen: React.FC = () => {
             style={[styles.typeTab, reportType === 'CATEGORIES' && styles.typeTabActive]}
             onPress={() => setReportType('CATEGORIES')}
           >
-            <Layers size={14} color={reportType === 'CATEGORIES' ? '#ffffff' : colors.textSecondary} />
+            <Layers size={14} color={reportType === 'CATEGORIES' ? '#ffffff' : themeColors.textSecondary} />
             <Text style={[styles.typeTabText, reportType === 'CATEGORIES' && styles.typeTabTextActive]}>
               Categories
             </Text>
@@ -289,19 +284,9 @@ export const ReportsScreen: React.FC = () => {
             style={[styles.typeTab, reportType === 'EXPENSES' && styles.typeTabActive]}
             onPress={() => setReportType('EXPENSES')}
           >
-            <TrendingDown size={14} color={reportType === 'EXPENSES' ? '#ffffff' : colors.textSecondary} />
+            <TrendingDown size={14} color={reportType === 'EXPENSES' ? '#ffffff' : themeColors.textSecondary} />
             <Text style={[styles.typeTabText, reportType === 'EXPENSES' && styles.typeTabTextActive]}>
               Expenses
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.typeTab, reportType === 'DAMAGED' && styles.typeTabActive]}
-            onPress={() => setReportType('DAMAGED')}
-          >
-            <AlertTriangle size={14} color={reportType === 'DAMAGED' ? '#ffffff' : colors.textSecondary} />
-            <Text style={[styles.typeTabText, reportType === 'DAMAGED' && styles.typeTabTextActive]}>
-              Damaged Goods
             </Text>
           </TouchableOpacity>
 
@@ -309,30 +294,44 @@ export const ReportsScreen: React.FC = () => {
             style={[styles.typeTab, reportType === 'PLANNER' && styles.typeTabActive]}
             onPress={() => setReportType('PLANNER')}
           >
-            <PackageCheck size={14} color={reportType === 'PLANNER' ? '#ffffff' : colors.textSecondary} />
+            <PackageCheck size={14} color={reportType === 'PLANNER' ? '#ffffff' : themeColors.textSecondary} />
             <Text style={[styles.typeTabText, reportType === 'PLANNER' && styles.typeTabTextActive]}>
               Stock Planner
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.typeTab, reportType === 'DAMAGED' && styles.typeTabActive]}
+            onPress={() => setReportType('DAMAGED')}
+          >
+            <AlertTriangle size={14} color={reportType === 'DAMAGED' ? '#ffffff' : themeColors.textSecondary} />
+            <Text style={[styles.typeTabText, reportType === 'DAMAGED' && styles.typeTabTextActive]}>
+              Damaged Goods
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
 
       {/* Main Content Area */}
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 + insets.bottom }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* KPI Summary Card */}
-        {report && (
+        {report && report.summary && (
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>{report.title}</Text>
+            <Text style={styles.summaryTitle}>
+              {reportType === 'SALES' && 'Period Sales Summary'}
+              {reportType === 'PAYMENTS' && 'Collections by Channel'}
+              {reportType === 'CATEGORIES' && 'Category Revenue Performance'}
+              {reportType === 'EXPENSES' && 'Expense Total'}
+              {reportType === 'DAMAGED' && 'Damaged Goods Valuation'}
+              {reportType === 'PLANNER' && 'Critical Reorder Need'}
+            </Text>
 
             <View style={styles.summaryGrid}>
               {reportType === 'SALES' && (
                 <>
-                  <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Net Sales</Text>
-                    <Text style={[styles.sumValue, { color: colors.brand[600] }]}>
-                      {formatINR(report.summary.total_net)}
-                    </Text>
-                  </View>
                   <View style={styles.sumMetric}>
                     <Text style={styles.sumLabel}>Total Bills</Text>
                     <Text style={styles.sumValue}>{report.summary.total_bills ?? 0}</Text>
@@ -342,14 +341,10 @@ export const ReportsScreen: React.FC = () => {
                     <Text style={styles.sumValue}>{formatINR(report.summary.total_gross)}</Text>
                   </View>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Discounts</Text>
-                    <Text style={[styles.sumValue, { color: colors.danger }]}>
-                      {formatINR(report.summary.total_discount)}
+                    <Text style={styles.sumLabel}>Net Revenue</Text>
+                    <Text style={[styles.sumValue, { color: themeColors.brand[600] }]}>
+                      {formatINR(report.summary.total_net)}
                     </Text>
-                  </View>
-                  <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Tax Collected</Text>
-                    <Text style={styles.sumValue}>{formatINR(report.summary.total_tax)}</Text>
                   </View>
                   <View style={styles.sumMetric}>
                     <Text style={styles.sumLabel}>Avg Daily Sales</Text>
@@ -361,8 +356,8 @@ export const ReportsScreen: React.FC = () => {
               {reportType === 'PAYMENTS' && (
                 <>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Collections</Text>
-                    <Text style={[styles.sumValue, { color: colors.brand[600] }]}>
+                    <Text style={styles.sumLabel}>Total Collected</Text>
+                    <Text style={[styles.sumValue, { color: themeColors.success }]}>
                       {formatINR(report.summary.total_collected)}
                     </Text>
                   </View>
@@ -376,12 +371,12 @@ export const ReportsScreen: React.FC = () => {
               {reportType === 'CATEGORIES' && (
                 <>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Categories</Text>
+                    <Text style={styles.sumLabel}>Active Categories</Text>
                     <Text style={styles.sumValue}>{report.summary.total_categories ?? 0}</Text>
                   </View>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Revenue</Text>
-                    <Text style={[styles.sumValue, { color: colors.brand[600] }]}>
+                    <Text style={styles.sumLabel}>Total Department Revenue</Text>
+                    <Text style={[styles.sumValue, { color: themeColors.brand[600] }]}>
                       {formatINR(report.summary.total_revenue)}
                     </Text>
                   </View>
@@ -396,7 +391,7 @@ export const ReportsScreen: React.FC = () => {
                   </View>
                   <View style={styles.sumMetric}>
                     <Text style={styles.sumLabel}>Total Expenses</Text>
-                    <Text style={[styles.sumValue, { color: colors.danger }]}>
+                    <Text style={[styles.sumValue, { color: themeColors.danger }]}>
                       {formatINR(report.summary.total_expense)}
                     </Text>
                   </View>
@@ -410,14 +405,14 @@ export const ReportsScreen: React.FC = () => {
                     <Text style={styles.sumValue}>{report.summary.damaged_products_count ?? 0}</Text>
                   </View>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Units</Text>
-                    <Text style={[styles.sumValue, { color: colors.warning }]}>
+                    <Text style={styles.sumLabel}>Damaged Units</Text>
+                    <Text style={[styles.sumValue, { color: themeColors.danger }]}>
                       {report.summary.total_damaged_units ?? 0}
                     </Text>
                   </View>
                   <View style={styles.sumMetric}>
-                    <Text style={styles.sumLabel}>Total Loss (Cost)</Text>
-                    <Text style={[styles.sumValue, { color: colors.danger }]}>
+                    <Text style={styles.sumLabel}>Cost Value Loss</Text>
+                    <Text style={[styles.sumValue, { color: themeColors.danger }]}>
                       {formatINR(report.summary.total_cost_loss)}
                     </Text>
                   </View>
@@ -428,13 +423,13 @@ export const ReportsScreen: React.FC = () => {
                 <>
                   <View style={styles.sumMetric}>
                     <Text style={styles.sumLabel}>Critical Low Items</Text>
-                    <Text style={[styles.sumValue, { color: colors.danger }]}>
+                    <Text style={[styles.sumValue, { color: themeColors.danger }]}>
                       {report.summary.critical_items_count ?? 0}
                     </Text>
                   </View>
                   <View style={styles.sumMetric}>
                     <Text style={styles.sumLabel}>Suggested Order Units</Text>
-                    <Text style={[styles.sumValue, { color: colors.brand[600] }]}>
+                    <Text style={[styles.sumValue, { color: themeColors.brand[600] }]}>
                       {report.summary.total_suggested_units ?? 0}
                     </Text>
                   </View>
@@ -447,12 +442,12 @@ export const ReportsScreen: React.FC = () => {
         {/* Data Table */}
         {loading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={colors.brand[600]} />
+            <ActivityIndicator size="large" color={themeColors.brand[600]} />
             <Text style={styles.loadingText}>Generating report preview...</Text>
           </View>
         ) : !report || report.rows.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Filter size={32} color={colors.textMuted} />
+            <Filter size={32} color={themeColors.textMuted} />
             <Text style={styles.emptyTitle}>No Records Found</Text>
             <Text style={styles.emptySub}>No transactions found for this date range.</Text>
           </View>
@@ -470,11 +465,26 @@ export const ReportsScreen: React.FC = () => {
               <View>
                 {/* Table Header */}
                 <View style={styles.tableHeaderRow}>
-                  {report.columns.map((col, idx) => (
-                    <Text key={idx} style={[styles.thText, idx === 0 && { width: 120 }]}>
-                      {col}
-                    </Text>
-                  ))}
+                  {reportType === 'DAMAGED' ? (
+                    <>
+                      <Text style={[styles.thText, { width: 170 }]}>Product Name</Text>
+                      <Text style={[styles.thText, { width: 120 }]}>Barcode</Text>
+                      <Text style={[styles.thText, { width: 95, textAlign: 'center' }]}>Damaged Qty</Text>
+                      <Text style={[styles.thText, { width: 110, textAlign: 'right' }]}>Cost Price (₹)</Text>
+                    </>
+                  ) : reportType === 'PLANNER' ? (
+                    <>
+                      <Text style={[styles.thText, { width: 190 }]}>Product Name</Text>
+                      <Text style={[styles.thText, { width: 100, textAlign: 'center' }]}>Stock Left</Text>
+                      <Text style={[styles.thText, { width: 120, textAlign: 'center' }]}>Suggested Order</Text>
+                    </>
+                  ) : (
+                    report.columns.map((col, idx) => (
+                      <Text key={idx} style={[styles.thText, idx === 0 && { width: 120 }]}>
+                        {col}
+                      </Text>
+                    ))
+                  )}
                 </View>
 
                 {/* Table Rows */}
@@ -493,7 +503,7 @@ export const ReportsScreen: React.FC = () => {
                             {row.date_display || row.date}
                           </Text>
                           {row.time && (
-                            <Text style={{ fontSize: 10, color: colors.textMuted }}>{row.time}</Text>
+                            <Text style={{ fontSize: 10, color: themeColors.textMuted }}>{row.time}</Text>
                           )}
                         </View>
                         <Text style={[styles.tdText, styles.tdBold, { width: 95 }]}>
@@ -510,13 +520,13 @@ export const ReportsScreen: React.FC = () => {
                         <Text style={[styles.tdText, { width: 90, textAlign: 'right' }]}>
                           {formatINR(row.gross_amount)}
                         </Text>
-                        <Text style={[styles.tdText, { width: 80, textAlign: 'right', color: colors.danger }]}>
+                        <Text style={[styles.tdText, { width: 80, textAlign: 'right', color: themeColors.danger }]}>
                           -{formatINR(row.discount)}
                         </Text>
                         <Text style={[styles.tdText, { width: 75, textAlign: 'right' }]}>
                           {formatINR(row.tax)}
                         </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 105, textAlign: 'right', color: colors.textPrimary }]}>
+                        <Text style={[styles.tdText, styles.tdBold, { width: 105, textAlign: 'right', color: themeColors.textPrimary }]}>
                           {formatINR(row.net_amount)}
                         </Text>
                       </>
@@ -533,7 +543,7 @@ export const ReportsScreen: React.FC = () => {
                         <Text style={[styles.tdText, styles.tdBold, { width: 120, textAlign: 'right' }]}>
                           {formatINR(row.amount)}
                         </Text>
-                        <Text style={[styles.tdText, { width: 90, textAlign: 'right', color: colors.success, fontWeight: '700' }]}>
+                        <Text style={[styles.tdText, { width: 90, textAlign: 'right', color: themeColors.success, fontWeight: '700' }]}>
                           {row.share_pct}%
                         </Text>
                       </>
@@ -550,7 +560,7 @@ export const ReportsScreen: React.FC = () => {
                         <Text style={[styles.tdText, styles.tdBold, { width: 110, textAlign: 'right' }]}>
                           {formatINR(row.revenue)}
                         </Text>
-                        <Text style={[styles.tdText, { width: 90, textAlign: 'right', color: colors.success, fontWeight: '700' }]}>
+                        <Text style={[styles.tdText, { width: 90, textAlign: 'right', color: themeColors.success, fontWeight: '700' }]}>
                           {row.share_pct}%
                         </Text>
                       </>
@@ -570,54 +580,49 @@ export const ReportsScreen: React.FC = () => {
                         <Text style={[styles.tdText, { width: 80, textAlign: 'center' }]}>
                           {row.payment_mode || 'CASH'}
                         </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 100, textAlign: 'right', color: colors.danger }]}>
+                        <Text style={[styles.tdText, styles.tdBold, { width: 100, textAlign: 'right', color: themeColors.danger }]}>
                           {formatINR(row.amount)}
-                        </Text>
-                      </>
-                    )}
-
-                    {reportType === 'DAMAGED' && (
-                      <>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 150 }]} numberOfLines={1}>
-                          {row.product_name}
-                        </Text>
-                        <Text style={[styles.tdText, { width: 110, fontFamily: 'monospace' }]}>
-                          {row.barcode}
-                        </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 90, textAlign: 'center', color: colors.danger }]}>
-                          {row.damaged_units}
-                        </Text>
-                        <Text style={[styles.tdText, { width: 90, textAlign: 'right' }]}>
-                          {formatINR(row.cost_price)}
-                        </Text>
-                        <Text style={[styles.tdText, { width: 90, textAlign: 'right' }]}>
-                          {formatINR(row.selling_price)}
-                        </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 110, textAlign: 'right', color: colors.danger }]}>
-                          {formatINR(row.total_cost_loss)}
                         </Text>
                       </>
                     )}
 
                     {reportType === 'PLANNER' && (
                       <>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 150 }]} numberOfLines={1}>
+                        <Text style={[styles.tdText, styles.tdBold, { width: 190 }]} numberOfLines={1}>
                           {row.product_name}
                         </Text>
-                        <Text style={[styles.tdText, { width: 110, fontFamily: 'monospace' }]}>
-                          {row.barcode}
+                        <Text
+                          style={[
+                            styles.tdText,
+                            styles.tdBold,
+                            {
+                              width: 100,
+                              textAlign: 'center',
+                              color: (row.current_stock ?? row.stock ?? 0) <= 0 ? themeColors.danger : themeColors.textPrimary,
+                            },
+                          ]}
+                        >
+                          {row.current_stock ?? row.stock ?? 0}
                         </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 80, textAlign: 'center', color: colors.danger }]}>
-                          {row.current_stock}
+                        <Text style={[styles.tdText, styles.tdBold, { width: 120, textAlign: 'center', color: themeColors.brand[600] }]}>
+                          {row.suggested_order ?? 0} units
                         </Text>
-                        <Text style={[styles.tdText, { width: 80, textAlign: 'center' }]}>
-                          {row.min_alert}
+                      </>
+                    )}
+
+                    {reportType === 'DAMAGED' && (
+                      <>
+                        <Text style={[styles.tdText, styles.tdBold, { width: 170 }]} numberOfLines={1}>
+                          {row.product_name}
                         </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 100, textAlign: 'center', color: colors.brand[600] }]}>
-                          {row.suggested_order}
+                        <Text style={[styles.tdText, { width: 120, fontFamily: 'monospace' }]}>
+                          {row.barcode || '—'}
                         </Text>
-                        <Text style={[styles.tdText, styles.tdBold, { width: 100, textAlign: 'right' }]}>
-                          {formatINR(row.est_cost)}
+                        <Text style={[styles.tdText, styles.tdBold, { width: 95, textAlign: 'center', color: themeColors.danger }]}>
+                          {row.damaged_units ?? row.damaged_quantity ?? 0}
+                        </Text>
+                        <Text style={[styles.tdText, styles.tdBold, { width: 110, textAlign: 'right', color: themeColors.textPrimary }]}>
+                          {formatINR(row.cost_price ?? row.purchase_price ?? 0)}
                         </Text>
                       </>
                     )}
@@ -663,304 +668,272 @@ export const ReportsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  filterBar: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  chipsScroll: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  chipActive: {
-    backgroundColor: colors.brand[600],
-    borderColor: colors.brand[600],
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  chipTextActive: {
-    color: '#ffffff',
-  },
-  customDateBox: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  customRangeDisplayText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  truncatedNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 14,
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  truncatedText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 15,
-    color: '#0369a1',
-    fontWeight: '600',
-  },
-  dateField: {
-    flex: 1,
-  },
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textMuted,
-    marginBottom: 4,
-  },
-  dateInput: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: colors.textPrimary,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  applyBtn: {
-    backgroundColor: colors.brand[600],
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  applyBtnText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  typeTabsWrapper: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-    paddingVertical: 8,
-  },
-  typeTabsScroll: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  typeTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  typeTabActive: {
-    backgroundColor: colors.brand[600],
-    borderColor: colors.brand[600],
-  },
-  typeTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  typeTabTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginBottom: 14,
-  },
-  summaryTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 12,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  sumMetric: {
-    width: '47%',
-  },
-  sumLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '600',
-  },
-  sumValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  tableCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    overflow: 'hidden',
-  },
-  tableHeaderRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceSubtle,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  thText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    paddingHorizontal: 6,
-    width: 95,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceSubtle,
-    alignItems: 'center',
-  },
-  tableRowZebra: {
-    backgroundColor: '#fafafa',
-  },
-  tdText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    paddingHorizontal: 6,
-    width: 95,
-  },
-  tdBold: {
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  modeBadge: {
-    backgroundColor: colors.brand[50],
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  modeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.brand[600],
-  },
-  loadingBox: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  emptyBox: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 10,
-  },
-  emptySub: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  exportFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  exportBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  excelBtn: {
-    backgroundColor: '#059669', // Emerald Excel green
-  },
-  pdfBtn: {
-    backgroundColor: colors.brand[600], // Dolly Rose PDF
-  },
-  exportBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-});
+const createStyles = (themeColors: any, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.bg,
+    },
+    filterBar: {
+      backgroundColor: themeColors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+      paddingVertical: 10,
+    },
+    chipsScroll: {
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: themeColors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    chipActive: {
+      backgroundColor: themeColors.brand[600],
+      borderColor: themeColors.brand[600],
+    },
+    chipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: themeColors.textSecondary,
+    },
+    chipTextActive: {
+      color: '#ffffff',
+      fontWeight: '700',
+    },
+    customRangeBar: {
+      backgroundColor: themeColors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    customRangeDisplayText: {
+      fontSize: 11,
+      color: themeColors.textSecondary,
+      fontWeight: '600',
+    },
+    typeTabsWrapper: {
+      backgroundColor: themeColors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+      paddingVertical: 8,
+    },
+    typeTabsScroll: {
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    typeTab: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: themeColors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    typeTabActive: {
+      backgroundColor: themeColors.brand[600],
+      borderColor: themeColors.brand[600],
+    },
+    typeTabText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: themeColors.textSecondary,
+    },
+    typeTabTextActive: {
+      color: '#ffffff',
+      fontWeight: '700',
+    },
+    scrollContent: {
+      padding: 16,
+    },
+    summaryCard: {
+      backgroundColor: themeColors.card,
+      borderRadius: 14,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+      marginBottom: 14,
+    },
+    summaryTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: themeColors.textPrimary,
+      marginBottom: 12,
+    },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    sumMetric: {
+      width: '47%',
+    },
+    sumLabel: {
+      fontSize: 11,
+      color: themeColors.textMuted,
+      fontWeight: '600',
+    },
+    sumValue: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: themeColors.textPrimary,
+      marginTop: 2,
+    },
+    tableCard: {
+      backgroundColor: themeColors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+      overflow: 'hidden',
+    },
+    truncatedNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? 'rgba(2, 132, 199, 0.15)' : '#f0f9ff',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+    },
+    truncatedText: {
+      flex: 1,
+      fontSize: 11,
+      color: isDark ? '#38bdf8' : '#0369a1',
+      fontWeight: '600',
+      lineHeight: 15,
+    },
+    tableHeaderRow: {
+      flexDirection: 'row',
+      backgroundColor: themeColors.surfaceSubtle,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+    },
+    thText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: themeColors.textSecondary,
+      textTransform: 'uppercase',
+      paddingHorizontal: 6,
+      width: 95,
+    },
+    tableRow: {
+      flexDirection: 'row',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: isDark ? themeColors.cardBorder : themeColors.surfaceSubtle,
+      alignItems: 'center',
+    },
+    tableRowZebra: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : '#fafafa',
+    },
+    tdText: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+      paddingHorizontal: 6,
+      width: 95,
+    },
+    tdBold: {
+      fontWeight: '700',
+      color: themeColors.textPrimary,
+    },
+    modeBadge: {
+      backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : themeColors.brand[50],
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      alignItems: 'center',
+    },
+    modeBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: themeColors.brand[600],
+    },
+    loadingBox: {
+      padding: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadingText: {
+      marginTop: 10,
+      fontSize: 12,
+      color: themeColors.textMuted,
+    },
+    emptyBox: {
+      padding: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: themeColors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    emptyTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: themeColors.textPrimary,
+      marginTop: 10,
+    },
+    emptySub: {
+      fontSize: 12,
+      color: themeColors.textMuted,
+      marginTop: 4,
+    },
+    exportFooter: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: themeColors.card,
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: themeColors.cardBorder,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    exportBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    excelBtn: {
+      backgroundColor: '#059669',
+    },
+    pdfBtn: {
+      backgroundColor: themeColors.brand[600],
+    },
+    exportBtnText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+  });

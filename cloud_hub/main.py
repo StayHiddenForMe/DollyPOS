@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float, text
@@ -66,6 +66,17 @@ class HubDemand(Base):
     synced_to_pos = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class HubDemandMutation(Base):
+    __tablename__ = "hub_demand_mutations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    store_token = Column(String(50), index=True, nullable=False)
+    demand_id = Column(Integer, nullable=False)
+    action = Column(String(50), nullable=False)  # 'UPDATE_STATUS' | 'DELETE'
+    status = Column(String(50), nullable=True)
+    synced_to_pos = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class HubPendingProduct(Base):
     __tablename__ = "hub_pending_products"
 
@@ -82,12 +93,49 @@ class HubPendingProduct(Base):
     synced_to_pos = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class HubPendingVendor(Base):
+    __tablename__ = "hub_pending_vendors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    store_token = Column(String(50), index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    company_name = Column(String(150), nullable=True)
+    phone = Column(String(20), nullable=False)
+    alt_phone = Column(String(20), nullable=True)
+    email = Column(String(100), nullable=True)
+    gstin = Column(String(20), nullable=True)
+    address = Column(Text, nullable=True)
+    city = Column(String(50), nullable=True)
+    state = Column(String(50), default="Maharashtra", nullable=True)
+    notes = Column(Text, nullable=True)
+    bank_name = Column(String(100), nullable=True)
+    bank_account_no = Column(String(50), nullable=True)
+    bank_ifsc = Column(String(20), nullable=True)
+    bank_holder_name = Column(String(100), nullable=True)
+    vendor_upi_id = Column(String(100), nullable=True)
+    opening_due = Column(Float, default=0.0)
+    synced_to_pos = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class HubPendingVendorPayment(Base):
+    __tablename__ = "hub_pending_vendor_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    store_token = Column(String(50), index=True, nullable=False)
+    vendor_id = Column(Integer, nullable=False)
+    amount = Column(Float, nullable=False)
+    payment_mode = Column(String(50), default="UPI", nullable=False)
+    reference_no = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    synced_to_pos = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class HubStoreData(Base):
     __tablename__ = "hub_store_data"
 
     id = Column(Integer, primary_key=True, index=True)
     store_token = Column(String(50), index=True, nullable=False)
-    data_type = Column(String(50), index=True, nullable=False)  # 'INVENTORY', 'KHATA', 'REPORTS', 'CATEGORIES'
+    data_type = Column(String(50), index=True, nullable=False)  # 'INVENTORY', 'KHATA', 'REPORTS', 'CATEGORIES', 'DEMANDS', 'VENDORS'
     data_json = Column(Text, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -144,6 +192,7 @@ class SyncPayload(BaseModel):
     khata: Optional[Dict[str, Any]] = None
     categories: Optional[List[Dict[str, Any]]] = None
     demands: Optional[List[Dict[str, Any]]] = None
+    vendors: Optional[List[Dict[str, Any]]] = None
     synced_at: Optional[str] = None
 
 class DemandCreatePayload(BaseModel):
@@ -171,6 +220,47 @@ class MobileProductCreatePayload(BaseModel):
     mrp: Optional[float] = None
     stock_quantity: int = 1
     min_stock_alert: int = 3
+
+class VendorCreatePayload(BaseModel):
+    name: str
+    phone: str
+    company_name: Optional[str] = None
+    alt_phone: Optional[str] = None
+    email: Optional[str] = None
+    gstin: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = "Maharashtra"
+    notes: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_holder_name: Optional[str] = None
+    vendor_upi_id: Optional[str] = None
+    opening_due: Optional[float] = 0.0
+
+class VendorUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    company_name: Optional[str] = None
+    alt_phone: Optional[str] = None
+    email: Optional[str] = None
+    gstin: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    notes: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_holder_name: Optional[str] = None
+    vendor_upi_id: Optional[str] = None
+
+class VendorPaymentPayload(BaseModel):
+    amount: float
+    payment_mode: Optional[str] = "UPI"
+    reference_no: Optional[str] = None
+    notes: Optional[str] = None
 
 # -------------------------------------------------------------
 # API Endpoints
@@ -320,7 +410,38 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
             cat_record.data_json = json.dumps(payload.categories)
             cat_record.updated_at = now
 
+    if payload.vendors is not None:
+        v_record = db.query(HubStoreData).filter(
+            HubStoreData.store_token == token,
+            HubStoreData.data_type == "VENDORS"
+        ).first()
+        if not v_record:
+            v_record = HubStoreData(
+                store_token=token,
+                data_type="VENDORS",
+                data_json=json.dumps(payload.vendors)
+            )
+            db.add(v_record)
+        else:
+            v_record.data_json = json.dumps(payload.vendors)
+            v_record.updated_at = now
+
     if payload.demands is not None:
+        mutations = db.query(HubDemandMutation).filter(
+            HubDemandMutation.store_token == token
+        ).all()
+        deleted_ids = {m.demand_id for m in mutations if m.action == "DELETE"}
+        status_updates = {m.demand_id: m.status for m in mutations if m.action == "UPDATE_STATUS" and m.status}
+
+        filtered_demands = []
+        for d in payload.demands:
+            did = d.get("id")
+            if did in deleted_ids:
+                continue
+            if did in status_updates:
+                d["status"] = status_updates[did]
+            filtered_demands.append(d)
+
         dem_record = db.query(HubStoreData).filter(
             HubStoreData.store_token == token,
             HubStoreData.data_type == "DEMANDS"
@@ -329,11 +450,11 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
             dem_record = HubStoreData(
                 store_token=token,
                 data_type="DEMANDS",
-                data_json=json.dumps(payload.demands)
+                data_json=json.dumps(filtered_demands)
             )
             db.add(dem_record)
         else:
-            dem_record.data_json = json.dumps(payload.demands)
+            dem_record.data_json = json.dumps(filtered_demands)
             dem_record.updated_at = now
 
     # 6. Fetch unsynced mobile demands for this store to deliver to the desktop
@@ -379,6 +500,66 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
         })
         p.synced_to_pos = True
 
+    # 8. Fetch unsynced demand mutations (status updates & deletions from mobile)
+    unsynced_mutations = db.query(HubDemandMutation).filter(
+        HubDemandMutation.store_token == token,
+        HubDemandMutation.synced_to_pos == False
+    ).all()
+    mutations_to_deliver = []
+    for m in unsynced_mutations:
+        mutations_to_deliver.append({
+            "id": m.id,
+            "demand_id": m.demand_id,
+            "action": m.action,
+            "status": m.status
+        })
+        m.synced_to_pos = True
+
+    # 9. Fetch unsynced pending vendors created remotely on mobile
+    unsynced_vendors = db.query(HubPendingVendor).filter(
+        HubPendingVendor.store_token == token,
+        HubPendingVendor.synced_to_pos == False
+    ).all()
+    vendors_to_deliver = []
+    for pv in unsynced_vendors:
+        vendors_to_deliver.append({
+            "id": pv.id,
+            "name": pv.name,
+            "company_name": pv.company_name,
+            "phone": pv.phone,
+            "alt_phone": pv.alt_phone,
+            "email": pv.email,
+            "gstin": pv.gstin,
+            "address": pv.address,
+            "city": pv.city,
+            "state": pv.state,
+            "notes": pv.notes,
+            "bank_name": pv.bank_name,
+            "bank_account_no": pv.bank_account_no,
+            "bank_ifsc": pv.bank_ifsc,
+            "bank_holder_name": pv.bank_holder_name,
+            "vendor_upi_id": pv.vendor_upi_id,
+            "opening_due": pv.opening_due
+        })
+        pv.synced_to_pos = True
+
+    # 10. Fetch unsynced vendor payments recorded on mobile
+    unsynced_vendor_pmts = db.query(HubPendingVendorPayment).filter(
+        HubPendingVendorPayment.store_token == token,
+        HubPendingVendorPayment.synced_to_pos == False
+    ).all()
+    vendor_pmts_to_deliver = []
+    for pvp in unsynced_vendor_pmts:
+        vendor_pmts_to_deliver.append({
+            "id": pvp.id,
+            "vendor_id": pvp.vendor_id,
+            "amount": pvp.amount,
+            "payment_mode": pvp.payment_mode,
+            "reference_no": pvp.reference_no,
+            "notes": pvp.notes
+        })
+        pvp.synced_to_pos = True
+
     db.commit()
 
     return {
@@ -386,7 +567,10 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
         "store_token": token,
         "message": "Store data successfully synced to Cloud Hub.",
         "pending_demands": demands_to_deliver,
-        "pending_products": products_to_deliver
+        "pending_products": products_to_deliver,
+        "pending_demand_mutations": mutations_to_deliver,
+        "pending_vendors": vendors_to_deliver,
+        "pending_vendor_payments": vendor_pmts_to_deliver
     }
 
 @app.post("/api/v1/hub/pair")
@@ -400,10 +584,10 @@ def pair_store_mobile(payload: PairStoreRequest, db: Session = Depends(get_db)):
             detail=f"Store Token '{token}' not found. Please verify the code shown on your Dolly POS laptop screen."
         )
 
-    # Check if laptop is currently online (seen in last 90 seconds)
+    # Check if laptop is currently online (seen in last 360 seconds / 6 minutes)
     is_online = False
     if store.last_seen_at:
-        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=90)
+        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=360)
 
     return {
         "status": "valid",
@@ -434,10 +618,10 @@ def get_store_overview_for_mobile(
     if not store:
         raise HTTPException(status_code=404, detail="Store not found with this token.")
 
-    # Determine if POS is currently online
+    # Determine if POS is currently online (360 seconds threshold)
     is_online = False
     if store.last_seen_at:
-        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=90)
+        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=360)
 
     req_period = period.strip().upper()
     overview_data = {}
@@ -790,6 +974,20 @@ def get_store_reports_for_mobile(
                     mode_stats["CREDIT"]["bills"] += 1
                     mode_stats["CREDIT"]["amount"] += amt
 
+        # Ensure all credit/khata invoices are counted in mode_stats so Khata Udhar dues is never 0
+        invoices = reports_data.get("sales_invoices", [])
+        if s_str and e_str:
+            invoices = [inv for inv in invoices if s_str <= inv.get("date_ymd", "") <= e_str]
+        
+        credit_invs = [inv for inv in invoices if "CREDIT" in str(inv.get("payment_mode", "")).upper() or "KHATA" in str(inv.get("payment_mode", "")).upper()]
+        if credit_invs and mode_stats["CREDIT"]["amount"] == 0:
+            for inv in credit_invs:
+                amt = float(inv.get("net_amount", 0.0))
+                mode_stats["CREDIT"]["bills"] += 1
+                mode_stats["CREDIT"]["amount"] += amt
+                total_collected += amt
+            total_transactions += len(credit_invs)
+
         rows = []
         for k, v in mode_stats.items():
             pct = round((v["amount"] / total_collected * 100), 1) if total_collected > 0 else 0.0
@@ -878,22 +1076,33 @@ def get_store_reports_for_mobile(
     # 5. DAMAGED GOODS
     elif rep_upper == "DAMAGED":
         damaged = reports_data.get("damaged", [])
-        total_dmg_units = sum(int(d.get("damaged_quantity", 0)) for d in damaged)
-        total_cost_loss = sum(float(d.get("total_loss", 0.0)) for d in damaged)
+        total_dmg_units = sum(int(d.get("damaged_quantity", d.get("damaged_units", 0))) for d in damaged)
+        total_cost_loss = sum(float(d.get("total_loss", d.get("total_cost_loss", 0.0))) for d in damaged)
+
+        rows = []
+        for d in damaged:
+            qty = int(d.get("damaged_quantity", d.get("damaged_units", 0)))
+            cp = float(d.get("cost_price", d.get("purchase_price", 0.0)))
+            rows.append({
+                "product_name": d.get("product_name", "—"),
+                "barcode": d.get("barcode", "—"),
+                "damaged_units": qty,
+                "cost_price": round(cp, 2),
+            })
 
         return {
             "report_type": "DAMAGED",
-            "title": "Damaged Goods Valuation",
+            "title": "Damaged Goods Register",
             "store_name": store_title,
             "start_date": s_str,
             "end_date": e_str,
             "summary": {
-                "damaged_products_count": len(damaged),
+                "damaged_products_count": len(rows),
                 "total_damaged_units": total_dmg_units,
                 "total_cost_loss": round(total_cost_loss, 2)
             },
-            "columns": ["Product", "Barcode", "Damaged Qty", "Cost (₹)", "Selling (₹)", "Total Loss (₹)"],
-            "rows": damaged
+            "columns": ["Product Name", "Barcode", "Damaged Qty", "Cost Price (₹)"],
+            "rows": rows
         }
 
     # 6. REORDER & DEMAND PLANNER
@@ -901,18 +1110,26 @@ def get_store_reports_for_mobile(
         planner = reports_data.get("planner", [])
         total_suggested = sum(int(p.get("suggested_order", 0)) for p in planner)
 
+        rows = []
+        for p in planner:
+            rows.append({
+                "product_name": p.get("product_name", "—"),
+                "current_stock": int(p.get("current_stock", p.get("stock", 0))),
+                "suggested_order": int(p.get("suggested_order", 0)),
+            })
+
         return {
             "report_type": "PLANNER",
-            "title": "Demand & Reorder Planner",
+            "title": "Smart Stock Replenishment Planner",
             "store_name": store_title,
             "start_date": s_str,
             "end_date": e_str,
             "summary": {
-                "critical_items_count": len(planner),
+                "critical_items_count": len(rows),
                 "total_suggested_units": total_suggested
             },
-            "columns": ["Product", "Barcode", "Stock", "Alert Level", "Suggested Order", "Est. Cost (₹)"],
-            "rows": planner
+            "columns": ["Product Name", "Stock Left", "Suggested Order"],
+            "rows": rows
         }
 
     else:
@@ -930,7 +1147,7 @@ def get_store_reports_for_mobile(
 
 @app.get("/api/v1/hub/stores/{token}/status")
 def get_store_status_for_mobile(token: str, db: Session = Depends(get_db)):
-    """Heartbeat endpoint for mobile app connection indicator."""
+    """Heartbeat endpoint for mobile app connection indicator (360s threshold)."""
     t_clean = token.strip().upper()
     store = db.query(HubStore).filter(HubStore.store_token == t_clean).first()
     if not store:
@@ -938,7 +1155,7 @@ def get_store_status_for_mobile(token: str, db: Session = Depends(get_db)):
 
     is_online = False
     if store.last_seen_at:
-        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=90)
+        is_online = (datetime.utcnow() - store.last_seen_at) < timedelta(seconds=360)
 
     return {
         "store_token": store.store_token,
@@ -946,6 +1163,7 @@ def get_store_status_for_mobile(token: str, db: Session = Depends(get_db)):
         "is_pos_online": is_online,
         "last_seen_at": store.last_seen_at.isoformat() if store.last_seen_at else None
     }
+
 
 @app.get("/api/v1/hub/stores/{token}/demands")
 def get_store_demands_for_mobile(
@@ -1047,9 +1265,19 @@ def update_store_demand_status(
     payload: DemandStatusUpdatePayload,
     db: Session = Depends(get_db)
 ):
-    """Updates status of a customer demand request from mobile app."""
+    """Updates status of a customer demand request from mobile app and queues mutation for POS."""
     t_clean = token.strip().upper()
     new_status = payload.status.strip()
+
+    # Record mutation for desktop POS sync
+    mutation = HubDemandMutation(
+        store_token=t_clean,
+        demand_id=demand_id,
+        action="UPDATE_STATUS",
+        status=new_status,
+        synced_to_pos=False
+    )
+    db.add(mutation)
 
     # 1. Update in mobile demands table if present
     d = db.query(HubDemand).filter(
@@ -1069,20 +1297,16 @@ def update_store_demand_status(
     if dem_record and dem_record.data_json:
         try:
             d_list = json.loads(dem_record.data_json)
-            updated = False
             for item in d_list:
                 if item.get("id") == demand_id:
                     item["status"] = new_status
-                    updated = True
                     break
-            if updated:
-                dem_record.data_json = json.dumps(d_list)
-                db.commit()
-                return {"status": "success", "message": f"Demand status updated to {new_status}"}
+            dem_record.data_json = json.dumps(d_list)
         except Exception:
             pass
 
-    return {"status": "success", "message": f"Demand status recorded as {new_status}"}
+    db.commit()
+    return {"status": "success", "message": f"Demand status updated to {new_status}"}
 
 @app.delete("/api/v1/hub/stores/{token}/demands/{demand_id}")
 def delete_store_demand(
@@ -1090,17 +1314,24 @@ def delete_store_demand(
     demand_id: int,
     db: Session = Depends(get_db)
 ):
-    """Deletes a customer demand entry from the Cloud Hub."""
+    """Deletes a customer demand entry from the Cloud Hub and queues deletion for POS."""
     t_clean = token.strip().upper()
 
+    # Record deletion mutation for desktop POS sync
+    mutation = HubDemandMutation(
+        store_token=t_clean,
+        demand_id=demand_id,
+        action="DELETE",
+        status=None,
+        synced_to_pos=False
+    )
+    db.add(mutation)
+
     # 1. Delete from mobile demands
-    deleted_mobile = db.query(HubDemand).filter(
+    db.query(HubDemand).filter(
         HubDemand.store_token == t_clean,
         HubDemand.id == demand_id
     ).delete()
-    if deleted_mobile:
-        db.commit()
-        return {"status": "success", "message": "Demand removed"}
 
     # 2. Delete from desktop-synced demands JSON cache
     dem_record = db.query(HubStoreData).filter(
@@ -1110,16 +1341,318 @@ def delete_store_demand(
     if dem_record and dem_record.data_json:
         try:
             d_list = json.loads(dem_record.data_json)
-            before_len = len(d_list)
             d_list = [item for item in d_list if item.get("id") != demand_id]
-            if len(d_list) < before_len:
-                dem_record.data_json = json.dumps(d_list)
-                db.commit()
-                return {"status": "success", "message": "Demand removed"}
+            dem_record.data_json = json.dumps(d_list)
         except Exception:
             pass
 
-    return {"status": "success", "message": "Demand removed"}
+    db.commit()
+    return {"status": "success", "message": "Demand removed successfully"}
+
+@app.get("/api/v1/hub/stores/{token}/backup")
+def download_store_backup_from_cloud(token: str, db: Session = Depends(get_db)):
+    """
+    Synthesizes and downloads complete cloud database backup snapshot for the store.
+    Allows remote backup download from mobile even when store laptop is off-LAN.
+    """
+    t_clean = token.strip().upper()
+    store = db.query(HubStore).filter(HubStore.store_token == t_clean).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found.")
+
+    def get_data(dtype: str):
+        row = db.query(HubStoreData).filter(
+            HubStoreData.store_token == t_clean,
+            HubStoreData.data_type == dtype
+        ).first()
+        if row and row.data_json:
+            try:
+                return json.loads(row.data_json)
+            except Exception:
+                return None
+        return None
+
+    inventory_data = get_data("INVENTORY") or {}
+    khata_data = get_data("KHATA") or {}
+    reports_data = get_data("REPORTS") or {}
+    categories_data = get_data("CATEGORIES") or []
+    demands_data = get_data("DEMANDS") or []
+    vendors_data = get_data("VENDORS") or []
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+    backup_payload = {
+        "backup_version": "2.1",
+        "export_source": "Dolly POS Cloud Hub",
+        "store_token": store.store_token,
+        "store_name": store.shop_name,
+        "export_date": datetime.utcnow().isoformat(),
+        "store_settings": {
+            "shop_name": store.shop_name,
+            "tag_line": store.tagline,
+            "mobile": store.mobile,
+            "address": store.address,
+            "upi_id": store.upi_id,
+        },
+        "inventory": inventory_data.get("products", []) if isinstance(inventory_data, dict) else inventory_data,
+        "customers": khata_data.get("customers", []) if isinstance(khata_data, dict) else khata_data,
+        "categories": categories_data,
+        "invoices": reports_data.get("sales_invoices", []) if isinstance(reports_data, dict) else [],
+        "expenses": reports_data.get("expenses", []) if isinstance(reports_data, dict) else [],
+        "demands": demands_data,
+        "vendors": vendors_data,
+    }
+
+    content_str = json.dumps(backup_payload, indent=2)
+    filename = f"DollyPOS_CloudBackup_{store.store_token}_{timestamp}.json"
+
+    return Response(
+        content=content_str,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+@app.get("/api/v1/hub/stores/{token}/vendors")
+def get_store_vendors_for_mobile(
+    token: str,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Returns vendor directory with dues and bank details."""
+    t_clean = token.strip().upper()
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+
+    vendors = []
+    if v_record and v_record.data_json:
+        try:
+            vendors = json.loads(v_record.data_json)
+        except Exception:
+            vendors = []
+
+    # Merge pending vendors created from mobile
+    pending = db.query(HubPendingVendor).filter(
+        HubPendingVendor.store_token == t_clean,
+        HubPendingVendor.synced_to_pos == False
+    ).all()
+    for pv in pending:
+        if not any(v.get("id") == pv.id or v.get("name") == pv.name for v in vendors):
+            vendors.append({
+                "id": pv.id,
+                "name": pv.name,
+                "company_name": pv.company_name,
+                "phone": pv.phone,
+                "alt_phone": pv.alt_phone,
+                "email": pv.email,
+                "gstin": pv.gstin,
+                "address": pv.address,
+                "city": pv.city,
+                "state": pv.state,
+                "notes": pv.notes,
+                "bank_name": pv.bank_name,
+                "bank_account_no": pv.bank_account_no,
+                "bank_ifsc": pv.bank_ifsc,
+                "bank_holder_name": pv.bank_holder_name,
+                "vendor_upi_id": pv.vendor_upi_id,
+                "outstanding_due": pv.opening_due,
+                "is_active": True,
+                "created_at": pv.created_at.isoformat()
+            })
+
+    if search and search.strip():
+        s = search.strip().lower()
+        vendors = [v for v in vendors if s in str(v.get("name", "")).lower() or s in str(v.get("phone", "")).lower() or s in str(v.get("company_name", "")).lower()]
+
+    total_dues = sum(float(v.get("outstanding_due", 0.0)) for v in vendors)
+
+    return {
+        "total_vendors": len(vendors),
+        "total_dues": round(total_dues, 2),
+        "vendors": vendors
+    }
+
+@app.post("/api/v1/hub/stores/{token}/vendors")
+def create_store_vendor_from_mobile(
+    token: str,
+    payload: VendorCreatePayload,
+    db: Session = Depends(get_db)
+):
+    """Allows remote creation of a vendor from mobile companion."""
+    t_clean = token.strip().upper()
+    store = db.query(HubStore).filter(HubStore.store_token == t_clean).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found.")
+
+    pv = HubPendingVendor(
+        store_token=t_clean,
+        name=payload.name.strip(),
+        phone=payload.phone.strip(),
+        company_name=payload.company_name,
+        alt_phone=payload.alt_phone,
+        email=payload.email,
+        gstin=payload.gstin,
+        address=payload.address,
+        city=payload.city,
+        state=payload.state or "Maharashtra",
+        notes=payload.notes,
+        bank_name=payload.bank_name,
+        bank_account_no=payload.bank_account_no,
+        bank_ifsc=payload.bank_ifsc,
+        bank_holder_name=payload.bank_holder_name,
+        vendor_upi_id=payload.vendor_upi_id,
+        opening_due=payload.opening_due or 0.0,
+        synced_to_pos=False
+    )
+    db.add(pv)
+    db.commit()
+    db.refresh(pv)
+
+    # Inject into live VENDORS cache
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+    if v_record and v_record.data_json:
+        try:
+            v_list = json.loads(v_record.data_json)
+            v_list.append({
+                "id": pv.id,
+                "name": pv.name,
+                "company_name": pv.company_name,
+                "phone": pv.phone,
+                "alt_phone": pv.alt_phone,
+                "email": pv.email,
+                "gstin": pv.gstin,
+                "address": pv.address,
+                "city": pv.city,
+                "state": pv.state,
+                "notes": pv.notes,
+                "bank_name": pv.bank_name,
+                "bank_account_no": pv.bank_account_no,
+                "bank_ifsc": pv.bank_ifsc,
+                "bank_holder_name": pv.bank_holder_name,
+                "vendor_upi_id": pv.vendor_upi_id,
+                "outstanding_due": pv.opening_due,
+                "is_active": True,
+                "created_at": pv.created_at.isoformat()
+            })
+            v_record.data_json = json.dumps(v_list)
+            db.commit()
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": "Vendor created! Will sync to Dolly POS laptop.",
+        "id": pv.id
+    }
+
+@app.put("/api/v1/hub/stores/{token}/vendors/{vendor_id}")
+def update_store_vendor_from_mobile(
+    token: str,
+    vendor_id: int,
+    payload: VendorUpdatePayload,
+    db: Session = Depends(get_db)
+):
+    """Updates vendor bank details and information from mobile."""
+    t_clean = token.strip().upper()
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+
+    if v_record and v_record.data_json:
+        try:
+            v_list = json.loads(v_record.data_json)
+            for v in v_list:
+                if v.get("id") == vendor_id:
+                    for k, val in payload.model_dump(exclude_unset=True).items():
+                        if val is not None:
+                            v[k] = val
+                    v_record.data_json = json.dumps(v_list)
+                    db.commit()
+                    return {"status": "success", "message": "Vendor updated successfully"}
+        except Exception:
+            pass
+
+    return {"status": "success", "message": "Vendor details updated"}
+
+@app.post("/api/v1/hub/stores/{token}/vendors/{vendor_id}/payment")
+def record_store_vendor_payment_from_mobile(
+    token: str,
+    vendor_id: int,
+    payload: VendorPaymentPayload,
+    db: Session = Depends(get_db)
+):
+    """Records payment made to vendor and queues for laptop sync."""
+    t_clean = token.strip().upper()
+    pvp = HubPendingVendorPayment(
+        store_token=t_clean,
+        vendor_id=vendor_id,
+        amount=payload.amount,
+        payment_mode=payload.payment_mode or "UPI",
+        reference_no=payload.reference_no,
+        notes=payload.notes,
+        synced_to_pos=False
+    )
+    db.add(pvp)
+    db.commit()
+
+    # Deduct from outstanding_due in live VENDORS cache
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+    new_due = 0.0
+    if v_record and v_record.data_json:
+        try:
+            v_list = json.loads(v_record.data_json)
+            for v in v_list:
+                if v.get("id") == vendor_id:
+                    v["outstanding_due"] = max(0.0, float(v.get("outstanding_due", 0.0)) - payload.amount)
+                    new_due = v["outstanding_due"]
+            v_record.data_json = json.dumps(v_list)
+            db.commit()
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": f"Payment of ₹{payload.amount:,.2f} recorded! Dues updated.",
+        "new_due": new_due
+    }
+
+@app.get("/api/v1/hub/stores/{token}/vendors/{vendor_id}/ledger")
+def get_store_vendor_ledger_for_mobile(
+    token: str,
+    vendor_id: int,
+    db: Session = Depends(get_db)
+):
+    """Returns ledger history of payments made to vendor."""
+    t_clean = token.strip().upper()
+    pending = db.query(HubPendingVendorPayment).filter(
+        HubPendingVendorPayment.store_token == t_clean,
+        HubPendingVendorPayment.vendor_id == vendor_id
+    ).order_by(HubPendingVendorPayment.created_at.desc()).all()
+
+    entries = []
+    for p in pending:
+        entries.append({
+            "id": p.id,
+            "vendor_id": p.vendor_id,
+            "entry_type": "PAYMENT_MADE",
+            "reference_no": p.reference_no or "UPI_PAYMENT",
+            "debit_amount": p.amount,
+            "credit_amount": 0.0,
+            "balance_after": 0.0,
+            "payment_mode": p.payment_mode,
+            "notes": p.notes or "Payment via Mobile App",
+            "created_at": p.created_at.isoformat()
+        })
+    return entries
 
 @app.post("/api/v1/hub/stores/{token}/inventory")
 def add_product_to_store_inventory(

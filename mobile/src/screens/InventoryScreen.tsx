@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,9 +24,6 @@ import {
   Plus,
   X,
   Sparkles,
-  Tag,
-  DollarSign,
-  Layers,
 } from 'lucide-react-native';
 import { Header } from '../components/Header';
 import { api } from '../services/api';
@@ -34,7 +31,6 @@ import { useTheme } from '../context/ThemeContext';
 import { useConnection } from '../context/ConnectionContext';
 import { InventoryItem, InventoryResponse, CategoryItem } from '../types';
 import { formatINR } from '../utils/formatters';
-import { colors } from '../theme/colors';
 
 export const InventoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -49,6 +45,8 @@ export const InventoryScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const styles = useMemo(() => createStyles(themeColors, isDark), [themeColors, isDark]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -99,31 +97,23 @@ export const InventoryScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    fetchInventory(1, search, lowStockOnly, false);
-  }, [lowStockOnly]);
-
-  useEffect(() => {
-    // 1. Instant Offline Load from store-specific cache
+    // Load cached inventory first for instant UI response
     const cacheKey = activeStore?.id ? `@dolly_pos_cached_inventory_${activeStore.id}` : '@dolly_pos_cached_inventory';
-    AsyncStorage.getItem(cacheKey)
-      .then((json) => {
-        if (json) {
-          const parsed = JSON.parse(json);
-          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+    AsyncStorage.getItem(cacheKey).then((cached) => {
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
             setProducts(parsed);
             setLoading(false);
           }
-        } else {
-          setProducts([]);
-          setLoading(true);
-        }
-      })
-      .catch(() => {});
+        } catch {}
+      }
+    });
 
-    // Load categories for modal dropdown
+    fetchInventory(1, '', false, false);
     api.getCategories().then(setCategories).catch(() => {});
-    fetchInventory(1, search, lowStockOnly, false);
-  }, [activeStore?.id]);
+  }, [fetchInventory, activeStore?.id]);
 
   const handleSearch = (text: string) => {
     setSearch(text);
@@ -140,43 +130,48 @@ export const InventoryScreen: React.FC = () => {
   };
 
   const handleAutoGenerateBarcode = () => {
-    const randomEAN = `890${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
-    setNewProdBarcode(randomEAN);
+    const timestamp = Date.now().toString().slice(-8);
+    setNewProdBarcode(`890${timestamp}`);
   };
 
   const handleSaveProduct = async () => {
     if (!newProdName.trim()) {
-      Alert.alert('Required', 'Please enter a product name');
+      Alert.alert('Validation Error', 'Product Name is required.');
       return;
     }
-    if (!newProdSelling || isNaN(Number(newProdSelling))) {
-      Alert.alert('Required', 'Please enter a valid selling price');
+    const sellPrice = parseFloat(newProdSelling);
+    if (isNaN(sellPrice) || sellPrice < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid Selling Price.');
       return;
     }
 
-    setIsSubmitting(true);
     try {
+      setIsSubmitting(true);
       await api.addProduct({
         name: newProdName.trim(),
         barcode: newProdBarcode.trim() || undefined,
         category_id: newProdCatId,
-        purchase_price: Number(newProdPurchase) || 0,
-        selling_price: Number(newProdSelling),
-        mrp: Number(newProdMRP) || Number(newProdSelling),
-        stock_quantity: Number(newProdStock) || 0,
-        min_stock_alert: Number(newProdAlert) || 3,
+        purchase_price: parseFloat(newProdPurchase) || 0,
+        selling_price: sellPrice,
+        mrp: parseFloat(newProdMRP) || sellPrice,
+        stock_quantity: parseInt(newProdStock, 10) || 1,
+        min_stock_alert: parseInt(newProdAlert, 10) || 3,
       });
 
       setShowAddModal(false);
-      showToast(`✓ Done! '${newProdName.trim()}' saved to POS`);
+      showToast(`Added "${newProdName}" successfully!`);
       // Reset form
       setNewProdName('');
       setNewProdBarcode('');
+      setNewProdCatId(undefined);
       setNewProdPurchase('');
       setNewProdSelling('');
       setNewProdMRP('');
       setNewProdStock('1');
+      setNewProdAlert('3');
+
       // Refresh list
+      setPage(1);
       fetchInventory(1, search, lowStockOnly, false);
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.detail || err.message || 'Failed to add product');
@@ -196,7 +191,7 @@ export const InventoryScreen: React.FC = () => {
             </View>
             {item.barcode && item.barcode !== '—' ? (
               <View style={styles.barcodeBadge}>
-                <Barcode size={11} color={colors.textMuted} />
+                <Barcode size={11} color={themeColors.textMuted} />
                 <Text style={styles.barcodeText}>{item.barcode}</Text>
               </View>
             ) : null}
@@ -211,14 +206,14 @@ export const InventoryScreen: React.FC = () => {
           ]}
         >
           {item.is_low_stock ? (
-            <AlertCircle size={13} color={colors.danger} />
+            <AlertCircle size={13} color={themeColors.danger} />
           ) : (
-            <CheckCircle size={13} color={colors.success} />
+            <CheckCircle size={13} color={themeColors.success} />
           )}
           <Text
             style={[
               styles.stockText,
-              { color: item.is_low_stock ? colors.danger : colors.success },
+              { color: item.is_low_stock ? themeColors.danger : themeColors.success },
             ]}
           >
             {item.current_stock} pcs
@@ -302,12 +297,12 @@ export const InventoryScreen: React.FC = () => {
             style={[styles.filterChip, lowStockOnly && styles.filterChipDangerActive]}
             onPress={() => setLowStockOnly(true)}
           >
-            <AlertCircle size={12} color={lowStockOnly ? '#ffffff' : colors.danger} />
+            <AlertCircle size={12} color={lowStockOnly ? '#ffffff' : themeColors.danger} />
             <Text
               style={[
                 styles.filterChipText,
                 lowStockOnly && styles.filterChipTextActive,
-                !lowStockOnly && { color: colors.danger },
+                !lowStockOnly && { color: themeColors.danger },
               ]}
             >
               Low Stock Only
@@ -319,7 +314,7 @@ export const InventoryScreen: React.FC = () => {
       {/* Main List */}
       {loading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={colors.brand[600]} />
+          <ActivityIndicator size="large" color={themeColors.brand[600]} />
           <Text style={styles.loadingText}>Searching product catalog...</Text>
         </View>
       ) : (
@@ -342,13 +337,13 @@ export const InventoryScreen: React.FC = () => {
           ListFooterComponent={
             loadingMore ? (
               <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={colors.brand[600]} />
+                <ActivityIndicator size="small" color={themeColors.brand[600]} />
               </View>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Package size={36} color={colors.textMuted} />
+              <Package size={36} color={themeColors.textMuted} />
               <Text style={styles.emptyTitle}>No Products Found</Text>
               <Text style={styles.emptySub}>Try searching with a different keyword or barcode.</Text>
             </View>
@@ -379,7 +374,7 @@ export const InventoryScreen: React.FC = () => {
                 <Text style={styles.modalSub}>Saved directly into Dolly POS database</Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setShowAddModal(false)}>
-                <X size={20} color={colors.textSecondary} />
+                <X size={20} color={themeColors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -401,7 +396,7 @@ export const InventoryScreen: React.FC = () => {
                 <View style={styles.labelRow}>
                   <Text style={styles.fieldLabel}>Barcode (Optional)</Text>
                   <TouchableOpacity onPress={handleAutoGenerateBarcode} style={styles.autoBtn}>
-                    <Sparkles size={12} color={colors.brand[600]} />
+                    <Sparkles size={12} color={themeColors.brand[600]} />
                     <Text style={styles.autoBtnText}>Auto-Generate</Text>
                   </TouchableOpacity>
                 </View>
@@ -526,380 +521,385 @@ export const InventoryScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  filterSection: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-    paddingBottom: 8,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: colors.textPrimary,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  filterChipActive: {
-    backgroundColor: colors.brand[600],
-  },
-  filterChipDangerActive: {
-    backgroundColor: colors.danger,
-  },
-  filterChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  filterChipTextActive: {
-    color: '#ffffff',
-  },
-  listContent: {
-    padding: 16,
-    paddingTop: 8,
-    gap: 12,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  titleArea: {
-    flex: 1,
-    marginRight: 8,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    lineHeight: 19,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 5,
-    flexWrap: 'wrap',
-  },
-  categoryBadge: {
-    backgroundColor: colors.brand[50],
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  categoryText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.brand[600],
-  },
-  barcodeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.surfaceSubtle,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  barcodeText: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    color: colors.textSecondary,
-  },
-  stockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  stockLow: {
-    backgroundColor: '#fee2e2',
-  },
-  stockOk: {
-    backgroundColor: '#ecfdf5',
-  },
-  stockText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  pricingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
-    paddingTop: 10,
-  },
-  priceLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  sellingPrice: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  mrpBox: {
-    alignItems: 'center',
-  },
-  mrpValue: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-    marginTop: 2,
-  },
-  costValue: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  minStockBox: {
-    alignItems: 'flex-end',
-  },
-  minStockValue: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  centerBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  footerLoader: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  emptyBox: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginTop: 20,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 10,
-  },
-  emptySub: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    backgroundColor: colors.brand[600],
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 26,
-    shadowColor: colors.brand[600],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  fabText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.textPrimary,
-  },
-  modalSub: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formContent: {
-    padding: 20,
-    gap: 14,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-  },
-  autoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  autoBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.brand[600],
-  },
-  inputField: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: colors.textPrimary,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  catScroll: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  catChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  catChipActive: {
-    backgroundColor: colors.brand[600],
-    borderColor: colors.brand[600],
-  },
-  catChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  catChipTextActive: {
-    color: '#ffffff',
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfField: {
-    flex: 1,
-    gap: 6,
-  },
-  saveProdBtn: {
-    backgroundColor: colors.brand[600],
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  saveProdBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  toastBanner: {
-    backgroundColor: '#059669', // Emerald success green
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  toastText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-});
+const createStyles = (themeColors: any, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.bg,
+    },
+    filterSection: {
+      backgroundColor: themeColors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+      paddingBottom: 8,
+    },
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: themeColors.surfaceSubtle,
+      marginHorizontal: 16,
+      marginTop: 10,
+      marginBottom: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    searchIcon: {
+      marginRight: 8,
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: 9,
+      fontSize: 13,
+      color: themeColors.textPrimary,
+    },
+    chipsRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      gap: 8,
+    },
+    filterChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      backgroundColor: themeColors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    filterChipActive: {
+      backgroundColor: themeColors.brand[600],
+      borderColor: themeColors.brand[600],
+    },
+    filterChipDangerActive: {
+      backgroundColor: themeColors.danger,
+      borderColor: themeColors.danger,
+    },
+    filterChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: themeColors.textSecondary,
+    },
+    filterChipTextActive: {
+      color: '#ffffff',
+    },
+    listContent: {
+      padding: 16,
+      paddingTop: 8,
+      gap: 12,
+    },
+    card: {
+      backgroundColor: themeColors.card,
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    cardTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    titleArea: {
+      flex: 1,
+      marginRight: 8,
+    },
+    productName: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: themeColors.textPrimary,
+      lineHeight: 19,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 5,
+      flexWrap: 'wrap',
+    },
+    categoryBadge: {
+      backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : themeColors.brand[50],
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    categoryText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: themeColors.brand[600],
+    },
+    barcodeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      backgroundColor: themeColors.surfaceSubtle,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    barcodeText: {
+      fontSize: 10,
+      fontFamily: 'monospace',
+      color: themeColors.textSecondary,
+    },
+    stockBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    stockLow: {
+      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+    },
+    stockOk: {
+      backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#ecfdf5',
+    },
+    stockText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    pricingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderTopWidth: 1,
+      borderTopColor: themeColors.cardBorder,
+      paddingTop: 10,
+    },
+    priceLabel: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: themeColors.textMuted,
+      textTransform: 'uppercase',
+    },
+    sellingPrice: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: themeColors.textPrimary,
+      marginTop: 2,
+    },
+    mrpBox: {
+      alignItems: 'center',
+    },
+    mrpValue: {
+      fontSize: 12,
+      color: themeColors.textMuted,
+      textDecorationLine: 'line-through',
+      marginTop: 2,
+    },
+    costValue: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    minStockBox: {
+      alignItems: 'flex-end',
+    },
+    minStockValue: {
+      fontSize: 11,
+      color: themeColors.textSecondary,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    centerBox: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadingText: {
+      marginTop: 10,
+      fontSize: 12,
+      color: themeColors.textMuted,
+    },
+    footerLoader: {
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    emptyBox: {
+      padding: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: themeColors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+      marginTop: 20,
+    },
+    emptyTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: themeColors.textPrimary,
+      marginTop: 10,
+    },
+    emptySub: {
+      fontSize: 12,
+      color: themeColors.textMuted,
+      marginTop: 4,
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      backgroundColor: themeColors.brand[600],
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 18,
+      paddingVertical: 13,
+      borderRadius: 26,
+      shadowColor: themeColors.brand[600],
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    fabText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: themeColors.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      maxHeight: '90%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.cardBorder,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: themeColors.textPrimary,
+    },
+    modalSub: {
+      fontSize: 11,
+      color: themeColors.textSecondary,
+      marginTop: 2,
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: themeColors.surfaceSubtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    formContent: {
+      padding: 20,
+      gap: 14,
+    },
+    inputGroup: {
+      gap: 6,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    fieldLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: themeColors.textSecondary,
+      textTransform: 'uppercase',
+    },
+    autoBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    autoBtnText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: themeColors.brand[600],
+    },
+    inputField: {
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 13,
+      color: themeColors.textPrimary,
+      backgroundColor: themeColors.surfaceSubtle,
+    },
+    catScroll: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingVertical: 4,
+    },
+    catChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 10,
+      backgroundColor: themeColors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+    },
+    catChipActive: {
+      backgroundColor: themeColors.brand[600],
+      borderColor: themeColors.brand[600],
+    },
+    catChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: themeColors.textSecondary,
+    },
+    catChipTextActive: {
+      color: '#ffffff',
+    },
+    rowInputs: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    halfField: {
+      flex: 1,
+      gap: 6,
+    },
+    saveProdBtn: {
+      backgroundColor: themeColors.brand[600],
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 10,
+    },
+    btnDisabled: {
+      opacity: 0.6,
+    },
+    saveProdBtnText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    toastBanner: {
+      backgroundColor: '#059669',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+    },
+    toastText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+  });

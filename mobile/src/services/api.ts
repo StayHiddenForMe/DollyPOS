@@ -11,6 +11,9 @@ import {
   NetworkInfo,
   BusinessStore,
   DemandItem,
+  Vendor,
+  VendorLedgerEntry,
+  VendorResponse,
 } from '../types';
 
 export const STORAGE_KEYS = {
@@ -566,30 +569,67 @@ export const api = {
     return res.data;
   },
 
-  // 9. 1-Click Database Backup Download to Phone
+  // 9. 1-Click Database Backup Download to Phone (LAN or Cloud Hub Fallback)
   async downloadFullBackup(): Promise<string> {
-    const url = `${cachedServerUrl}/api/v1/mobile/backup-download`;
     const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
     const filename = `DollyPOS_Database_Backup_${timestamp}.json`;
     const targetUri = `${FileSystem.cacheDirectory}${filename}`;
 
-    const downloadRes = await FileSystem.downloadAsync(url, targetUri, {
-      headers: cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {},
-    });
+    let downloaded = false;
 
-    if (downloadRes.status !== 200) {
-      throw new Error(`Server returned HTTP ${downloadRes.status} while generating backup`);
+    // 1. Try local LAN POS if configured and not default dummy
+    if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
+      try {
+        const lanUrl = `${cachedServerUrl}/api/v1/mobile/backup-download`;
+        const downloadRes = await FileSystem.downloadAsync(lanUrl, targetUri, {
+          headers: cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {},
+        });
+        if (downloadRes.status === 200) {
+          downloaded = true;
+        }
+      } catch (lanErr) {
+        console.log('LAN backup download failed, falling back to Cloud Hub...', lanErr);
+      }
+    }
+
+    // 2. Fall back to Cloud Hub backup endpoint if LAN was unreachable
+    if (!downloaded) {
+      let storeToken = cachedActiveStore?.token;
+      let hubUrl = cachedActiveStore?.hub_url || cachedHubUrl || DEFAULT_HUB_URL;
+      if (!storeToken) {
+        const stores = await getSavedBusinesses();
+        const found = stores.find((s) => s.token);
+        if (found && found.token) {
+          storeToken = found.token;
+          if (found.hub_url) hubUrl = found.hub_url;
+        }
+      }
+
+      if (!storeToken) {
+        throw new Error('Could not download backup. Please ensure your store token is paired or your phone is connected to the shop Wi-Fi.');
+      }
+
+      const cleanHub = hubUrl.trim().replace(/\/$/, '');
+      const cloudUrl = `${cleanHub}/api/v1/hub/stores/${encodeURIComponent(storeToken)}/backup`;
+      const downloadRes = await FileSystem.downloadAsync(cloudUrl, targetUri, {
+        headers: cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {},
+      });
+
+      if (downloadRes.status !== 200) {
+        throw new Error(`Cloud Hub returned HTTP ${downloadRes.status} while generating backup`);
+      }
+      downloaded = true;
     }
 
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
-      await Sharing.shareAsync(downloadRes.uri, {
+      await Sharing.shareAsync(targetUri, {
         mimeType: 'application/json',
         dialogTitle: 'Save Dolly POS Database Backup',
         UTI: 'public.json',
       });
     }
-    return downloadRes.uri;
+    return targetUri;
   },
 
   // 10. Customer Demand Log / Lost Demand API (Cloud Hub & Local Sync)
@@ -674,5 +714,124 @@ export const api = {
     const client = getClient();
     const res = await client.delete(`/procurement/lost-demand/${id}`);
     return res.data;
+  },
+
+  // 11. Vendor Management System (Cloud Hub & Direct LAN)
+  async getVendors(search?: string): Promise<VendorResponse> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<VendorResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors`,
+          {
+            params: { search: search || undefined },
+            timeout: 15000,
+          }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to local client if available
+      }
+    }
+    try {
+      const client = getClient();
+      const res = await client.get<VendorResponse>('/mobile/vendors', {
+        params: { search: search || undefined },
+      });
+      return res.data;
+    } catch (lanErr) {
+      const stores = await getSavedBusinesses();
+      const storeWithToken = stores.find((s) => s.token);
+      if (storeWithToken && storeWithToken.token) {
+        const hub = (storeWithToken.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+        const res = await axios.get<VendorResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/vendors`,
+          {
+            params: { search: search || undefined },
+            timeout: 15000,
+          }
+        );
+        return res.data;
+      }
+      throw lanErr;
+    }
+  },
+
+  async createVendor(data: Partial<Vendor>): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.post(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors`,
+          data,
+          { timeout: 15000 }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to LAN
+      }
+    }
+    const client = getClient();
+    const res = await client.post('/mobile/vendors', data);
+    return res.data;
+  },
+
+  async updateVendor(id: number, data: Partial<Vendor>): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.put(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${id}`,
+          data,
+          { timeout: 15000 }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to LAN
+      }
+    }
+    const client = getClient();
+    const res = await client.put(`/mobile/vendors/${id}`, data);
+    return res.data;
+  },
+
+  async recordVendorPayment(
+    vendorId: number,
+    data: { amount: number; payment_mode?: string; reference_no?: string; notes?: string }
+  ): Promise<any> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.post(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${vendorId}/payment`,
+          data,
+          { timeout: 15000 }
+        );
+        return res.data;
+      } catch (e) {
+        // Fallback to LAN
+      }
+    }
+    const client = getClient();
+    const res = await client.post(`/mobile/vendors/${vendorId}/payment`, data);
+    return res.data;
+  },
+
+  async getVendorLedger(vendorId: number): Promise<VendorLedgerEntry[]> {
+    if (cachedActiveStore && cachedActiveStore.token) {
+      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+      try {
+        const res = await axios.get<VendorLedgerEntry[]>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${vendorId}/ledger`,
+          { timeout: 15000 }
+        );
+        return res.data || [];
+      } catch (e) {
+        // Fallback to LAN
+      }
+    }
+    const client = getClient();
+    const res = await client.get<VendorLedgerEntry[]>(`/mobile/vendors/${vendorId}/ledger`);
+    return res.data || [];
   },
 };

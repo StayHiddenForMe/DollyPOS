@@ -178,3 +178,47 @@ export interface DemandItem {
   created_at: string;
 }
 
+export interface Vendor {
+  id: number;
+  vendor_code?: string;
+  name: string;
+  company_name?: string;
+  phone: string;
+  alt_phone?: string;
+  email?: string;
+  gstin?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  notes?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  bank_holder_name?: string;
+  vendor_upi_id?: string;
+  outstanding_due: number;
+  opening_due?: number;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+export interface VendorLedgerEntry {
+  id: number;
+  vendor_id: number;
+  entry_type: string;
+  reference_no?: string;
+  debit_amount: number;
+  credit_amount: number;
+  balance_after: number;
+  payment_mode?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface VendorResponse {
+  total_vendors: number;
+  total_dues: number;
+  vendors: Vendor[];
+}
+
+

@@ -8,6 +8,7 @@ import {
   TrendingUp,
   FileSpreadsheet,
   Package,
+  Truck,
   ClipboardList,
   Settings as SettingsIcon,
 } from 'lucide-react-native';
@@ -20,6 +21,7 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { OverviewScreen } from './src/screens/OverviewScreen';
 import { ReportsScreen } from './src/screens/ReportsScreen';
 import { InventoryScreen } from './src/screens/InventoryScreen';
+import { VendorsScreen } from './src/screens/VendorsScreen';
 import { DemandLogScreen } from './src/screens/DemandLogScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 
@@ -43,7 +45,7 @@ const MainNavigator = () => {
           paddingTop: 6,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '700',
         },
       }}
@@ -70,6 +72,14 @@ const MainNavigator = () => {
         options={{
           tabBarLabel: 'Inventory',
           tabBarIcon: ({ color, size }) => <Package size={size || 22} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Vendors"
+        component={VendorsScreen}
+        options={{
+          tabBarLabel: 'Vendors',
+          tabBarIcon: ({ color, size }) => <Truck size={size || 22} color={color} />,
         }}
       />
       <Tab.Screen
