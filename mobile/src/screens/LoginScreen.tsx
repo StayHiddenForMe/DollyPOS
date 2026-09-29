@@ -33,6 +33,8 @@ import {
   LogOut,
   QrCode,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useConnection } from '../context/ConnectionContext';
@@ -74,6 +76,7 @@ export const LoginScreen: React.FC = () => {
   const [localIpInput, setLocalIpInput] = useState(serverUrl);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoggingInLocal, setIsLoggingInLocal] = useState(false);
 
   // UI Modals
@@ -194,16 +197,26 @@ export const LoginScreen: React.FC = () => {
     clearError();
 
     try {
-      if (localIpInput.trim() && localIpInput.trim() !== serverUrl) {
-        await updateServerUrl(localIpInput.trim());
+      const target = localIpInput.trim() || serverUrl;
+      await updateServerUrl(target);
+
+      const reachable = await checkConnection(target);
+      if (!reachable) {
+        setIsLoggingInLocal(false);
+        Alert.alert(
+          'Connection Error',
+          `Could not reach laptop at ${target}. Make sure your laptop Dolly POS is running and both devices are on the shop Wi-Fi.`
+        );
+        return;
       }
-      const success = await login(username.trim(), password);
+
+      const success = await login(username.trim().toLowerCase(), password);
       setIsLoggingInLocal(false);
 
-      if (!success && !authError) {
+      if (!success) {
         Alert.alert(
           'Login Failed',
-          'Could not log in. Verify your username/password and make sure your phone is connected to the shop Wi-Fi.'
+          authError || 'Could not log in. Verify your username/password and try again.'
         );
       }
     } catch (err: any) {
@@ -546,13 +559,25 @@ export const LoginScreen: React.FC = () => {
                   <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: isDark ? '#334155' : '#CBD5E1' }]}>
                     <Lock size={18} color="#94A3B8" style={styles.inputIcon} />
                     <TextInput
-                      style={[styles.input, { color: isDark ? '#F8FAFC' : '#0F172A' }]}
+                      style={[styles.input, { color: isDark ? '#F8FAFC' : '#0F172A', flex: 1 }]}
                       value={password}
                       onChangeText={setPassword}
                       placeholder="Enter password"
                       placeholderTextColor={isDark ? '#94A3B8' : '#64748B'}
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                     />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword((prev) => !prev)}
+                      style={{ paddingHorizontal: 10, paddingVertical: 8 }}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+                      ) : (
+                        <Eye size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+                      )}
+                    </TouchableOpacity>
                   </View>
                 </View>
 

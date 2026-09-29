@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dolly POS Companion",
     "slug": "dolly-pos-companion",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.dollytoys.poscompanion",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#db2777",
         "foregroundImage": "./assets/android-icon-foreground.png"
