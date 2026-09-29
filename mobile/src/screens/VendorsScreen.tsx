@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -104,8 +104,10 @@ export const VendorsScreen: React.FC = () => {
     }, 2500);
   };
 
+  const vendorSearchTimeoutRef = useRef<any>(null);
+
   const fetchVendors = useCallback(
-    async (searchQuery = search) => {
+    async (searchQuery = '') => {
       try {
         const res = await api.getVendors(searchQuery);
         setVendors(res.vendors || []);
@@ -124,7 +126,7 @@ export const VendorsScreen: React.FC = () => {
         setRefreshing(false);
       }
     },
-    [search, activeStore?.id]
+    [activeStore?.id]
   );
 
   useEffect(() => {
@@ -146,12 +148,25 @@ export const VendorsScreen: React.FC = () => {
       }
     });
 
-    fetchVendors();
-  }, [fetchVendors, activeStore?.id]);
+    fetchVendors('');
+  }, [fetchVendors]);
+
+  useEffect(() => {
+    return () => {
+      if (vendorSearchTimeoutRef.current) {
+        clearTimeout(vendorSearchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
-    fetchVendors(text);
+    if (vendorSearchTimeoutRef.current) {
+      clearTimeout(vendorSearchTimeoutRef.current);
+    }
+    vendorSearchTimeoutRef.current = setTimeout(() => {
+      fetchVendors(text.trim());
+    }, 350);
   };
 
   const handleCopy = async (textToCopy: string, label: string) => {

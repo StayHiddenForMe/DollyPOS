@@ -740,17 +740,34 @@ class CloudSyncService:
                 pending_mutations = res_data.get("pending_demand_mutations", [])
                 for m in pending_mutations:
                     did = m.get("demand_id")
+                    item_desc = (m.get("item_description") or "").strip()
+                    cust_phone = (m.get("customer_phone") or "").strip()
                     action = m.get("action")
                     if action == "DELETE":
-                        db.query(LostDemand).filter(LostDemand.id == did).delete()
+                        deleted = False
+                        if did:
+                            deleted = db.query(LostDemand).filter(LostDemand.id == did).delete(synchronize_session=False) > 0
+                        if not deleted and item_desc:
+                            q = db.query(LostDemand).filter(func.lower(LostDemand.item_description) == item_desc.lower())
+                            if cust_phone:
+                                q = q.filter(LostDemand.customer_phone == cust_phone)
+                            q.delete(synchronize_session=False)
                     elif action == "UPDATE_STATUS":
                         new_st = m.get("status")
-                        demand_row = db.query(LostDemand).filter(LostDemand.id == did).first()
-                        if demand_row and new_st:
-                            try:
-                                demand_row.status = LostDemandStatus(new_st)
-                            except Exception:
-                                pass
+                        if new_st:
+                            row = None
+                            if did:
+                                row = db.query(LostDemand).filter(LostDemand.id == did).first()
+                            if not row and item_desc:
+                                q = db.query(LostDemand).filter(func.lower(LostDemand.item_description) == item_desc.lower())
+                                if cust_phone:
+                                    q = q.filter(LostDemand.customer_phone == cust_phone)
+                                row = q.first()
+                            if row:
+                                try:
+                                    row.status = LostDemandStatus(new_st)
+                                except Exception:
+                                    pass
 
                 # 4. Process pending vendors created remotely on mobile
                 pending_vendors = res_data.get("pending_vendors", [])
@@ -794,8 +811,40 @@ class CloudSyncService:
                                     notes="Opening balance adjustment from mobile companion"
                                 )
                                 db.add(ledger)
+                        else:
+                            # Update existing vendor with any new UPI/bank details
+                            if pv.get("vendor_upi_id") and not existing_v.vendor_upi_id:
+                                existing_v.vendor_upi_id = pv.get("vendor_upi_id")
+                            if pv.get("bank_name") and not existing_v.bank_name:
+                                existing_v.bank_name = pv.get("bank_name")
+                            if pv.get("bank_account_no") and not existing_v.bank_account_no:
+                                existing_v.bank_account_no = pv.get("bank_account_no")
+                            if pv.get("bank_ifsc") and not existing_v.bank_ifsc:
+                                existing_v.bank_ifsc = pv.get("bank_ifsc")
+                            if pv.get("bank_holder_name") and not existing_v.bank_holder_name:
+                                existing_v.bank_holder_name = pv.get("bank_holder_name")
 
-                # 5. Process pending vendor payments recorded remotely on mobile
+                # 5. Process pending vendor updates made remotely on mobile
+                pending_vendor_updates = res_data.get("pending_vendor_updates", [])
+                for vu in pending_vendor_updates:
+                    v_id = vu.get("vendor_id")
+                    v_name = (vu.get("vendor_name") or "").strip()
+                    v_phone = (vu.get("vendor_phone") or "").strip()
+                    updates = vu.get("updates", {})
+                    target_vendor = None
+                    if v_id:
+                        target_vendor = db.query(Vendor).filter(Vendor.id == v_id).first()
+                    if not target_vendor and v_name:
+                        target_vendor = db.query(Vendor).filter(func.lower(Vendor.name) == v_name.lower()).first()
+                    if not target_vendor and v_phone:
+                        target_vendor = db.query(Vendor).filter(Vendor.phone == v_phone).first()
+
+                    if target_vendor and updates:
+                        for k, val in updates.items():
+                            if hasattr(target_vendor, k) and val is not None:
+                                setattr(target_vendor, k, val)
+
+                # 6. Process pending vendor payments recorded remotely on mobile
                 pending_vendor_pmts = res_data.get("pending_vendor_payments", [])
                 for pvp in pending_vendor_pmts:
                     v_id = pvp.get("vendor_id")

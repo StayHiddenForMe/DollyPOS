@@ -533,6 +533,8 @@ def get_mobile_reports(
     start_date: str = Query(..., description="Start date in YYYY-MM-DD (IST)"),
     end_date: str = Query(..., description="End date in YYYY-MM-DD (IST)"),
     report_type: str = Query("SALES", description="SALES, PAYMENTS, CATEGORIES, EXPENSES, DAMAGED, PLANNER"),
+    limit: int = Query(25, le=10000),
+    export: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -569,6 +571,7 @@ def get_mobile_reports(
         total_discount = 0.0
         total_tax = 0.0
         unique_dates = set()
+        max_rows = 10000 if export else limit
 
         for inv in invoices:
             ist_dt = inv.created_at + IST_OFFSET
@@ -583,8 +586,9 @@ def get_mobile_reports(
             total_discount += d
             total_tax += t
 
-            # Only append first 150 rows for mobile preview to avoid native Android OutOfMemory crash
-            if len(rows) < 150:
+            # Cap preview rows to 25 for mobile screen (instant rendering, zero lag).
+            # When exporting as Excel or PDF, export all invoices.
+            if len(rows) < max_rows:
                 mode_str = str(inv.payment_mode.value if hasattr(inv.payment_mode, "value") else inv.payment_mode).upper()
                 rows.append({
                     "date": ist_dt.strftime("%d %b %Y"),
@@ -615,7 +619,7 @@ def get_mobile_reports(
             "columns": ["Date", "Bill #", "Customer", "Payment Mode", "Gross (₹)", "Discount", "Tax", "Net Amount (₹)"],
             "rows": rows,
             "total_rows": len(invoices),
-            "is_truncated": len(invoices) > 150
+            "is_truncated": len(invoices) > len(rows)
         }
 
     # ------------------ 2. PAYMENTS BREAKDOWN ------------------

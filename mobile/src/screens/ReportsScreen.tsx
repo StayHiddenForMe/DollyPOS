@@ -146,7 +146,11 @@ export const ReportsScreen: React.FC = () => {
     }
     setExportingExcel(true);
     try {
-      await exportReportToExcel(report);
+      let exportData = report;
+      if (report.is_truncated) {
+        exportData = await api.getReports(startDate, endDate, reportType, true);
+      }
+      await exportReportToExcel(exportData);
     } catch (e: any) {
       Alert.alert('Export Error', e?.message || 'Failed to export Excel file');
     } finally {
@@ -161,7 +165,11 @@ export const ReportsScreen: React.FC = () => {
     }
     setExportingPdf(true);
     try {
-      await exportReportToPDF(report);
+      let exportData = report;
+      if (report.is_truncated) {
+        exportData = await api.getReports(startDate, endDate, reportType, true);
+      }
+      await exportReportToPDF(exportData);
     } catch (e: any) {
       Alert.alert('Export Error', e?.message || 'Failed to export PDF file');
     } finally {
@@ -457,7 +465,7 @@ export const ReportsScreen: React.FC = () => {
               <View style={styles.truncatedNotice}>
                 <Info size={14} color="#0284c7" />
                 <Text style={styles.truncatedText}>
-                  Showing latest {report.rows.length} of {report.total_rows || (report.summary as any).total_bills} transactions. Tap Export Excel / PDF to download the full archive.
+                  Showing latest {report.rows.length} of {report.total_rows || (report.summary as any).total_bills || report.rows.length} bills. Tap Export Excel / PDF to download the full archive.
                 </Text>
               </View>
             )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -67,14 +67,16 @@ export const InventoryScreen: React.FC = () => {
   const [newProdStock, setNewProdStock] = useState('1');
   const [newProdAlert, setNewProdAlert] = useState('3');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const PAGE_SIZE = 25;
+  const searchTimeoutRef = useRef<any>(null);
 
   const fetchInventory = useCallback(
-    async (pageNum = 1, searchQuery = search, lowOnly = lowStockOnly, append = false) => {
+    async (pageNum = 1, searchQuery = '', lowOnly = false, append = false) => {
       try {
         if (!append) setLoading(true);
         else setLoadingMore(true);
 
-        const res = await api.getInventory(searchQuery, undefined, lowOnly, pageNum, 50);
+        const res = await api.getInventory(searchQuery, undefined, lowOnly, pageNum, PAGE_SIZE);
         setData(res);
         if (append) {
           setProducts((prev) => [...prev, ...res.products]);
@@ -93,7 +95,7 @@ export const InventoryScreen: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [search, lowStockOnly, activeStore?.id]
+    [activeStore?.id]
   );
 
   useEffect(() => {
@@ -113,19 +115,38 @@ export const InventoryScreen: React.FC = () => {
 
     fetchInventory(1, '', false, false);
     api.getCategories().then(setCategories).catch(() => {});
-  }, [fetchInventory, activeStore?.id]);
+  }, [fetchInventory]);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
     setPage(1);
-    fetchInventory(1, text, lowStockOnly, false);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchInventory(1, text.trim(), lowStockOnly, false);
+    }, 350);
+  };
+
+  const handleToggleLowStock = (val: boolean) => {
+    setLowStockOnly(val);
+    setPage(1);
+    fetchInventory(1, search.trim(), val, false);
   };
 
   const handleLoadMore = () => {
     if (data && data.has_more && !loadingMore && !loading) {
       const nextPage = page + 1;
       setPage(nextPage);
-      fetchInventory(nextPage, search, lowStockOnly, true);
+      fetchInventory(nextPage, search.trim(), lowStockOnly, true);
     }
   };
 
@@ -286,7 +307,7 @@ export const InventoryScreen: React.FC = () => {
         <View style={styles.chipsRow}>
           <TouchableOpacity
             style={[styles.filterChip, !lowStockOnly && styles.filterChipActive]}
-            onPress={() => setLowStockOnly(false)}
+            onPress={() => handleToggleLowStock(false)}
           >
             <Text style={[styles.filterChipText, !lowStockOnly && styles.filterChipTextActive]}>
               All Catalog ({data?.total_count || 0})
@@ -295,7 +316,7 @@ export const InventoryScreen: React.FC = () => {
 
           <TouchableOpacity
             style={[styles.filterChip, lowStockOnly && styles.filterChipDangerActive]}
-            onPress={() => setLowStockOnly(true)}
+            onPress={() => handleToggleLowStock(true)}
           >
             <AlertCircle size={12} color={lowStockOnly ? '#ffffff' : themeColors.danger} />
             <Text

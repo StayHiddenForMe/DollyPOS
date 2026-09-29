@@ -309,19 +309,24 @@ export const api = {
   async getReports(
     startDate: string,
     endDate: string,
-    reportType: string = 'SALES'
+    reportType: string = 'SALES',
+    isExport: boolean = false
   ): Promise<ReportResponse> {
+    const reportParams = {
+      start_date: startDate,
+      end_date: endDate,
+      report_type: reportType,
+      limit: isExport ? 10000 : 25,
+      export: isExport ? 'true' : 'false',
+    };
+
     if (cachedActiveStore && cachedActiveStore.token) {
       const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get<ReportResponse>(
           `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/reports`,
           {
-            params: {
-              start_date: startDate,
-              end_date: endDate,
-              report_type: reportType,
-            },
+            params: reportParams,
             timeout: 45000,
           }
         );
@@ -331,11 +336,7 @@ export const api = {
           try {
             const client = getClient();
             const res = await client.get<ReportResponse>('/mobile/reports', {
-              params: {
-                start_date: startDate,
-                end_date: endDate,
-                report_type: reportType,
-              },
+              params: reportParams,
             });
             return res.data;
           } catch {}
@@ -347,11 +348,7 @@ export const api = {
     try {
       const client = getClient();
       const res = await client.get<ReportResponse>('/mobile/reports', {
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          report_type: reportType,
-        },
+        params: reportParams,
       });
       return res.data;
     } catch (lanErr) {
@@ -363,11 +360,7 @@ export const api = {
         const res = await axios.get<ReportResponse>(
           `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/reports`,
           {
-            params: {
-              start_date: startDate,
-              end_date: endDate,
-              report_type: reportType,
-            },
+            params: reportParams,
             timeout: 45000,
           }
         );
@@ -435,7 +428,7 @@ export const api = {
     categoryId?: number,
     lowStockOnly: boolean = false,
     page: number = 1,
-    limit: number = 50
+    limit: number = 25
   ): Promise<InventoryResponse> {
     if (cachedActiveStore && cachedActiveStore.token) {
       const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');

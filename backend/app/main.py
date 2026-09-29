@@ -148,6 +148,8 @@ def seed_initial_data():
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS last_cloud_sync_at TIMESTAMP",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_status VARCHAR(50) DEFAULT 'IDLE'",
             "ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS cloud_sync_error TEXT",
+            "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_upi_id VARCHAR(100)",
+            "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS outstanding_due FLOAT DEFAULT 0.0",
             "CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments (invoice_id)",
         ]
         log_main(f"Executing {len(migration_statements)} migration statements...")
