@@ -63,12 +63,20 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
   const [endDate, setEndDate] = useState<string>(todayStr);
   const [showCustomRange, setShowCustomRange] = useState(false);
 
-  // 1. Instant Offline Cache Load (Scoped per active store)
+  // 1. Instant Offline Cache Load (Scoped per active store and period)
+  const getCacheKeys = useCallback((p: PeriodType) => {
+    const storePrefix = activeStore?.id ? `@dolly_pos_cached_overview_${activeStore.id}` : '@dolly_pos_cached_overview';
+    const storeTimePrefix = activeStore?.id ? `@dolly_pos_cached_overview_time_${activeStore.id}` : '@dolly_pos_cached_overview_time';
+    return {
+      cacheKey: `${storePrefix}_${p}`,
+      cacheTimeKey: `${storeTimePrefix}_${p}`,
+    };
+  }, [activeStore?.id]);
+
   useEffect(() => {
     const loadCachedSnapshot = async () => {
       try {
-        const cacheKey = activeStore?.id ? `@dolly_pos_cached_overview_${activeStore.id}` : '@dolly_pos_cached_overview';
-        const cacheTimeKey = activeStore?.id ? `@dolly_pos_cached_overview_time_${activeStore.id}` : '@dolly_pos_cached_overview_time';
+        const { cacheKey, cacheTimeKey } = getCacheKeys(period);
         const cachedJson = await AsyncStorage.getItem(cacheKey);
         const cachedTime = await AsyncStorage.getItem(cacheTimeKey);
         if (cachedJson) {
@@ -77,17 +85,22 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
           setIsOfflineSnapshot(true);
           setOfflineTimestamp(cachedTime);
           setLoading(false);
-        } else {
-          setData(null);
-          setLoading(true);
+        } else if (!data) {
+          // If no cache for this period yet, check if TODAY cache exists as fallback
+          const todayKeys = getCacheKeys('TODAY');
+          const fallbackJson = await AsyncStorage.getItem(todayKeys.cacheKey);
+          if (fallbackJson) {
+            setData(JSON.parse(fallbackJson));
+            setIsOfflineSnapshot(true);
+            setLoading(false);
+          }
         }
       } catch (err) {
         console.warn('Failed to load cached overview snapshot:', err);
       }
     };
     loadCachedSnapshot();
-    fetchOverview(period, startDate, endDate);
-  }, [activeStore?.id]);
+  }, [activeStore?.id, period, getCacheKeys]);
 
   const isFetchingRef = useRef(false);
 
@@ -107,9 +120,8 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
         if (res.shop_name) {
           setLiveShopName(res.shop_name);
         }
-        if (p === 'TODAY') {
-          const cacheKey = activeStore?.id ? `@dolly_pos_cached_overview_${activeStore.id}` : '@dolly_pos_cached_overview';
-          const cacheTimeKey = activeStore?.id ? `@dolly_pos_cached_overview_time_${activeStore.id}` : '@dolly_pos_cached_overview_time';
+        if (p !== 'CUSTOM') {
+          const { cacheKey, cacheTimeKey } = getCacheKeys(p);
           AsyncStorage.setItem(cacheKey, JSON.stringify(res)).catch(() => {});
           const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
           AsyncStorage.setItem(cacheTimeKey, timeLabel).catch(() => {});
@@ -120,7 +132,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
         setIsOfflineSnapshot(true);
         setError(
           err?.response?.status === 503
-            ? 'POS Server is temporarily unavailable or tunnel is reconnecting. Pull down to refresh.'
+            ? 'POS Server is temporarily unavailable. Pull down to refresh.'
             : err?.message || 'Could not connect to Dolly POS server.'
         );
       } finally {
@@ -129,7 +141,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
         isFetchingRef.current = false;
       }
     },
-    [activeStore?.id]
+    [activeStore?.id, getCacheKeys]
   );
 
   useEffect(() => {
@@ -382,7 +394,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
           </View>
         )}
 
-        {error && !isOfflineSnapshot ? (
+        {error && !data ? (
           <View style={[styles.errorBanner, { backgroundColor: colors.dangerLight, borderColor: colors.danger }]}>
             <Text style={[styles.errorBannerText, { color: colors.danger }]}>{error}</Text>
           </View>

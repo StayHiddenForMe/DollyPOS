@@ -105,10 +105,57 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
       setNetworkInfo(info);
       setLatencyMs(elapsed);
       setLastChecked(new Date());
+
+      // Auto-bind Store Token from local POS so mobile app can use 24/7 Cloud Hub when laptop is off
+      if (info.store_token) {
+        if (!activeStore || !activeStore.token) {
+          const autoStore: BusinessStore = {
+            id: activeStore?.id || `store_${Date.now()}`,
+            name: info.shop_name || 'Dolly Toys & Kids Wear',
+            token: info.store_token,
+            tagline: info.tagline,
+            url: url,
+            hub_url: info.cloud_hub_url || DEFAULT_HUB_URL,
+            is_active: true,
+            is_pos_online: true,
+            last_synced: info.server_time,
+          };
+          const existingList = await getSavedBusinesses();
+          const filtered = existingList.filter((s) => s.token !== info.store_token && s.id !== autoStore.id);
+          filtered.push(autoStore);
+          await saveBusinessesList(filtered);
+          setStores(filtered);
+          setActiveStoreState(autoStore);
+        }
+      }
+
       setIsChecking(false);
       isCheckingRef.current = false;
       return true;
     } catch (err) {
+      // If direct LAN failed (laptop closed / off), check if we have a 24/7 Cloud Hub store token!
+      if (activeStore && activeStore.token) {
+        try {
+          const hubRes = await api.checkStoreStatus(activeStore.token, activeStore.hub_url);
+          setIsOnline(true);
+          setIsPosOnline(Boolean(hubRes.is_pos_online));
+          setNetworkInfo((prev) => ({
+            shop_name: hubRes.shop_name || activeStore.name,
+            tagline: prev?.tagline || 'Cloud 24/7 Mode (Laptop Offline)',
+            local_ip: prev?.local_ip || 'Cloud Hub',
+            port: prev?.port || 443,
+            api_base_url: activeStore.hub_url || DEFAULT_HUB_URL,
+            server_time: hubRes.last_seen_at || new Date().toISOString(),
+            status: hubRes.is_pos_online ? 'ONLINE' : 'POS_OFFLINE',
+          }));
+          setIsChecking(false);
+          isCheckingRef.current = false;
+          return true;
+        } catch {
+          // Cloud Hub check also failed
+        }
+      }
+
       setIsOnline(false);
       setIsPosOnline(false);
       setLatencyMs(null);

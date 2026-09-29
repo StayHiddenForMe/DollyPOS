@@ -245,37 +245,61 @@ export const api = {
               start_date: startDate || undefined,
               end_date: endDate || undefined,
             },
-            timeout: 20000,
+            timeout: 45000,
           }
         );
         return res.data;
       } catch (hubErr) {
         // Fallback to direct local LAN if available
         if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
-          const client = getClient();
-          const res = await client.get<DashboardOverview>('/mobile/overview', {
-            params: {
-              period,
-              start_date: startDate || undefined,
-              end_date: endDate || undefined,
-            },
-          });
-          return res.data;
+          try {
+            const client = getClient();
+            const res = await client.get<DashboardOverview>('/mobile/overview', {
+              params: {
+                period,
+                start_date: startDate || undefined,
+                end_date: endDate || undefined,
+              },
+            });
+            return res.data;
+          } catch {}
         }
         throw hubErr;
       }
     }
 
-    // Standard direct LAN connection
-    const client = getClient();
-    const res = await client.get<DashboardOverview>('/mobile/overview', {
-      params: {
-        period,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-      },
-    });
-    return res.data;
+    // Direct LAN connection fallback with Cloud fallback if laptop goes offline
+    try {
+      const client = getClient();
+      const res = await client.get<DashboardOverview>('/mobile/overview', {
+        params: {
+          period,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        },
+      });
+      return res.data;
+    } catch (lanErr) {
+      const stores = await getSavedBusinesses();
+      const storeWithToken = stores.find((s) => s.token);
+      if (storeWithToken && storeWithToken.token) {
+        cachedActiveStore = storeWithToken;
+        const hub = (storeWithToken.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+        const res = await axios.get<DashboardOverview>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/overview`,
+          {
+            params: {
+              period,
+              start_date: startDate || undefined,
+              end_date: endDate || undefined,
+            },
+            timeout: 45000,
+          }
+        );
+        return res.data;
+      }
+      throw lanErr;
+    }
   },
 
   // 4. Reports Studio (6 Report Types)
@@ -295,34 +319,59 @@ export const api = {
               end_date: endDate,
               report_type: reportType,
             },
-            timeout: 20000,
+            timeout: 45000,
           }
         );
         return res.data;
       } catch (hubErr) {
         if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
-          const client = getClient();
-          const res = await client.get<ReportResponse>('/mobile/reports', {
+          try {
+            const client = getClient();
+            const res = await client.get<ReportResponse>('/mobile/reports', {
+              params: {
+                start_date: startDate,
+                end_date: endDate,
+                report_type: reportType,
+              },
+            });
+            return res.data;
+          } catch {}
+        }
+        throw hubErr;
+      }
+    }
+
+    try {
+      const client = getClient();
+      const res = await client.get<ReportResponse>('/mobile/reports', {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          report_type: reportType,
+        },
+      });
+      return res.data;
+    } catch (lanErr) {
+      const stores = await getSavedBusinesses();
+      const storeWithToken = stores.find((s) => s.token);
+      if (storeWithToken && storeWithToken.token) {
+        cachedActiveStore = storeWithToken;
+        const hub = (storeWithToken.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+        const res = await axios.get<ReportResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/reports`,
+          {
             params: {
               start_date: startDate,
               end_date: endDate,
               report_type: reportType,
             },
-          });
-          return res.data;
-        }
-        throw hubErr;
+            timeout: 45000,
+          }
+        );
+        return res.data;
       }
+      throw lanErr;
     }
-    const client = getClient();
-    const res = await client.get<ReportResponse>('/mobile/reports', {
-      params: {
-        start_date: startDate,
-        end_date: endDate,
-        report_type: reportType,
-      },
-    });
-    return res.data;
   },
 
   // 5. Customer Khata
@@ -334,26 +383,47 @@ export const api = {
           `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/khata`,
           {
             params: { search: search || undefined },
-            timeout: 20000,
+            timeout: 45000,
           }
         );
         return res.data;
       } catch (hubErr) {
         if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
-          const client = getClient();
-          const res = await client.get<KhataResponse>('/mobile/customers/khata', {
-            params: { search: search || undefined },
-          });
-          return res.data;
+          try {
+            const client = getClient();
+            const res = await client.get<KhataResponse>('/mobile/customers/khata', {
+              params: { search: search || undefined },
+            });
+            return res.data;
+          } catch {}
         }
         throw hubErr;
       }
     }
-    const client = getClient();
-    const res = await client.get<KhataResponse>('/mobile/customers/khata', {
-      params: { search: search || undefined },
-    });
-    return res.data;
+
+    try {
+      const client = getClient();
+      const res = await client.get<KhataResponse>('/mobile/customers/khata', {
+        params: { search: search || undefined },
+      });
+      return res.data;
+    } catch (lanErr) {
+      const stores = await getSavedBusinesses();
+      const storeWithToken = stores.find((s) => s.token);
+      if (storeWithToken && storeWithToken.token) {
+        cachedActiveStore = storeWithToken;
+        const hub = (storeWithToken.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+        const res = await axios.get<KhataResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/khata`,
+          {
+            params: { search: search || undefined },
+            timeout: 45000,
+          }
+        );
+        return res.data;
+      }
+      throw lanErr;
+    }
   },
 
   // 6. Real-time Inventory Lookup with pagination
@@ -377,14 +447,51 @@ export const api = {
               page,
               limit,
             },
-            timeout: 20000,
+            timeout: 45000,
           }
         );
         return res.data;
       } catch (hubErr) {
         if (cachedServerUrl && cachedServerUrl !== DEFAULT_SERVER_URL) {
-          const client = getClient();
-          const res = await client.get<InventoryResponse>('/mobile/inventory', {
+          try {
+            const client = getClient();
+            const res = await client.get<InventoryResponse>('/mobile/inventory', {
+              params: {
+                search: search || undefined,
+                category_id: categoryId || undefined,
+                low_stock_only: lowStockOnly || undefined,
+                page,
+                limit,
+              },
+            });
+            return res.data;
+          } catch {}
+        }
+        throw hubErr;
+      }
+    }
+
+    try {
+      const client = getClient();
+      const res = await client.get<InventoryResponse>('/mobile/inventory', {
+        params: {
+          search: search || undefined,
+          category_id: categoryId || undefined,
+          low_stock_only: lowStockOnly || undefined,
+          page,
+          limit,
+        },
+      });
+      return res.data;
+    } catch (lanErr) {
+      const stores = await getSavedBusinesses();
+      const storeWithToken = stores.find((s) => s.token);
+      if (storeWithToken && storeWithToken.token) {
+        cachedActiveStore = storeWithToken;
+        const hub = (storeWithToken.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+        const res = await axios.get<InventoryResponse>(
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(storeWithToken.token)}/inventory`,
+          {
             params: {
               search: search || undefined,
               category_id: categoryId || undefined,
@@ -392,23 +499,13 @@ export const api = {
               page,
               limit,
             },
-          });
-          return res.data;
-        }
-        throw hubErr;
+            timeout: 45000,
+          }
+        );
+        return res.data;
       }
+      throw lanErr;
     }
-    const client = getClient();
-    const res = await client.get<InventoryResponse>('/mobile/inventory', {
-      params: {
-        search: search || undefined,
-        category_id: categoryId || undefined,
-        low_stock_only: lowStockOnly || undefined,
-        page,
-        limit,
-      },
-    });
-    return res.data;
   },
 
   // 7. Add Product directly from mobile (Cloud Hub & Direct LAN)

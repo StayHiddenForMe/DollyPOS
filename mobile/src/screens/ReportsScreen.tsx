@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -104,18 +105,38 @@ export const ReportsScreen: React.FC = () => {
     setShowCustomRange(false);
   };
 
+  const getReportCacheKey = useCallback(() => {
+    const storePrefix = activeStore?.id ? `@dolly_pos_cached_report_${activeStore.id}` : '@dolly_pos_cached_report';
+    return `${storePrefix}_${reportType}_${startDate}_${endDate}`;
+  }, [activeStore?.id, reportType, startDate, endDate]);
+
   const fetchReports = useCallback(async () => {
+    const cacheKey = getReportCacheKey();
     try {
-      setLoading(true);
+      // 1. Try loading cached report instantly
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        setReport(JSON.parse(cached));
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
+      // 2. Fetch fresh live or cloud report
       const res = await api.getReports(startDate, endDate, reportType);
       setReport(res);
+      AsyncStorage.setItem(cacheKey, JSON.stringify(res)).catch(() => {});
     } catch (err: any) {
       console.warn('Failed to fetch reports:', err);
-      Alert.alert('Error', err?.message || 'Failed to load report data');
+      // Only alert if we have no cached report to display
+      const hasCached = await AsyncStorage.getItem(cacheKey);
+      if (!hasCached) {
+        Alert.alert('Offline Notice', err?.message || 'Could not reach POS server or Cloud Hub.');
+      }
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, reportType, activeStore?.id]);
+  }, [startDate, endDate, reportType, activeStore?.id, getReportCacheKey]);
 
   useEffect(() => {
     fetchReports();

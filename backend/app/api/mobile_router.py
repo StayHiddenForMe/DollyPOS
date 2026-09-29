@@ -98,7 +98,9 @@ def get_mobile_network_info(db: Session = Depends(get_db)):
         "api_base_url": f"http://{local_ip}:{port}/api/v1",
         "server_time": ist_now.strftime("%Y-%m-%d %I:%M:%S %p"),
         "status": "ONLINE",
-        "pairing_code": f"DLY-{local_ip.replace('.', '')}-{port}"
+        "pairing_code": f"DLY-{local_ip.replace('.', '')}-{port}",
+        "store_token": getattr(st, "store_token", None) if st else None,
+        "cloud_hub_url": getattr(st, "cloud_hub_url", "https://dollypos-hub.onrender.com") if st else "https://dollypos-hub.onrender.com"
     }
 
 

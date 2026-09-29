@@ -139,6 +139,8 @@ export interface NetworkInfo {
   server_time: string;
   status: string;
   pairing_code?: string;
+  store_token?: string;
+  cloud_hub_url?: string;
 }
 
 export interface UserProfile {
