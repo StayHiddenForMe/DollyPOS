@@ -78,6 +78,7 @@ export const VendorsScreen: React.FC = () => {
   // Payment Recording Modal
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
   const [selectedVendorForPayment, setSelectedVendorForPayment] = useState<Vendor | null>(null);
+  const [paymentType, setPaymentType] = useState<'DUE' | 'ADVANCE'>('DUE');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [paymentRef, setPaymentRef] = useState<string>('');
@@ -225,7 +226,14 @@ export const VendorsScreen: React.FC = () => {
 
   const handleOpenPaymentModal = (vendor: Vendor) => {
     setSelectedVendorForPayment(vendor);
-    setPaymentAmount(vendor.outstanding_due > 0 ? String(vendor.outstanding_due) : '');
+    const due = parseFloat(String(vendor.outstanding_due)) || 0;
+    if (due > 0) {
+      setPaymentType('DUE');
+      setPaymentAmount(String(due));
+    } else {
+      setPaymentType('ADVANCE');
+      setPaymentAmount('');
+    }
     setPaymentMode('UPI');
     setPaymentRef('');
     setPaymentNotes('');
@@ -240,13 +248,19 @@ export const VendorsScreen: React.FC = () => {
       return;
     }
 
+    const userNotes = paymentNotes.trim();
+    const typeTag = paymentType === 'ADVANCE' ? '[ADVANCE]' : '[DUE PAYMENT]';
+    const notesPayload = userNotes
+      ? (userNotes.startsWith('[') ? userNotes : `${typeTag} ${userNotes}`)
+      : (paymentType === 'ADVANCE' ? 'Advance payment to vendor' : 'Payment against pending dues');
+
     try {
       setIsSubmittingPayment(true);
       await api.recordVendorPayment(selectedVendorForPayment.id, {
         amount: amt,
         payment_mode: paymentMode,
         reference_no: paymentRef.trim() || undefined,
-        notes: paymentNotes.trim() || undefined,
+        notes: notesPayload,
         vendor_name: selectedVendorForPayment.name,
         vendor_phone: selectedVendorForPayment.phone,
       });
@@ -273,7 +287,7 @@ export const VendorsScreen: React.FC = () => {
       );
       setTotalDues((prev) => Math.round((prev - amt) * 100) / 100);
 
-      showToast(`Recorded payment of ₹${amt.toLocaleString('en-IN')}!`);
+      showToast(`Recorded ${paymentType === 'ADVANCE' ? 'advance payment' : 'due payment'} of ₹${amt.toLocaleString('en-IN')}!`);
       setShowPaymentModal(false);
       fetchVendors();
     } catch (err: any) {
@@ -734,8 +748,99 @@ export const VendorsScreen: React.FC = () => {
             </View>
 
             <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+              {/* Payment Type Toggle Switch: Due vs Advance */}
               <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Payment Amount (₹) *</Text>
+                <Text style={styles.fieldLabel}>Payment Type</Text>
+                <View style={styles.paymentTypeToggleBox}>
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentTypeBtn,
+                      paymentType === 'DUE' && styles.paymentTypeBtnActiveDue,
+                    ]}
+                    onPress={() => {
+                      setPaymentType('DUE');
+                      const due = parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0;
+                      if (due > 0) {
+                        setPaymentAmount(String(due));
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <AlertCircle
+                      size={14}
+                      color={paymentType === 'DUE' ? '#ffffff' : themeColors.danger}
+                    />
+                    <Text
+                      style={[
+                        styles.paymentTypeBtnText,
+                        paymentType === 'DUE' && styles.paymentTypeBtnTextActive,
+                        paymentType !== 'DUE' && { color: themeColors.danger },
+                      ]}
+                    >
+                      Due Payment
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentTypeBtn,
+                      paymentType === 'ADVANCE' && styles.paymentTypeBtnActiveAdvance,
+                    ]}
+                    onPress={() => {
+                      setPaymentType('ADVANCE');
+                      const due = parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0;
+                      if (paymentAmount === String(due) && due > 0) {
+                        setPaymentAmount('');
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Wallet
+                      size={14}
+                      color={paymentType === 'ADVANCE' ? '#ffffff' : (isDark ? '#60a5fa' : '#2563eb')}
+                    />
+                    <Text
+                      style={[
+                        styles.paymentTypeBtnText,
+                        paymentType === 'ADVANCE' && styles.paymentTypeBtnTextActive,
+                        paymentType !== 'ADVANCE' && { color: isDark ? '#60a5fa' : '#2563eb' },
+                      ]}
+                    >
+                      Advance Payment
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Helper / Context Banner */}
+                {paymentType === 'DUE' ? (
+                  <View style={styles.paymentTypeHelperDue}>
+                    <Text style={styles.paymentTypeHelperTextDue}>
+                      {(parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0) > 0
+                        ? `Clearing pending balance. Due: ${formatINR(selectedVendorForPayment?.outstanding_due || 0)}`
+                        : `No pending dues (Settled). Payment will be credited as advance.`}
+                    </Text>
+                    {(parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0) > 0 && (
+                      <TouchableOpacity
+                        style={styles.quickFillPill}
+                        onPress={() => setPaymentAmount(String(selectedVendorForPayment?.outstanding_due || 0))}
+                      >
+                        <Text style={styles.quickFillText}>Pay Full Due</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.paymentTypeHelperAdvance}>
+                    <Text style={styles.paymentTypeHelperTextAdvance}>
+                      Pre-paying vendor for upcoming orders. Credited as advance balance.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>
+                  {paymentType === 'ADVANCE' ? 'Advance Amount (₹) *' : 'Payment Amount (₹) *'}
+                </Text>
                 <TextInput
                   style={[styles.inputField, { fontSize: 18, fontWeight: '800' }]}
                   placeholder="0.00"
@@ -779,7 +884,11 @@ export const VendorsScreen: React.FC = () => {
                 <Text style={styles.fieldLabel}>Notes / Remarks</Text>
                 <TextInput
                   style={styles.inputField}
-                  placeholder="e.g. Paid for Surat shipment parcel"
+                  placeholder={
+                    paymentType === 'ADVANCE'
+                      ? 'e.g. Advance payment for upcoming shipment'
+                      : 'e.g. Cleared bill invoice / pending dues'
+                  }
                   placeholderTextColor={themeColors.textMuted}
                   value={paymentNotes}
                   onChangeText={setPaymentNotes}
@@ -795,7 +904,9 @@ export const VendorsScreen: React.FC = () => {
                 {isSubmittingPayment ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>Confirm & Record Payment</Text>
+                  <Text style={styles.saveBtnText}>
+                    {paymentType === 'ADVANCE' ? 'Confirm & Pay Advance' : 'Confirm & Record Due Payment'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -1645,6 +1756,88 @@ const createStyles = (themeColors: any, isDark: boolean) =>
     },
     modeChipTextActive: {
       color: '#ffffff',
+    },
+    paymentTypeToggleBox: {
+      flexDirection: 'row',
+      backgroundColor: themeColors.surfaceSubtle,
+      borderRadius: 12,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: themeColors.cardBorder,
+      gap: 6,
+    },
+    paymentTypeBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: 9,
+    },
+    paymentTypeBtnActiveDue: {
+      backgroundColor: themeColors.danger,
+      shadowColor: themeColors.danger,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    paymentTypeBtnActiveAdvance: {
+      backgroundColor: '#2563eb',
+      shadowColor: '#2563eb',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    paymentTypeBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    paymentTypeBtnTextActive: {
+      color: '#ffffff',
+      fontWeight: '800',
+    },
+    paymentTypeHelperDue: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#fee2e2',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      marginTop: 2,
+    },
+    paymentTypeHelperTextDue: {
+      fontSize: 11,
+      color: themeColors.danger,
+      fontWeight: '600',
+      flex: 1,
+    },
+    quickFillPill: {
+      backgroundColor: themeColors.danger,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      marginLeft: 6,
+    },
+    quickFillText: {
+      color: '#ffffff',
+      fontSize: 10,
+      fontWeight: '800',
+    },
+    paymentTypeHelperAdvance: {
+      backgroundColor: isDark ? 'rgba(59, 130, 246, 0.12)' : '#eff6ff',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      marginTop: 2,
+    },
+    paymentTypeHelperTextAdvance: {
+      fontSize: 11,
+      color: isDark ? '#60a5fa' : '#2563eb',
+      fontWeight: '600',
     },
     saveBtn: {
       backgroundColor: themeColors.brand[600],
