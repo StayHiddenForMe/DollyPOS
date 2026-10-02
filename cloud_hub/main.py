@@ -131,6 +131,7 @@ class HubPendingVendorPayment(Base):
     payment_mode = Column(String(50), default="UPI", nullable=False)
     reference_no = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
+    payment_type = Column(String(20), default="ADVANCE")
     synced_to_pos = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -167,7 +168,35 @@ try:
         conn.execute(text("ALTER TABLE hub_pending_vendors ADD COLUMN IF NOT EXISTS opening_due FLOAT DEFAULT 0.0"))
         conn.execute(text("ALTER TABLE hub_pending_vendor_payments ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(100)"))
         conn.execute(text("ALTER TABLE hub_pending_vendor_payments ADD COLUMN IF NOT EXISTS vendor_phone VARCHAR(20)"))
+        conn.execute(text("ALTER TABLE hub_pending_vendor_payments ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) DEFAULT 'ADVANCE'"))
         conn.commit()
+except Exception:
+    pass
+
+# One-time repair for test vendors where user recorded Due but code previously saved negative
+try:
+    with SessionLocal() as db_repair:
+        v_rows = db_repair.query(HubStoreData).filter(HubStoreData.data_type == "VENDORS").all()
+        for vr in v_rows:
+            if vr.data_json:
+                try:
+                    vl = json.loads(vr.data_json)
+                    modified = False
+                    for v in vl:
+                        if v.get("name") in ["Mobile 1", "Mobile 12", "Test mobile 1"] and float(v.get("outstanding_due", 0.0)) < 0:
+                            v["outstanding_due"] = abs(float(v["outstanding_due"]))
+                            modified = True
+                    if modified:
+                        vr.data_json = json.dumps(vl)
+                        db_repair.commit()
+                except Exception:
+                    pass
+
+        pvs = db_repair.query(HubPendingVendor).all()
+        for pv in pvs:
+            if pv.name in ["Mobile 1", "Mobile 12", "Test mobile 1"] and float(pv.opening_due or 0.0) < 0:
+                pv.opening_due = abs(float(pv.opening_due))
+        db_repair.commit()
 except Exception:
     pass
 
@@ -285,6 +314,7 @@ class VendorPaymentPayload(BaseModel):
     notes: Optional[str] = None
     vendor_name: Optional[str] = None
     vendor_phone: Optional[str] = None
+    payment_type: Optional[str] = "ADVANCE"
 
 # -------------------------------------------------------------
 # API Endpoints
@@ -660,7 +690,8 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
             "amount": pvp.amount,
             "payment_mode": pvp.payment_mode,
             "reference_no": pvp.reference_no,
-            "notes": pvp.notes
+            "notes": pvp.notes,
+            "payment_type": getattr(pvp, "payment_type", "ADVANCE") or "ADVANCE"
         })
         pvp.synced_to_pos = True
 
@@ -1846,10 +1877,12 @@ def record_store_vendor_payment_from_mobile(
     payload: VendorPaymentPayload,
     db: Session = Depends(get_db)
 ):
-    """Records payment made to vendor and queues for laptop sync."""
+    """Records payment or due entry for vendor and queues for laptop sync."""
     t_clean = token.strip().upper()
     v_name = (payload.vendor_name or "").strip()
     v_phone = (payload.vendor_phone or "").strip()
+    p_type = (payload.payment_type or "ADVANCE").strip().upper()
+    is_due = (p_type == "DUE")
 
     # If v_name or v_phone missing, attempt to find vendor in cache or pending
     if not v_name or not v_phone:
@@ -1861,7 +1894,7 @@ def record_store_vendor_payment_from_mobile(
             v_name = v_name or pv_lookup.name
             v_phone = v_phone or pv_lookup.phone
 
-    # Deduct from outstanding_due in live VENDORS cache
+    # Update outstanding_due in live VENDORS cache
     v_record = db.query(HubStoreData).filter(
         HubStoreData.store_token == t_clean,
         HubStoreData.data_type == "VENDORS"
@@ -1881,7 +1914,10 @@ def record_store_vendor_payment_from_mobile(
                     if not v_phone:
                         v_phone = v.get("phone")
                     cur_due = float(v.get("outstanding_due", 0.0) or 0.0)
-                    v["outstanding_due"] = round(cur_due - payload.amount, 2)
+                    if is_due:
+                        v["outstanding_due"] = round(cur_due + payload.amount, 2)
+                    else:
+                        v["outstanding_due"] = round(cur_due - payload.amount, 2)
                     new_due = v["outstanding_due"]
                     matched = True
                     break
@@ -1908,7 +1944,11 @@ def record_store_vendor_payment_from_mobile(
         ).first()
 
     if pv:
-        pv.opening_due = round(float(pv.opening_due or 0.0) - payload.amount, 2)
+        cur_opening = float(pv.opening_due or 0.0)
+        if is_due:
+            pv.opening_due = round(cur_opening + payload.amount, 2)
+        else:
+            pv.opening_due = round(cur_opening - payload.amount, 2)
         if not matched:
             new_due = pv.opening_due
         db.commit()
@@ -1922,14 +1962,16 @@ def record_store_vendor_payment_from_mobile(
         payment_mode=payload.payment_mode or "UPI",
         reference_no=payload.reference_no,
         notes=payload.notes,
+        payment_type=p_type,
         synced_to_pos=False
     )
     db.add(pvp)
     db.commit()
 
+    action_label = "Due" if is_due else "Payment"
     return {
         "status": "success",
-        "message": f"Payment of ₹{payload.amount:,.2f} recorded! Dues updated.",
+        "message": f"{action_label} of ₹{payload.amount:,.2f} recorded! Dues updated.",
         "new_due": new_due
     }
 

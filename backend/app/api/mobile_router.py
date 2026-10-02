@@ -995,6 +995,7 @@ class MobileVendorPayment(BaseModel):
     payment_mode: Optional[str] = "UPI"
     reference_no: Optional[str] = None
     notes: Optional[str] = None
+    payment_type: Optional[str] = "ADVANCE"
 
 @router.get("/vendors")
 def get_mobile_vendors(
@@ -1139,32 +1140,49 @@ def record_mobile_vendor_payment(
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    new_due = round(float(vendor.outstanding_due or 0.0) - payload.amount, 2)
-    vendor.outstanding_due = new_due
+    is_due = (payload.payment_type or "ADVANCE").strip().upper() == "DUE"
+    cur_due = float(vendor.outstanding_due or 0.0)
 
-    ledger = VendorLedger(
-        vendor_id=vendor.id,
-        entry_type=VendorLedgerType.PAYMENT_MADE,
-        reference_no=payload.reference_no or "MOBILE_UPI_PAYMENT",
-        debit_amount=payload.amount,
-        credit_amount=0.0,
-        balance_after=vendor.outstanding_due,
-        payment_mode=payload.payment_mode or "UPI",
-        notes=payload.notes or "Payment via Dolly POS Mobile App"
-    )
+    if is_due:
+        new_due = round(cur_due + payload.amount, 2)
+        ledger = VendorLedger(
+            vendor_id=vendor.id,
+            entry_type=VendorLedgerType.ADJUSTMENT,
+            reference_no=payload.reference_no or "MOBILE_DUE_ENTRY",
+            debit_amount=0.0,
+            credit_amount=payload.amount,
+            balance_after=new_due,
+            payment_mode=payload.payment_mode or "CREDIT",
+            notes=payload.notes or "Due / bill added via Dolly POS Mobile App"
+        )
+    else:
+        new_due = round(cur_due - payload.amount, 2)
+        ledger = VendorLedger(
+            vendor_id=vendor.id,
+            entry_type=VendorLedgerType.PAYMENT_MADE,
+            reference_no=payload.reference_no or "MOBILE_UPI_PAYMENT",
+            debit_amount=payload.amount,
+            credit_amount=0.0,
+            balance_after=new_due,
+            payment_mode=payload.payment_mode or "UPI",
+            notes=payload.notes or "Payment via Dolly POS Mobile App"
+        )
+
+    vendor.outstanding_due = new_due
     db.add(ledger)
     db.commit()
     db.refresh(ledger)
-    log_action(db, user_id=current_user.id, action_type="VENDOR_PAYMENT_MOBILE", entity="VENDOR", entity_id=str(vendor.id), details={"amount": payload.amount})
+    log_action(db, user_id=current_user.id, action_type="VENDOR_PAYMENT_MOBILE", entity="VENDOR", entity_id=str(vendor.id), details={"amount": payload.amount, "type": payload.payment_type})
     try:
         from app.services.cloud_sync_service import trigger_instant_cloud_sync
         trigger_instant_cloud_sync()
     except Exception:
         pass
 
+    action_label = "Due" if is_due else "Payment"
     return {
         "status": "success",
-        "message": f"Payment of ₹{payload.amount:,.2f} recorded! Dues updated.",
+        "message": f"{action_label} of ₹{payload.amount:,.2f} recorded! Dues updated.",
         "new_due": vendor.outstanding_due
     }
 

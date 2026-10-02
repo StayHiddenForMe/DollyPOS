@@ -923,6 +923,8 @@ class CloudSyncService:
                         v_id = pvp.get("vendor_id")
                         v_name = (pvp.get("vendor_name") or "").strip()
                         v_phone = (pvp.get("vendor_phone") or "").strip()
+                        p_type = (pvp.get("payment_type") or "ADVANCE").strip().upper()
+                        is_due = (p_type == "DUE")
                         amt = 0.0
                         try:
                             amt = float(pvp.get("amount") or 0.0)
@@ -942,18 +944,32 @@ class CloudSyncService:
 
                         if vendor_rec and amt > 0:
                             current_due = float(vendor_rec.outstanding_due or 0.0)
-                            new_balance = round(current_due - amt, 2)
-                            vendor_rec.outstanding_due = new_balance
-                            v_ledger = VendorLedger(
-                                vendor_id=vendor_rec.id,
-                                entry_type=VendorLedgerType.PAYMENT_MADE,
-                                reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
-                                debit_amount=amt,
-                                credit_amount=0.0,
-                                balance_after=new_balance,
-                                payment_mode=pvp.get("payment_mode") or "UPI",
-                                notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
-                            )
+                            if is_due:
+                                new_balance = round(current_due + amt, 2)
+                                vendor_rec.outstanding_due = new_balance
+                                v_ledger = VendorLedger(
+                                    vendor_id=vendor_rec.id,
+                                    entry_type=VendorLedgerType.ADJUSTMENT,
+                                    reference_no=pvp.get("reference_no") or "MOBILE_DUE_ENTRY",
+                                    debit_amount=0.0,
+                                    credit_amount=amt,
+                                    balance_after=new_balance,
+                                    payment_mode=pvp.get("payment_mode") or "CREDIT",
+                                    notes=pvp.get("notes") or "Due / bill added via Dolly POS Mobile App"
+                                )
+                            else:
+                                new_balance = round(current_due - amt, 2)
+                                vendor_rec.outstanding_due = new_balance
+                                v_ledger = VendorLedger(
+                                    vendor_id=vendor_rec.id,
+                                    entry_type=VendorLedgerType.PAYMENT_MADE,
+                                    reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
+                                    debit_amount=amt,
+                                    credit_amount=0.0,
+                                    balance_after=new_balance,
+                                    payment_mode=pvp.get("payment_mode") or "UPI",
+                                    notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
+                                )
                             db.add(v_ledger)
                     except Exception:
                         pass

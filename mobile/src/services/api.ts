@@ -823,6 +823,7 @@ export const api = {
       notes?: string;
       vendor_name?: string;
       vendor_phone?: string;
+      payment_type?: 'DUE' | 'ADVANCE';
     }
   ): Promise<any> {
     const store = await resolveActiveStore();

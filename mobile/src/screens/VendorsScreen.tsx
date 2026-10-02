@@ -228,10 +228,10 @@ export const VendorsScreen: React.FC = () => {
     setSelectedVendorForPayment(vendor);
     const due = parseFloat(String(vendor.outstanding_due)) || 0;
     if (due > 0) {
-      setPaymentType('DUE');
+      setPaymentType('ADVANCE');
       setPaymentAmount(String(due));
     } else {
-      setPaymentType('ADVANCE');
+      setPaymentType('DUE');
       setPaymentAmount('');
     }
     setPaymentMode('UPI');
@@ -244,15 +244,16 @@ export const VendorsScreen: React.FC = () => {
     if (!selectedVendorForPayment) return;
     const amt = parseFloat(paymentAmount);
     if (isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid payment amount greater than ₹0.');
+      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than ₹0.');
       return;
     }
 
+    const isDue = paymentType === 'DUE';
     const userNotes = paymentNotes.trim();
-    const typeTag = paymentType === 'ADVANCE' ? '[ADVANCE]' : '[DUE PAYMENT]';
+    const typeTag = isDue ? '[DUE ENTRY]' : '[ADVANCE PAYMENT]';
     const notesPayload = userNotes
       ? (userNotes.startsWith('[') ? userNotes : `${typeTag} ${userNotes}`)
-      : (paymentType === 'ADVANCE' ? 'Advance payment to vendor' : 'Payment against pending dues');
+      : (isDue ? 'Due / bill added to vendor' : 'Payment / advance to vendor');
 
     try {
       setIsSubmittingPayment(true);
@@ -263,6 +264,7 @@ export const VendorsScreen: React.FC = () => {
         notes: notesPayload,
         vendor_name: selectedVendorForPayment.name,
         vendor_phone: selectedVendorForPayment.phone,
+        payment_type: paymentType,
       });
 
       // Optimistically update vendor card and total dues immediately
@@ -277,17 +279,18 @@ export const VendorsScreen: React.FC = () => {
           const matchName = targetName && (v.name || '').trim().toLowerCase() === targetName;
           if (matchId || matchPhone || matchName) {
             const currentDue = parseFloat(String(v.outstanding_due)) || 0;
+            const updatedDue = isDue ? (currentDue + amt) : (currentDue - amt);
             return {
               ...v,
-              outstanding_due: Math.round((currentDue - amt) * 100) / 100,
+              outstanding_due: Math.round(updatedDue * 100) / 100,
             };
           }
           return v;
         })
       );
-      setTotalDues((prev) => Math.round((prev - amt) * 100) / 100);
+      setTotalDues((prev) => Math.round((prev + (isDue ? amt : -amt)) * 100) / 100);
 
-      showToast(`Recorded ${paymentType === 'ADVANCE' ? 'advance payment' : 'due payment'} of ₹${amt.toLocaleString('en-IN')}!`);
+      showToast(`Recorded ${isDue ? 'due of' : 'payment of'} ₹${amt.toLocaleString('en-IN')}!`);
       setShowPaymentModal(false);
       fetchVendors();
     } catch (err: any) {
@@ -737,9 +740,11 @@ export const VendorsScreen: React.FC = () => {
           <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Record Vendor Payment</Text>
+                <Text style={styles.modalTitle}>
+                  {paymentType === 'DUE' ? 'Record Due (I Owe)' : 'Record Advance / Payment'}
+                </Text>
                 <Text style={styles.modalSub}>
-                  {selectedVendorForPayment?.name} • Due: {formatINR(selectedVendorForPayment?.outstanding_due || 0)}
+                  {selectedVendorForPayment?.name} • Current Due: {formatINR(selectedVendorForPayment?.outstanding_due || 0)}
                 </Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setShowPaymentModal(false)}>
@@ -750,7 +755,7 @@ export const VendorsScreen: React.FC = () => {
             <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
               {/* Payment Type Toggle Switch: Due vs Advance */}
               <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Payment Type</Text>
+                <Text style={styles.fieldLabel}>Type of Entry</Text>
                 <View style={styles.paymentTypeToggleBox}>
                   <TouchableOpacity
                     style={[
@@ -759,10 +764,6 @@ export const VendorsScreen: React.FC = () => {
                     ]}
                     onPress={() => {
                       setPaymentType('DUE');
-                      const due = parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0;
-                      if (due > 0) {
-                        setPaymentAmount(String(due));
-                      }
                     }}
                     activeOpacity={0.8}
                   >
@@ -777,7 +778,7 @@ export const VendorsScreen: React.FC = () => {
                         paymentType !== 'DUE' && { color: themeColors.danger },
                       ]}
                     >
-                      Due Payment
+                      Due (I Owe)
                     </Text>
                   </TouchableOpacity>
 
@@ -789,8 +790,8 @@ export const VendorsScreen: React.FC = () => {
                     onPress={() => {
                       setPaymentType('ADVANCE');
                       const due = parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0;
-                      if (paymentAmount === String(due) && due > 0) {
-                        setPaymentAmount('');
+                      if (due > 0 && !paymentAmount) {
+                        setPaymentAmount(String(due));
                       }
                     }}
                     activeOpacity={0.8}
@@ -806,7 +807,7 @@ export const VendorsScreen: React.FC = () => {
                         paymentType !== 'ADVANCE' && { color: isDark ? '#60a5fa' : '#2563eb' },
                       ]}
                     >
-                      Advance Payment
+                      Advance / Pay
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -815,9 +816,15 @@ export const VendorsScreen: React.FC = () => {
                 {paymentType === 'DUE' ? (
                   <View style={styles.paymentTypeHelperDue}>
                     <Text style={styles.paymentTypeHelperTextDue}>
+                      Recording Due: Adds to amount you owe vendor (e.g. goods bought on credit). Will show as Pending Dues.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.paymentTypeHelperAdvance}>
+                    <Text style={styles.paymentTypeHelperTextAdvance}>
                       {(parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0) > 0
-                        ? `Clearing pending balance. Due: ${formatINR(selectedVendorForPayment?.outstanding_due || 0)}`
-                        : `No pending dues (Settled). Payment will be credited as advance.`}
+                        ? `Paying vendor to clear pending balance (Current Due: ${formatINR(selectedVendorForPayment?.outstanding_due || 0)}).`
+                        : `Pre-paying vendor for upcoming orders (Credited as Advance Paid).`}
                     </Text>
                     {(parseFloat(String(selectedVendorForPayment?.outstanding_due)) || 0) > 0 && (
                       <TouchableOpacity
@@ -828,18 +835,12 @@ export const VendorsScreen: React.FC = () => {
                       </TouchableOpacity>
                     )}
                   </View>
-                ) : (
-                  <View style={styles.paymentTypeHelperAdvance}>
-                    <Text style={styles.paymentTypeHelperTextAdvance}>
-                      Pre-paying vendor for upcoming orders. Credited as advance balance.
-                    </Text>
-                  </View>
                 )}
               </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.fieldLabel}>
-                  {paymentType === 'ADVANCE' ? 'Advance Amount (₹) *' : 'Payment Amount (₹) *'}
+                  {paymentType === 'DUE' ? 'Due Amount (₹) *' : 'Payment / Advance Amount (₹) *'}
                 </Text>
                 <TextInput
                   style={[styles.inputField, { fontSize: 18, fontWeight: '800' }]}
@@ -885,9 +886,9 @@ export const VendorsScreen: React.FC = () => {
                 <TextInput
                   style={styles.inputField}
                   placeholder={
-                    paymentType === 'ADVANCE'
-                      ? 'e.g. Advance payment for upcoming shipment'
-                      : 'e.g. Cleared bill invoice / pending dues'
+                    paymentType === 'DUE'
+                      ? 'e.g. Unpaid purchase bill / credit stock received'
+                      : 'e.g. Advance payment / settlement against dues'
                   }
                   placeholderTextColor={themeColors.textMuted}
                   value={paymentNotes}
@@ -905,7 +906,7 @@ export const VendorsScreen: React.FC = () => {
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.saveBtnText}>
-                    {paymentType === 'ADVANCE' ? 'Confirm & Pay Advance' : 'Confirm & Record Due Payment'}
+                    {paymentType === 'DUE' ? 'Confirm & Save Due Entry' : 'Confirm & Save Payment'}
                   </Text>
                 )}
               </TouchableOpacity>
