@@ -109,7 +109,7 @@ def make_vendor_payment(
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
     
-    vendor.outstanding_due = max(0.0, vendor.outstanding_due - entry_in.amount)
+    vendor.outstanding_due = round(float(vendor.outstanding_due or 0.0) - entry_in.amount, 2)
     
     ledger = VendorLedger(
         vendor_id=vendor.id,

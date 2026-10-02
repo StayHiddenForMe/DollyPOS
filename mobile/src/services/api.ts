@@ -816,7 +816,14 @@ export const api = {
 
   async recordVendorPayment(
     vendorId: number,
-    data: { amount: number; payment_mode?: string; reference_no?: string; notes?: string }
+    data: {
+      amount: number;
+      payment_mode?: string;
+      reference_no?: string;
+      notes?: string;
+      vendor_name?: string;
+      vendor_phone?: string;
+    }
   ): Promise<any> {
     const store = await resolveActiveStore();
     if (store && store.token) {

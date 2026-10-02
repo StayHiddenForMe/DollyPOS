@@ -921,21 +921,36 @@ class CloudSyncService:
                 for pvp in pending_vendor_pmts:
                     try:
                         v_id = pvp.get("vendor_id")
+                        v_name = (pvp.get("vendor_name") or "").strip()
+                        v_phone = (pvp.get("vendor_phone") or "").strip()
                         amt = 0.0
                         try:
                             amt = float(pvp.get("amount") or 0.0)
                         except (ValueError, TypeError):
                             amt = 0.0
-                        vendor_rec = db.query(Vendor).filter(Vendor.id == v_id).first()
+
+                        vendor_rec = None
+                        if v_id:
+                            try:
+                                vendor_rec = db.query(Vendor).filter(Vendor.id == int(v_id)).first()
+                            except (ValueError, TypeError):
+                                pass
+                        if not vendor_rec and v_phone:
+                            vendor_rec = db.query(Vendor).filter(Vendor.phone == v_phone).first()
+                        if not vendor_rec and v_name:
+                            vendor_rec = db.query(Vendor).filter(func.lower(Vendor.name) == v_name.lower()).first()
+
                         if vendor_rec and amt > 0:
-                            vendor_rec.outstanding_due = max(0.0, vendor_rec.outstanding_due - amt)
+                            current_due = float(vendor_rec.outstanding_due or 0.0)
+                            new_balance = round(current_due - amt, 2)
+                            vendor_rec.outstanding_due = new_balance
                             v_ledger = VendorLedger(
                                 vendor_id=vendor_rec.id,
                                 entry_type=VendorLedgerType.PAYMENT_MADE,
                                 reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
                                 debit_amount=amt,
                                 credit_amount=0.0,
-                                balance_after=vendor_rec.outstanding_due,
+                                balance_after=new_balance,
                                 payment_mode=pvp.get("payment_mode") or "UPI",
                                 notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
                             )

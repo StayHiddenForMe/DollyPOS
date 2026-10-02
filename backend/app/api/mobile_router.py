@@ -1087,6 +1087,11 @@ def create_mobile_vendor(
     db.commit()
     db.refresh(vendor)
     log_action(db, user_id=current_user.id, action_type="CREATE_VENDOR_MOBILE", entity="VENDOR", entity_id=str(vendor.id))
+    try:
+        from app.services.cloud_sync_service import trigger_instant_cloud_sync
+        trigger_instant_cloud_sync()
+    except Exception:
+        pass
 
     return {
         "id": vendor.id,
@@ -1115,6 +1120,11 @@ def update_mobile_vendor(
 
     db.commit()
     db.refresh(vendor)
+    try:
+        from app.services.cloud_sync_service import trigger_instant_cloud_sync
+        trigger_instant_cloud_sync()
+    except Exception:
+        pass
     return {"status": "success", "message": "Vendor updated successfully"}
 
 @router.post("/vendors/{vendor_id}/payment")
@@ -1129,7 +1139,8 @@ def record_mobile_vendor_payment(
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    vendor.outstanding_due = max(0.0, float(vendor.outstanding_due or 0.0) - payload.amount)
+    new_due = round(float(vendor.outstanding_due or 0.0) - payload.amount, 2)
+    vendor.outstanding_due = new_due
 
     ledger = VendorLedger(
         vendor_id=vendor.id,
@@ -1145,6 +1156,11 @@ def record_mobile_vendor_payment(
     db.commit()
     db.refresh(ledger)
     log_action(db, user_id=current_user.id, action_type="VENDOR_PAYMENT_MOBILE", entity="VENDOR", entity_id=str(vendor.id), details={"amount": payload.amount})
+    try:
+        from app.services.cloud_sync_service import trigger_instant_cloud_sync
+        trigger_instant_cloud_sync()
+    except Exception:
+        pass
 
     return {
         "status": "success",

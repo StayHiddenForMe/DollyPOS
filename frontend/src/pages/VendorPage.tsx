@@ -435,11 +435,13 @@ export const VendorPage: React.FC = () => {
                 {/* Outstanding Due & Interactive Ledger Button (Item 22) */}
                 <div className="border-t pt-3 flex items-center justify-between text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Outstanding Due</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                      {v.outstanding_due < 0 ? 'Advance Paid' : 'Outstanding Due'}
+                    </span>
                     <span className={`font-mono font-black text-sm ${
-                      v.outstanding_due > 0 ? 'text-rose-600' : 'text-emerald-600'
+                      v.outstanding_due > 0 ? 'text-rose-600' : v.outstanding_due < 0 ? 'text-blue-600' : 'text-emerald-600'
                     }`}>
-                      {formatINR(v.outstanding_due)}
+                      {v.outstanding_due < 0 ? formatINR(Math.abs(v.outstanding_due)) : formatINR(v.outstanding_due)}
                     </span>
                   </div>
 

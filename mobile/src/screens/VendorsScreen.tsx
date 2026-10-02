@@ -247,7 +247,31 @@ export const VendorsScreen: React.FC = () => {
         payment_mode: paymentMode,
         reference_no: paymentRef.trim() || undefined,
         notes: paymentNotes.trim() || undefined,
+        vendor_name: selectedVendorForPayment.name,
+        vendor_phone: selectedVendorForPayment.phone,
       });
+
+      // Optimistically update vendor card and total dues immediately
+      const targetId = selectedVendorForPayment.id;
+      const targetPhone = (selectedVendorForPayment.phone || '').trim();
+      const targetName = (selectedVendorForPayment.name || '').trim().toLowerCase();
+
+      setVendors((prevVendors) =>
+        prevVendors.map((v) => {
+          const matchId = v.id === targetId;
+          const matchPhone = targetPhone && (v.phone || '').trim() === targetPhone;
+          const matchName = targetName && (v.name || '').trim().toLowerCase() === targetName;
+          if (matchId || matchPhone || matchName) {
+            const currentDue = parseFloat(String(v.outstanding_due)) || 0;
+            return {
+              ...v,
+              outstanding_due: Math.round((currentDue - amt) * 100) / 100,
+            };
+          }
+          return v;
+        })
+      );
+      setTotalDues((prev) => Math.round((prev - amt) * 100) / 100);
 
       showToast(`Recorded payment of ₹${amt.toLocaleString('en-IN')}!`);
       setShowPaymentModal(false);
@@ -413,12 +437,27 @@ export const VendorsScreen: React.FC = () => {
           </View>
 
           {/* Dues Badge */}
-          <View style={[styles.duesBadge, due > 0 ? styles.duesPending : styles.duesSettled]}>
-            <Text style={[styles.duesLabel, due > 0 ? styles.duesPendingText : styles.duesSettledText]}>
-              {due > 0 ? 'Pending Dues' : 'Settled'}
+          <View
+            style={[
+              styles.duesBadge,
+              due > 0 ? styles.duesPending : due < 0 ? styles.duesAdvance : styles.duesSettled,
+            ]}
+          >
+            <Text
+              style={[
+                styles.duesLabel,
+                due > 0 ? styles.duesPendingText : due < 0 ? styles.duesAdvanceText : styles.duesSettledText,
+              ]}
+            >
+              {due > 0 ? 'Pending Dues' : due < 0 ? 'Advance Paid' : 'Settled'}
             </Text>
-            <Text style={[styles.duesAmount, due > 0 ? styles.duesPendingAmount : styles.duesSettledAmount]}>
-              {formatINR(due)}
+            <Text
+              style={[
+                styles.duesAmount,
+                due > 0 ? styles.duesPendingAmount : due < 0 ? styles.duesAdvanceAmount : styles.duesSettledAmount,
+              ]}
+            >
+              {due < 0 ? formatINR(Math.abs(due)) : formatINR(due)}
             </Text>
           </View>
         </View>
@@ -1300,6 +1339,15 @@ const createStyles = (themeColors: any, isDark: boolean) =>
     },
     duesSettledAmount: {
       color: themeColors.success,
+    },
+    duesAdvance: {
+      backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+    },
+    duesAdvanceText: {
+      color: isDark ? '#60a5fa' : '#2563eb',
+    },
+    duesAdvanceAmount: {
+      color: isDark ? '#60a5fa' : '#2563eb',
     },
     bankCard: {
       backgroundColor: themeColors.surfaceSubtle,

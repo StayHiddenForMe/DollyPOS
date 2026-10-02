@@ -3,7 +3,9 @@ export const formatINR = (amount: number | null | undefined): string => {
     return '₹0.00';
   }
 
-  const rounded = Number(amount).toFixed(2);
+  const isNegative = amount < 0;
+  const absAmount = Math.abs(amount);
+  const rounded = absAmount.toFixed(2);
   const [integerPart, decimalPart] = rounded.split('.');
 
   // Format integerPart according to Indian numbering system (3 digits, then 2 digits)
@@ -14,7 +16,7 @@ export const formatINR = (amount: number | null | undefined): string => {
   }
   const formattedInteger = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
 
-  return `₹${formattedInteger}.${decimalPart}`;
+  return `${isNegative ? '-' : ''}₹${formattedInteger}.${decimalPart}`;
 };
 
 export const formatCompactINR = (amount: number | null | undefined): string => {

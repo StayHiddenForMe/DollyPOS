@@ -124,7 +124,9 @@ class HubPendingVendorPayment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     store_token = Column(String(50), index=True, nullable=False)
-    vendor_id = Column(Integer, nullable=False)
+    vendor_id = Column(Integer, nullable=True)
+    vendor_name = Column(String(100), nullable=True)
+    vendor_phone = Column(String(20), nullable=True)
     amount = Column(Float, nullable=False)
     payment_mode = Column(String(50), default="UPI", nullable=False)
     reference_no = Column(String(100), nullable=True)
@@ -163,6 +165,8 @@ try:
         conn.execute(text("ALTER TABLE hub_demand_mutations ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)"))
         conn.execute(text("ALTER TABLE hub_pending_vendors ADD COLUMN IF NOT EXISTS vendor_upi_id VARCHAR(100)"))
         conn.execute(text("ALTER TABLE hub_pending_vendors ADD COLUMN IF NOT EXISTS opening_due FLOAT DEFAULT 0.0"))
+        conn.execute(text("ALTER TABLE hub_pending_vendor_payments ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(100)"))
+        conn.execute(text("ALTER TABLE hub_pending_vendor_payments ADD COLUMN IF NOT EXISTS vendor_phone VARCHAR(20)"))
         conn.commit()
 except Exception:
     pass
@@ -279,6 +283,8 @@ class VendorPaymentPayload(BaseModel):
     payment_mode: Optional[str] = "UPI"
     reference_no: Optional[str] = None
     notes: Optional[str] = None
+    vendor_name: Optional[str] = None
+    vendor_phone: Optional[str] = None
 
 # -------------------------------------------------------------
 # API Endpoints
@@ -649,6 +655,8 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
         vendor_pmts_to_deliver.append({
             "id": pvp.id,
             "vendor_id": pvp.vendor_id,
+            "vendor_name": getattr(pvp, "vendor_name", None),
+            "vendor_phone": getattr(pvp, "vendor_phone", None),
             "amount": pvp.amount,
             "payment_mode": pvp.payment_mode,
             "reference_no": pvp.reference_no,
@@ -1840,9 +1848,76 @@ def record_store_vendor_payment_from_mobile(
 ):
     """Records payment made to vendor and queues for laptop sync."""
     t_clean = token.strip().upper()
+    v_name = (payload.vendor_name or "").strip()
+    v_phone = (payload.vendor_phone or "").strip()
+
+    # If v_name or v_phone missing, attempt to find vendor in cache or pending
+    if not v_name or not v_phone:
+        pv_lookup = db.query(HubPendingVendor).filter(
+            HubPendingVendor.store_token == t_clean,
+            HubPendingVendor.id == vendor_id
+        ).first()
+        if pv_lookup:
+            v_name = v_name or pv_lookup.name
+            v_phone = v_phone or pv_lookup.phone
+
+    # Deduct from outstanding_due in live VENDORS cache
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+    new_due = 0.0
+    matched = False
+    if v_record and v_record.data_json:
+        try:
+            v_list = json.loads(v_record.data_json)
+            for v in v_list:
+                match_id = (v.get("id") == vendor_id or str(v.get("id")) == str(vendor_id))
+                match_phone = bool(v_phone and str(v.get("phone", "")).strip() == v_phone)
+                match_name = bool(v_name and str(v.get("name", "")).strip().lower() == v_name.lower())
+                if match_id or match_phone or match_name:
+                    if not v_name:
+                        v_name = v.get("name")
+                    if not v_phone:
+                        v_phone = v.get("phone")
+                    cur_due = float(v.get("outstanding_due", 0.0) or 0.0)
+                    v["outstanding_due"] = round(cur_due - payload.amount, 2)
+                    new_due = v["outstanding_due"]
+                    matched = True
+                    break
+            v_record.data_json = json.dumps(v_list)
+            v_record.updated_at = datetime.utcnow()
+            db.commit()
+        except Exception:
+            pass
+
+    # Also update in pending vendor if still pending
+    pv = db.query(HubPendingVendor).filter(
+        HubPendingVendor.store_token == t_clean,
+        HubPendingVendor.id == vendor_id
+    ).first()
+    if not pv and (v_phone or v_name):
+        conditions = []
+        if v_phone:
+            conditions.append(HubPendingVendor.phone == v_phone)
+        if v_name:
+            conditions.append(func.lower(HubPendingVendor.name) == v_name.lower())
+        pv = db.query(HubPendingVendor).filter(
+            HubPendingVendor.store_token == t_clean,
+            or_(*conditions)
+        ).first()
+
+    if pv:
+        pv.opening_due = round(float(pv.opening_due or 0.0) - payload.amount, 2)
+        if not matched:
+            new_due = pv.opening_due
+        db.commit()
+
     pvp = HubPendingVendorPayment(
         store_token=t_clean,
         vendor_id=vendor_id,
+        vendor_name=v_name or None,
+        vendor_phone=v_phone or None,
         amount=payload.amount,
         payment_mode=payload.payment_mode or "UPI",
         reference_no=payload.reference_no,
@@ -1851,24 +1926,6 @@ def record_store_vendor_payment_from_mobile(
     )
     db.add(pvp)
     db.commit()
-
-    # Deduct from outstanding_due in live VENDORS cache
-    v_record = db.query(HubStoreData).filter(
-        HubStoreData.store_token == t_clean,
-        HubStoreData.data_type == "VENDORS"
-    ).first()
-    new_due = 0.0
-    if v_record and v_record.data_json:
-        try:
-            v_list = json.loads(v_record.data_json)
-            for v in v_list:
-                if v.get("id") == vendor_id:
-                    v["outstanding_due"] = max(0.0, float(v.get("outstanding_due", 0.0)) - payload.amount)
-                    new_due = v["outstanding_due"]
-            v_record.data_json = json.dumps(v_list)
-            db.commit()
-        except Exception:
-            pass
 
     return {
         "status": "success",
@@ -1914,9 +1971,32 @@ def get_store_vendor_ledger_for_mobile(
 ):
     """Returns ledger history of payments made to vendor."""
     t_clean = token.strip().upper()
+    v_phone = None
+    v_name = None
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+    if v_record and v_record.data_json:
+        try:
+            v_list = json.loads(v_record.data_json)
+            for v in v_list:
+                if v.get("id") == vendor_id or str(v.get("id")) == str(vendor_id):
+                    v_phone = (v.get("phone") or "").strip()
+                    v_name = (v.get("name") or "").strip()
+                    break
+        except Exception:
+            pass
+
+    query_filter = [HubPendingVendorPayment.vendor_id == vendor_id]
+    if v_phone:
+        query_filter.append(HubPendingVendorPayment.vendor_phone == v_phone)
+    if v_name:
+        query_filter.append(func.lower(HubPendingVendorPayment.vendor_name) == v_name.lower())
+
     pending = db.query(HubPendingVendorPayment).filter(
         HubPendingVendorPayment.store_token == t_clean,
-        HubPendingVendorPayment.vendor_id == vendor_id
+        or_(*query_filter)
     ).order_by(HubPendingVendorPayment.created_at.desc()).all()
 
     entries = []
