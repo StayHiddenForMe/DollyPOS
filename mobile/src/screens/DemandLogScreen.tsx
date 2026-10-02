@@ -348,7 +348,7 @@ export const DemandLogScreen: React.FC = () => {
       ) : (
         <FlatList
           data={filteredDemands}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => `${item.id ?? 'd'}-${item.customer_phone || item.item_description || index}-${index}`}
           contentContainerStyle={styles.listContent}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}

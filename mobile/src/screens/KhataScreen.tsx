@@ -140,7 +140,7 @@ export const KhataScreen: React.FC = () => {
       ) : (
         <FlatList
           data={data?.customers || []}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => `${item.id ?? 'c'}-${item.phone || item.name || index}-${index}`}
           renderItem={renderCustomerItem}
           contentContainerStyle={styles.listContent}
           onRefresh={() => {

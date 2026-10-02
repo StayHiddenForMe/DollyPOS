@@ -455,11 +455,11 @@ export const SettingsScreen: React.FC = () => {
           </Text>
 
           <View style={styles.storeList}>
-            {stores.map((b) => {
+            {stores.map((b, idx) => {
               const isActive = b.id === activeStore?.id;
               return (
                 <View
-                  key={b.id}
+                  key={`${b.id || b.token || idx}-${idx}`}
                   style={[
                     styles.storeCard,
                     {

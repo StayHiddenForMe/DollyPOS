@@ -113,11 +113,11 @@ export const StoreSwitcherModal: React.FC<StoreSwitcherModalProps> = ({ visible,
 
           {/* Store List */}
           <ScrollView style={styles.storesList} contentContainerStyle={styles.storesListContent}>
-            {stores.map((s) => {
+            {stores.map((s, idx) => {
               const isActive = s.id === activeStore?.id;
               return (
                 <TouchableOpacity
-                  key={s.id}
+                  key={`${s.id || s.token || idx}-${idx}`}
                   style={[
                     styles.storeItem,
                     {

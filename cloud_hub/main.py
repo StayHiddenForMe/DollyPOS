@@ -1336,8 +1336,9 @@ def get_store_demands_for_mobile(
         cur_status = d.status or (desktop_item.get("status") if desktop_item else "PENDING_PROCUREMENT")
         if not cur_status:
             cur_status = "PENDING_PROCUREMENT"
+        unique_dem_id = d.id if d.id >= 100000 else 100000 + d.id
         items.append({
-            "id": d.id,
+            "id": unique_dem_id,
             "item_description": d.item_description,
             "category_name": d.category_name,
             "preferred_size": d.preferred_size,
@@ -1614,8 +1615,9 @@ def get_store_vendors_for_mobile(
     for pv in pending:
         existing = next((v for v in vendors if v.get("id") == pv.id or str(v.get("phone", "")).strip() == pv.phone.strip() or str(v.get("name", "")).strip().lower() == pv.name.strip().lower()), None)
         if not existing:
+            unique_pv_id = pv.id if pv.id >= 100000 else 100000 + pv.id
             vendors.append({
-                "id": pv.id,
+                "id": unique_pv_id,
                 "name": pv.name,
                 "company_name": pv.company_name,
                 "phone": pv.phone,

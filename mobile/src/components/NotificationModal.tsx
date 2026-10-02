@@ -142,11 +142,11 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                   </TouchableOpacity>
                 </View>
 
-                {items.map((item) => {
+                {items.map((item, idx) => {
                   const isOut = item.stock <= 0;
                   return (
                     <View
-                      key={item.id}
+                      key={`${item.id}-${item.barcode || idx}-${idx}`}
                       style={[
                         styles.stockItemCard,
                         {

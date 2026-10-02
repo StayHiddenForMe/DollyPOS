@@ -43,7 +43,7 @@ if (!(Test-Path -Path $BackupDir)) {
 $BackupFile = "$BackupDir\${dbName}_$timestamp.sql"
 
 $env:PGPASSWORD = $dbPass
-Write-Host "Creating backup of $dbName database on $dbHost:$dbPort..." -ForegroundColor Cyan
+Write-Host "Creating backup of $dbName database on $($dbHost):$($dbPort)..." -ForegroundColor Cyan
 
 pg_dump -U $dbUser -h $dbHost -p $dbPort -d $dbName -F p -f $BackupFile
 

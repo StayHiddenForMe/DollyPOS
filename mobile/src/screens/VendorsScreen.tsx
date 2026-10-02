@@ -642,7 +642,7 @@ export const VendorsScreen: React.FC = () => {
       ) : (
         <FlatList
           data={filteredVendors}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => `${item.id ?? 'v'}-${item.phone || item.name || index}-${index}`}
           renderItem={renderVendorItem}
           contentContainerStyle={[
             styles.listContent,

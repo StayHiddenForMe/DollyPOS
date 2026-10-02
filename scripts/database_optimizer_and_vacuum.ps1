@@ -40,7 +40,7 @@ $env:PGPASSWORD = $dbPass
 Write-Host "==========================================================" -ForegroundColor Magenta
 Write-Host "   DOLLY POS - 50-YEAR LONGEVITY & VACUUM MAINTENANCE     " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Magenta
-Write-Host "Target Database: $dbName on $dbHost:$dbPort (User: $dbUser)" -ForegroundColor Gray
+Write-Host "Target Database: $dbName on $($dbHost):$($dbPort) (User: $dbUser)" -ForegroundColor Gray
 
 Write-Host "[1/3] Running VACUUM ANALYZE on $dbName..." -ForegroundColor Yellow
 psql -U $dbUser -h $dbHost -p $dbPort -d $dbName -c "VACUUM ANALYZE;"

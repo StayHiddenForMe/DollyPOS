@@ -48,7 +48,7 @@ foreach ($dd in $dataDirs) {
             Write-Host "      [FIXED] Removed stale lock file: $pidFile" -ForegroundColor Green
             $lockRemoved = $true
         } catch {
-            Write-Host "      [NOTE] Could not remove $pidFile: $_" -ForegroundColor Gray
+            Write-Host "      [NOTE] Could not remove $($pidFile): $_" -ForegroundColor Gray
         }
     }
 }
