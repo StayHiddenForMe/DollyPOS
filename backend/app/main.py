@@ -295,7 +295,7 @@ async def lifespan(app: FastAPI):
                 await asyncio.to_thread(run_background_cloud_sync)
             except Exception:
                 pass
-            await asyncio.sleep(25)
+            await asyncio.sleep(60)
 
     sync_task = asyncio.create_task(periodic_cloud_sync())
     log_main("lifespan ready, yielding to server...")
