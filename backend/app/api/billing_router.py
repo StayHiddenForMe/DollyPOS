@@ -17,6 +17,7 @@ from app.schemas.billing_schema import InvoiceCreate, InvoiceOut, HeldBillSummar
 from app.services.receipt_service import receipt_service
 from app.services.upi_service import upi_service
 from app.core.audit import log_action
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/billing", tags=["Billing & Checkout"])
 
@@ -210,6 +211,7 @@ def create_invoice(
     db.refresh(invoice)
 
     log_action(db, user_id=current_user.id, action_type="CREATE_INVOICE", entity="INVOICE", entity_id=str(invoice.id), details={"bill_number": invoice.bill_number, "total": invoice.grand_total})
+    trigger_instant_cloud_sync()
     return invoice
 
 @router.post("/hold", response_model=InvoiceOut)
@@ -394,6 +396,7 @@ def cancel_invoice(
     invoice.is_cancelled = True
     db.commit()
     log_action(db, user_id=current_user.id, action_type="CANCEL_BILL", entity="INVOICE", entity_id=str(invoice.id), details={"bill_number": invoice.bill_number})
+    trigger_instant_cloud_sync()
     return {"message": f"Bill {invoice.bill_number} cancelled and items restocked."}
 
 @router.get("/export-excel")

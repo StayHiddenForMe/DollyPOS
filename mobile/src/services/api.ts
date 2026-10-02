@@ -254,12 +254,12 @@ export const api = {
     startDate?: string,
     endDate?: string
   ): Promise<DashboardOverview> {
-    // Check if active store is connected via Cloud Hub Token
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = cachedActiveStore?.token ? cachedActiveStore : (await initializeApiConfig()).activeStore;
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get<DashboardOverview>(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/overview`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/overview`,
           {
             params: {
               period,
@@ -338,11 +338,12 @@ export const api = {
       export: isExport ? 'true' : 'false',
     };
 
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = cachedActiveStore?.token ? cachedActiveStore : (await initializeApiConfig()).activeStore;
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get<ReportResponse>(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/reports`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/reports`,
           {
             params: reportParams,
             timeout: 45000,

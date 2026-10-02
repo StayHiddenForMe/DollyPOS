@@ -14,6 +14,7 @@ from app.models.invoice import Invoice, PaymentStatus
 from app.schemas.customer_schema import CustomerCreate, CustomerUpdate, CustomerOut, CustomerLedgerEntryCreate, CustomerLedgerEntryOut
 from app.schemas.billing_schema import InvoiceOut
 from app.core.audit import log_action
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/customers", tags=["Customer CRM & Khata"])
 
@@ -142,6 +143,7 @@ def record_customer_payment(
     db.commit()
     db.refresh(ledger)
     log_action(db, user_id=current_user.id, action_type="CUSTOMER_PAYMENT", entity="CUSTOMER", entity_id=str(customer.id), details={"amount": entry_in.amount})
+    trigger_instant_cloud_sync()
     return ledger
 
 # --- Excel Export & Import ---

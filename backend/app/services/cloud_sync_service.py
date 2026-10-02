@@ -960,3 +960,29 @@ def trigger_instant_cloud_sync():
 
     _th.Thread(target=_worker, daemon=True).start()
 
+def check_cloud_has_pending() -> bool:
+    """
+    Performs an ultra-lightweight check (<50 bytes, ~10ms) against Cloud Hub
+    to see if mobile companion app logged new vendors, demands, or status changes.
+    """
+    from app.core.database import SessionLocal
+    from app.models.settings import StoreSettings
+    bg_db = SessionLocal()
+    try:
+        st = bg_db.query(StoreSettings).first()
+        if not st or not getattr(st, "cloud_sync_enabled", True):
+            return False
+        hub_url = getattr(st, "cloud_hub_url", "").strip().rstrip("/")
+        store_token = getattr(st, "store_token", None)
+        if not hub_url or not store_token:
+            return False
+        endpoint = f"{hub_url}/api/v1/hub/stores/{store_token}/has-pending"
+        res = requests.get(endpoint, timeout=5.0)
+        if res.status_code == 200:
+            return bool(res.json().get("has_pending", False))
+        return False
+    except Exception:
+        return False
+    finally:
+        bg_db.close()
+

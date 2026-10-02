@@ -94,6 +94,15 @@ export const VendorPage: React.FC = () => {
     return () => clearInterval(timer);
   }, [search, isModalOpen, isSettleModalOpen, selectedVendorForLedger]);
 
+  // Listen to manual Topbar cloud sync
+  useEffect(() => {
+    const handleSynced = () => {
+      fetchVendors(true);
+    };
+    window.addEventListener('dollypos:cloud-synced', handleSynced);
+    return () => window.removeEventListener('dollypos:cloud-synced', handleSynced);
+  }, [search]);
+
   // Close active modals on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -310,15 +319,6 @@ export const VendorPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-xs flex items-center space-x-1.5 transition-all active:scale-95 disabled:opacity-50"
-            title="Pull latest vendors & dues from mobile / Cloud Hub"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-pink-500' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync with Mobile'}</span>
-          </button>
 
           <button
             onClick={handleOpenAdd}

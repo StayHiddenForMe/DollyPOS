@@ -54,11 +54,11 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   }, [isOnline]);
 
-  // Initial load and periodic refresh every 45s when online
+  // Initial load and periodic refresh every 180s (3 min) when online
   useEffect(() => {
     if (isOnline) {
       refreshNotifications();
-      const interval = setInterval(refreshNotifications, 45000);
+      const interval = setInterval(refreshNotifications, 180000);
       return () => clearInterval(interval);
     }
   }, [isOnline, refreshNotifications]);

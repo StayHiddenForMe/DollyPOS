@@ -151,6 +151,14 @@ export const VendorsScreen: React.FC = () => {
     fetchVendors('');
   }, [fetchVendors]);
 
+  // Auto-sync after 180s (3 min) if Vendors screen is open continuously
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchVendors(search.trim());
+    }, 180000);
+    return () => clearInterval(timer);
+  }, [fetchVendors, search]);
+
   useEffect(() => {
     return () => {
       if (vendorSearchTimeoutRef.current) {

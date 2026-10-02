@@ -477,8 +477,20 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
             v_record.updated_at = now
 
     if payload.demands is not None:
+        # Purge obsolete mutations that were already synced to POS in previous cycles
+        try:
+            db.query(HubDemandMutation).filter(
+                HubDemandMutation.store_token == token,
+                HubDemandMutation.synced_to_pos == True
+            ).delete(synchronize_session=False)
+            db.commit()
+        except Exception:
+            pass
+
+        # Only apply pending mutations that POS has not yet processed
         mutations = db.query(HubDemandMutation).filter(
-            HubDemandMutation.store_token == token
+            HubDemandMutation.store_token == token,
+            HubDemandMutation.synced_to_pos == False
         ).all()
         deleted_ids = {m.demand_id for m in mutations if m.action == "DELETE"}
         deleted_descs = {m.item_description.strip().lower() for m in mutations if m.action == "DELETE" and m.item_description}
@@ -928,6 +940,23 @@ def get_store_khata_for_mobile(
         "customers": custs
     }
 
+@app.get("/api/v1/hub/stores/{token}/has-pending")
+def check_store_has_pending(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """Super lightweight check (10ms, <50 bytes) for desktop POS to detect if mobile made changes."""
+    t_clean = token.strip().upper()
+    has_pending = (
+        db.query(HubPendingVendor.id).filter(HubPendingVendor.store_token == t_clean, HubPendingVendor.synced_to_pos == False).first() is not None
+        or db.query(HubPendingVendorUpdate.id).filter(HubPendingVendorUpdate.store_token == t_clean, HubPendingVendorUpdate.synced_to_pos == False).first() is not None
+        or db.query(HubPendingVendorPayment.id).filter(HubPendingVendorPayment.store_token == t_clean, HubPendingVendorPayment.synced_to_pos == False).first() is not None
+        or db.query(HubDemand.id).filter(HubDemand.store_token == t_clean, HubDemand.synced_to_pos == False).first() is not None
+        or db.query(HubDemandMutation.id).filter(HubDemandMutation.store_token == t_clean, HubDemandMutation.synced_to_pos == False).first() is not None
+        or db.query(HubPendingProduct.id).filter(HubPendingProduct.store_token == t_clean, HubPendingProduct.synced_to_pos == False).first() is not None
+    )
+    return {"has_pending": bool(has_pending)}
+
 @app.get("/api/v1/hub/stores/{token}/reports")
 def get_store_reports_for_mobile(
     token: str,
@@ -986,6 +1015,24 @@ def get_store_reports_for_mobile(
             total_discount = sum(float(inv.get("discount", 0.0)) for inv in invoices)
             total_tax = sum(float(inv.get("tax", 0.0)) for inv in invoices)
             unique_dates = len(set(inv.get("date_ymd", "") for inv in invoices)) or 1
+
+        # Fallback: If no granular invoices matched the range but daily sales summary exists, generate aggregate rows
+        if not invoices and daily_sales:
+            for day_k in sorted(daily_sales.keys(), reverse=True):
+                if (not s_str or day_k >= s_str) and (not e_str or day_k <= e_str):
+                    day_v = daily_sales[day_k]
+                    invoices.append({
+                        "date_ymd": day_k,
+                        "date": day_k,
+                        "time": "—",
+                        "bill_number": f"{day_v.get('bills', 0)} bills",
+                        "customer": "Daily Aggregate Summary",
+                        "payment_mode": "STORE COUNTER",
+                        "gross_amount": round(float(day_v.get("gross", 0.0)), 2),
+                        "discount": round(float(day_v.get("discount", 0.0)), 2),
+                        "tax": round(float(day_v.get("tax", 0.0)), 2),
+                        "net_amount": round(float(day_v.get("net", 0.0)), 2)
+                    })
 
         # Cap preview rows to 25 for mobile screen (instant rendering, zero lag).
         # When exporting as Excel or PDF, export all invoices (up to 10,000).

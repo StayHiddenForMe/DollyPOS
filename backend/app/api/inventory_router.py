@@ -19,6 +19,7 @@ from app.schemas.product_schema import (
 )
 from app.core.audit import log_action
 from app.services.analytics_service import analytics_service
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 
@@ -245,6 +246,7 @@ def create_product(
     db.refresh(product)
     
     log_action(db, user_id=current_user.id, action_type="CREATE_PRODUCT", entity="PRODUCT", entity_id=str(product.id), details={"name": product.name, "barcode": product.barcode})
+    trigger_instant_cloud_sync()
     return ProductOut.model_validate(product)
 
 @router.post("/multi-size", response_model=List[ProductOut])
@@ -332,6 +334,7 @@ def create_multi_size_products(
         db.refresh(p)
 
     log_action(db, user_id=current_user.id, action_type="CREATE_MULTI_SIZE_PRODUCT", entity="PRODUCT", details={"count": len(created_products), "name": payload.name})
+    trigger_instant_cloud_sync()
     return [ProductOut.model_validate(p) for p in created_products]
 
 @router.get("/{product_id}/price-history", response_model=List[ProductPriceHistoryOut])
@@ -400,6 +403,7 @@ def update_product(
     db.refresh(product)
 
     log_action(db, user_id=current_user.id, action_type="UPDATE_PRODUCT", entity="PRODUCT", entity_id=str(product.id))
+    trigger_instant_cloud_sync()
     return ProductOut.model_validate(product)
 
 @router.put("/{product_id}/speed-dial", response_model=ProductOut)
@@ -426,6 +430,7 @@ def toggle_product_speed_dial(
 
     db.commit()
     db.refresh(product)
+    trigger_instant_cloud_sync()
     return ProductOut.model_validate(product)
 
 @router.delete("/{product_id}")
@@ -441,6 +446,7 @@ def delete_product(
     product.is_active = False
     db.commit()
     log_action(db, user_id=current_user.id, action_type="DELETE_PRODUCT", entity="PRODUCT", entity_id=str(product.id))
+    trigger_instant_cloud_sync()
     return {"message": "Product deactivated successfully"}
 
 # --- Damaged & Defective Products Section ---
@@ -496,6 +502,7 @@ def mark_product_damaged(
     db.commit()
     db.refresh(product)
     log_action(db, user_id=current_user.id, action_type="MARK_DAMAGED", entity="PRODUCT", entity_id=str(product.id), details={"qty": req.quantity, "reason": req.reason})
+    trigger_instant_cloud_sync()
     return {"message": f"Marked {req.quantity} pcs of '{product.name}' as damaged/defective.", "damaged_quantity": product.damaged_quantity, "stock_quantity": product.stock_quantity}
 
 @router.post("/restock-damaged")
@@ -521,6 +528,7 @@ def restock_damaged_product(
     db.commit()
     db.refresh(product)
     log_action(db, user_id=current_user.id, action_type="RESTOCK_DAMAGED", entity="PRODUCT", entity_id=str(product.id), details={"qty": req.quantity, "reason": req.reason})
+    trigger_instant_cloud_sync()
     return {"message": f"Successfully recovered and restocked {req.quantity} pcs of '{product.name}' into active inventory!", "damaged_quantity": product.damaged_quantity, "stock_quantity": product.stock_quantity}
 
 @router.get("/dead-stock")

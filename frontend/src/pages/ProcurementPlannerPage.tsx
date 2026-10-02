@@ -156,6 +156,15 @@ export const ProcurementPlannerPage: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeTab, notesStatusFilter, notesVendorFilter, notesSearch, isLogModalOpen, editingNote, restockItem]);
 
+  // Listen to manual Topbar cloud sync
+  useEffect(() => {
+    const handleSynced = () => {
+      fetchData(true);
+    };
+    window.addEventListener('dollypos:cloud-synced', handleSynced);
+    return () => window.removeEventListener('dollypos:cloud-synced', handleSynced);
+  }, [activeTab, notesStatusFilter, notesVendorFilter, notesSearch]);
+
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -727,15 +736,6 @@ export const ProcurementPlannerPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
-            title="Sync latest demand status & notes with Mobile App / Cloud Hub"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-pink-500' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync with Mobile'}</span>
-          </button>
 
           {activeTab === 'LOW_STOCK' && (
             <button

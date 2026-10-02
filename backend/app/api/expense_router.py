@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.expense import Expense, ExpenseCategory
 from app.schemas.expense_schema import ExpenseCreate, ExpenseUpdate, ExpenseOut, ExpenseSummary
 from app.core.audit import log_action
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 from app.core.timezone import (
     get_ist_now,
     get_ist_today,
@@ -90,6 +91,7 @@ def create_expense(
     db.refresh(expense)
 
     log_action(db, user_id=current_user.id, action_type="CREATE_EXPENSE", entity="EXPENSE", entity_id=str(expense.id), details={"title": expense.title, "amount": expense.amount})
+    trigger_instant_cloud_sync()
     
     e_out = ExpenseOut.model_validate(expense)
     e_out.logged_by_name = current_user.full_name
@@ -107,6 +109,7 @@ def delete_expense(
     db.delete(expense)
     db.commit()
     log_action(db, user_id=current_user.id, action_type="DELETE_EXPENSE", entity="EXPENSE", entity_id=str(expense_id))
+    trigger_instant_cloud_sync()
     return {"message": "Expense deleted"}
 
 @router.post("/bulk-delete")
@@ -118,6 +121,7 @@ def bulk_delete_expenses(
     deleted_count = db.query(Expense).filter(Expense.id.in_(req.expense_ids)).delete(synchronize_session=False)
     db.commit()
     log_action(db, user_id=current_user.id, action_type="BULK_DELETE_EXPENSES", entity="EXPENSE", details={"count": deleted_count, "ids": req.expense_ids})
+    trigger_instant_cloud_sync()
     return {"message": f"Successfully deleted {deleted_count} expenses"}
 
 @router.get("/summary", response_model=ExpenseSummary)

@@ -148,6 +148,14 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ navigation }) =>
     fetchOverview(period, startDate, endDate);
   }, [period, startDate, endDate, fetchOverview, activeStore?.id]);
 
+  // Auto-sync after 180s (3 min) if mobile application is kept open continuously
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchOverview(period, startDate, endDate);
+    }, 180000);
+    return () => clearInterval(timer);
+  }, [fetchOverview, period, startDate, endDate]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     checkConnection();

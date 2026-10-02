@@ -86,6 +86,14 @@ export const DemandLogScreen: React.FC = () => {
     fetchDemands();
   }, [fetchDemands]);
 
+  // Auto-sync after 180s (3 min) if Demand Register is open continuously
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchDemands();
+    }, 180000);
+    return () => clearInterval(timer);
+  }, [fetchDemands]);
+
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchDemands();

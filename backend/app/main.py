@@ -290,12 +290,30 @@ async def lifespan(app: FastAPI):
 
     async def periodic_cloud_sync():
         await asyncio.sleep(5)
+        # 1. Initial startup sync to fetch cloud state
+        try:
+            await asyncio.to_thread(run_background_cloud_sync)
+        except Exception:
+            pass
+
+        from app.services.cloud_sync_service import check_cloud_has_pending
+        seconds_elapsed = 0
         while True:
+            await asyncio.sleep(15)
+            seconds_elapsed += 15
+
+            has_pending = False
             try:
-                await asyncio.to_thread(run_background_cloud_sync)
+                has_pending = await asyncio.to_thread(check_cloud_has_pending)
             except Exception:
-                pass
-            await asyncio.sleep(60)
+                has_pending = False
+
+            if has_pending or seconds_elapsed >= 180:
+                try:
+                    await asyncio.to_thread(run_background_cloud_sync)
+                except Exception:
+                    pass
+                seconds_elapsed = 0
 
     sync_task = asyncio.create_task(periodic_cloud_sync())
     log_main("lifespan ready, yielding to server...")

@@ -15,7 +15,8 @@ import {
   Database,
   Sun,
   Moon,
-  Power
+  Power,
+  RotateCw
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { formatINR } from '../../utils/formatters';
@@ -105,6 +106,20 @@ export const Navbar: React.FC = () => {
 
   const visibleAlertCount = (isAnniversaryToday ? 1 : 0) + (hasLowStock ? 1 : 0) + (hasVendorDues ? 1 : 0) + (hasDeadStock ? 1 : 0);
 
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const handleManualCloudSync = async () => {
+    if (isSyncingCloud) return;
+    setIsSyncingCloud(true);
+    try {
+      await api.post('/cloud-sync/trigger');
+      window.dispatchEvent(new CustomEvent('dollypos:cloud-synced'));
+    } catch (e) {
+      console.warn('Manual cloud sync failed:', e);
+    } finally {
+      setTimeout(() => setIsSyncingCloud(false), 800);
+    }
+  };
+
   return (
     <>
       {/* Dynamic Store Anniversary Celebratory Notification Banner */}
@@ -147,6 +162,20 @@ export const Navbar: React.FC = () => {
 
       {/* Right controls */}
       <div className="flex items-center space-x-3">
+        {/* 1-Click Sync with Mobile / Cloud Hub */}
+        <button
+          onClick={handleManualCloudSync}
+          disabled={isSyncingCloud}
+          className={`p-2 rounded-xl transition-all flex items-center justify-center ${
+            isSyncingCloud
+              ? 'text-pink-600 bg-pink-50 dark:bg-pink-950/40'
+              : 'text-slate-500 hover:text-pink-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          title="Sync with Mobile App & Cloud Hub (Demand logs, Vendors, Sales)"
+        >
+          <RotateCw className={`w-4 h-4 ${isSyncingCloud ? 'animate-spin text-pink-600' : ''}`} />
+        </button>
+
         {/* Light / Dark Mode Toggle Button */}
         <button
           onClick={toggleTheme}

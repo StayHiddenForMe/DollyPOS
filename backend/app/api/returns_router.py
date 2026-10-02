@@ -15,6 +15,7 @@ from app.models.return_order import ReturnOrder, ReturnItem, ReturnType
 from app.schemas.return_schema import ReturnOrderCreate, ReturnOrderOut
 from app.core.audit import log_action
 from app.api.billing_router import generate_bill_number
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/returns", tags=["Returns & Exchanges Engine"])
 
@@ -152,6 +153,7 @@ def process_exchange_order(
     db.refresh(return_order)
 
     log_action(db, user_id=current_user.id, action_type="EXCHANGE_PROCESSED", entity="RETURN", entity_id=str(return_order.id), details={"return_number": ret_number, "net_difference": req.net_difference})
+    trigger_instant_cloud_sync()
 
     return {
         "success": True,

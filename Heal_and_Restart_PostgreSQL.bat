@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Dolly POS - PostgreSQL 1-Click Service Healer & Restarter
+title Dolly POS - PostgreSQL 1-Click Service Healer and Restarter
 cd /d "%~dp0"
 
 :: Check for Administrator Privileges

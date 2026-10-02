@@ -59,6 +59,46 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   }, []);
 
+  // Helper to dynamically update store name across state and storage
+  const updateStoreName = useCallback(async (storeIdOrToken: string | undefined, newName: string) => {
+    if (!newName || !newName.trim()) return;
+    const cleanName = newName.trim();
+
+    setNetworkInfo((prev) => {
+      if (prev && prev.shop_name === cleanName) return prev;
+      return prev ? { ...prev, shop_name: cleanName } : null;
+    });
+
+    setActiveStoreState((prev) => {
+      if (!prev) return null;
+      if (prev.id === storeIdOrToken || prev.token === storeIdOrToken || !storeIdOrToken) {
+        if (prev.name === cleanName) return prev;
+        return { ...prev, name: cleanName };
+      }
+      return prev;
+    });
+
+    try {
+      const list = await getSavedBusinesses();
+      let changed = false;
+      const updated = list.map((s) => {
+        if (s.id === storeIdOrToken || s.token === storeIdOrToken || (s.is_active && !storeIdOrToken)) {
+          if (s.name !== cleanName) {
+            changed = true;
+            return { ...s, name: cleanName };
+          }
+        }
+        return s;
+      });
+      if (changed) {
+        await saveBusinessesList(updated);
+        setStores(updated);
+      }
+    } catch (e) {
+      console.warn('Failed to persist updated store name:', e);
+    }
+  }, []);
+
   const checkConnection = async (targetUrl?: string): Promise<boolean> => {
     if (isCheckingRef.current) return isOnline;
     if (!activeStore && !targetUrl) {
@@ -81,8 +121,13 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
         setLatencyMs(elapsed);
         setLastChecked(new Date());
 
+        const liveName = hubRes.shop_name || activeStore.name || 'Dolly POS Store';
+        if (hubRes.shop_name && hubRes.shop_name !== activeStore.name) {
+          updateStoreName(activeStore.id, hubRes.shop_name);
+        }
+
         setNetworkInfo((prev) => ({
-          shop_name: hubRes.shop_name || activeStore.name || 'Dolly POS Store',
+          shop_name: liveName,
           tagline: prev?.tagline || 'Store Access Token Connected',
           local_ip: prev?.local_ip || 'Cloud',
           port: prev?.port || 443,
@@ -175,11 +220,8 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const setLiveShopName = useCallback((name: string) => {
     if (!name) return;
-    setNetworkInfo((prev) => {
-      if (prev && prev.shop_name === name) return prev;
-      return prev ? { ...prev, shop_name: name } : null;
-    });
-  }, []);
+    updateStoreName(activeStore?.id, name);
+  }, [activeStore?.id, updateStoreName]);
 
   // Multi-Store: Add store using Store Access Token
   const addStoreByToken = async (
@@ -262,7 +304,7 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
           setIsPosOnline(Boolean(statusRes.is_pos_online));
           setIsOnline(true);
           if (statusRes.shop_name) {
-            setNetworkInfo((prev) => prev ? { ...prev, shop_name: statusRes.shop_name } : null);
+            updateStoreName(target.id, statusRes.shop_name);
           }
         }).catch(() => {
           setIsPosOnline(false);
@@ -330,9 +372,9 @@ export const ConnectionProvider: React.FC<{ children: ReactNode }> = ({ children
     init();
   }, [refreshStores]);
 
-  // Calm, non-spammy heartbeat: 30s when online, 10s when offline
+  // Calm, non-spammy heartbeat: 180s (3 min) when online, 15s when offline
   useEffect(() => {
-    const interval = isOnline ? 30000 : 10000;
+    const interval = isOnline ? 180000 : 15000;
     const timer = setInterval(() => {
       checkConnection();
     }, interval);

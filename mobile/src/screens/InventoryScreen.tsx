@@ -117,6 +117,14 @@ export const InventoryScreen: React.FC = () => {
     api.getCategories().then(setCategories).catch(() => {});
   }, [fetchInventory]);
 
+  // Auto-sync after 180s (3 min) if Inventory screen is open continuously
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchInventory(1, search.trim(), lowStockOnly, false);
+    }, 180000);
+    return () => clearInterval(timer);
+  }, [fetchInventory, search, lowStockOnly]);
+
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {

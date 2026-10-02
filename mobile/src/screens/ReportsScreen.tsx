@@ -139,6 +139,14 @@ export const ReportsScreen: React.FC = () => {
     fetchReports();
   }, [fetchReports]);
 
+  // Auto-sync after 180s (3 min) if Reports screen is open continuously
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchReports();
+    }, 180000);
+    return () => clearInterval(timer);
+  }, [fetchReports]);
+
   const handleExportExcel = async () => {
     if (!report || report.rows.length === 0) {
       Alert.alert('No Data', 'No records found to export for the selected date range.');

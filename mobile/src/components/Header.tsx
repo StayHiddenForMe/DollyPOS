@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   const effectiveAlertCount = alertCount !== undefined ? alertCount : globalAlertCount;
   const effectiveLowStockItems = lowStockItems !== undefined ? lowStockItems : globalLowStockItems;
 
-  const displayStoreName = storeName || activeStore?.name || networkInfo?.shop_name || 'Dolly POS';
+  const displayStoreName = storeName || networkInfo?.shop_name || activeStore?.name || 'Dolly POS';
 
   const handleNotificationPress = () => {
     if (onNotificationPress) {
