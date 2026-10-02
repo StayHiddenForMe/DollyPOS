@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Depends, Query, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float, text, or_, func
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
