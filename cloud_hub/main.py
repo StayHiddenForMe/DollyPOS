@@ -585,32 +585,39 @@ def sync_from_desktop_pos(payload: SyncPayload, db: Session = Depends(get_db)):
         m.synced_to_pos = True
 
     # 9. Fetch unsynced pending vendors created remotely on mobile
-    unsynced_vendors = db.query(HubPendingVendor).filter(
-        HubPendingVendor.store_token == token,
-        HubPendingVendor.synced_to_pos == False
+    all_pending_v = db.query(HubPendingVendor).filter(
+        HubPendingVendor.store_token == token
     ).all()
     vendors_to_deliver = []
-    for pv in unsynced_vendors:
-        vendors_to_deliver.append({
-            "id": pv.id,
-            "name": pv.name,
-            "company_name": pv.company_name,
-            "phone": pv.phone,
-            "alt_phone": pv.alt_phone,
-            "email": pv.email,
-            "gstin": pv.gstin,
-            "address": pv.address,
-            "city": pv.city,
-            "state": pv.state,
-            "notes": pv.notes,
-            "bank_name": pv.bank_name,
-            "bank_account_no": pv.bank_account_no,
-            "bank_ifsc": pv.bank_ifsc,
-            "bank_holder_name": pv.bank_holder_name,
-            "vendor_upi_id": pv.vendor_upi_id,
-            "opening_due": pv.opening_due
-        })
-        pv.synced_to_pos = True
+    for pv in all_pending_v:
+        # Deliver if not yet marked synced, or if POS incoming vendor payload does not have this vendor yet
+        pv_name_clean = (pv.name or "").strip().lower()
+        pv_phone_clean = (pv.phone or "").strip()
+        not_in_pos = False
+        if payload.vendors is not None:
+            not_in_pos = (pv_phone_clean not in existing_phones and pv_name_clean not in existing_names)
+
+        if not pv.synced_to_pos or not_in_pos:
+            vendors_to_deliver.append({
+                "id": pv.id,
+                "name": pv.name,
+                "company_name": pv.company_name,
+                "phone": pv.phone,
+                "alt_phone": pv.alt_phone,
+                "email": pv.email,
+                "gstin": pv.gstin,
+                "address": pv.address,
+                "city": pv.city,
+                "state": pv.state,
+                "notes": pv.notes,
+                "bank_name": pv.bank_name,
+                "bank_account_no": pv.bank_account_no,
+                "bank_ifsc": pv.bank_ifsc,
+                "bank_holder_name": pv.bank_holder_name,
+                "vendor_upi_id": pv.vendor_upi_id,
+                "opening_due": pv.opening_due or 0.0
+            })
+            pv.synced_to_pos = True
 
     # 10. Fetch unsynced vendor updates made remotely on mobile
     unsynced_vendor_updates = db.query(HubPendingVendorUpdate).filter(

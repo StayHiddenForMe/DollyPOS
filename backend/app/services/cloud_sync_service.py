@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, text
+from sqlalchemy import func, desc, text, or_, and_
 
 from app.models.settings import StoreSettings
 from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode
@@ -783,111 +783,165 @@ class CloudSyncService:
                                     row.status = target_enum
 
                 # 4. Process pending vendors created remotely on mobile
-                pending_vendors = res_data.get("pending_vendors", [])
+                pending_vendors = list(res_data.get("pending_vendors", []))
+
+                # Reconcile against live hub vendors directory to catch any mobile vendors
+                # created previously that might not have reached POS due to prior sync interruption
+                try:
+                    hub_v_res = requests.get(f"{hub_url}/api/v1/hub/stores/{store_token}/vendors", timeout=10.0)
+                    if hub_v_res.status_code == 200:
+                        all_hub_vendors = hub_v_res.json().get("vendors", [])
+                        pv_phones = {str(pv.get("phone", "")).strip() for pv in pending_vendors if pv.get("phone")}
+                        pv_names = {str(pv.get("name", "")).strip().lower() for pv in pending_vendors if pv.get("name")}
+                        for hv in all_hub_vendors:
+                            h_phone = str(hv.get("phone", "")).strip()
+                            h_name = str(hv.get("name", "")).strip().lower()
+                            if (h_phone and h_phone not in pv_phones) or (h_name and h_name not in pv_names):
+                                pending_vendors.append(hv)
+                                if h_phone:
+                                    pv_phones.add(h_phone)
+                                if h_name:
+                                    pv_names.add(h_name)
+                except Exception:
+                    pass
+
                 from app.models.vendor import Vendor, VendorLedger, VendorLedgerType
                 for pv in pending_vendors:
-                    pv_name = pv.get("name", "").strip()
-                    pv_phone = pv.get("phone", "").strip()
-                    if pv_name:
-                        existing_v = None
-                        if pv_phone:
-                            existing_v = db.query(Vendor).filter(
-                                or_(
-                                    and_(func.lower(Vendor.name) == pv_name.lower(), Vendor.phone == pv_phone),
-                                    Vendor.phone == pv_phone
-                                )
-                            ).first()
-                        if not existing_v:
-                            existing_v = db.query(Vendor).filter(func.lower(Vendor.name) == pv_name.lower()).first()
+                    try:
+                        pv_name = (pv.get("name") or "").strip()
+                        pv_phone = (pv.get("phone") or "").strip()
+                        if pv_name:
+                            existing_v = None
+                            if pv_phone:
+                                existing_v = db.query(Vendor).filter(
+                                    or_(
+                                        and_(func.lower(Vendor.name) == pv_name.lower(), Vendor.phone == pv_phone),
+                                        Vendor.phone == pv_phone
+                                    )
+                                ).first()
+                            if not existing_v:
+                                existing_v = db.query(Vendor).filter(func.lower(Vendor.name) == pv_name.lower()).first()
 
-                        if not existing_v:
-                            new_v = Vendor(
-                                name=pv_name,
-                                company_name=pv.get("company_name"),
-                                phone=pv_phone or "N/A",
-                                alt_phone=pv.get("alt_phone"),
-                                email=pv.get("email"),
-                                gstin=pv.get("gstin"),
-                                address=pv.get("address"),
-                                city=pv.get("city"),
-                                state=pv.get("state") or "Maharashtra",
-                                notes=pv.get("notes"),
-                                bank_name=pv.get("bank_name"),
-                                bank_account_no=pv.get("bank_account_no"),
-                                bank_ifsc=pv.get("bank_ifsc"),
-                                bank_holder_name=pv.get("bank_holder_name"),
-                                vendor_upi_id=pv.get("vendor_upi_id"),
-                                outstanding_due=float(pv.get("opening_due", 0.0)),
-                                is_active=True,
-                                created_at=datetime.utcnow()
-                            )
-                            db.add(new_v)
-                            db.flush()
-                            if new_v.outstanding_due > 0:
-                                ledger = VendorLedger(
-                                    vendor_id=new_v.id,
-                                    entry_type=VendorLedgerType.ADJUSTMENT,
-                                    reference_no="OPENING_BALANCE",
-                                    credit_amount=new_v.outstanding_due,
-                                    debit_amount=0.0,
-                                    balance_after=new_v.outstanding_due,
-                                    notes="Opening balance adjustment from mobile companion"
+                            if not existing_v:
+                                # Generate a unique vendor code if missing (e.g. V1, V2, etc.)
+                                v_count = db.query(Vendor).count()
+                                v_code = f"V{v_count + 1}"
+                                while db.query(Vendor).filter(Vendor.vendor_code == v_code).first():
+                                    v_count += 1
+                                    v_code = f"V{v_count + 1}"
+
+                                opening_due_val = 0.0
+                                try:
+                                    raw_due = pv.get("opening_due")
+                                    if raw_due is None:
+                                        raw_due = pv.get("outstanding_due")
+                                    opening_due_val = float(raw_due or 0.0)
+                                except (ValueError, TypeError):
+                                    opening_due_val = 0.0
+
+                                new_v = Vendor(
+                                    vendor_code=v_code,
+                                    name=pv_name,
+                                    company_name=pv.get("company_name"),
+                                    phone=pv_phone or "N/A",
+                                    alt_phone=pv.get("alt_phone"),
+                                    email=pv.get("email"),
+                                    gstin=pv.get("gstin"),
+                                    address=pv.get("address"),
+                                    city=pv.get("city"),
+                                    state=pv.get("state") or "Maharashtra",
+                                    notes=pv.get("notes"),
+                                    bank_name=pv.get("bank_name"),
+                                    bank_account_no=pv.get("bank_account_no"),
+                                    bank_ifsc=pv.get("bank_ifsc"),
+                                    bank_holder_name=pv.get("bank_holder_name"),
+                                    vendor_upi_id=pv.get("vendor_upi_id"),
+                                    outstanding_due=opening_due_val,
+                                    is_active=True,
+                                    created_at=datetime.utcnow()
                                 )
-                                db.add(ledger)
-                        else:
-                            # Update existing vendor with any new UPI/bank details
-                            if pv.get("vendor_upi_id") and not existing_v.vendor_upi_id:
-                                existing_v.vendor_upi_id = pv.get("vendor_upi_id")
-                            if pv.get("bank_name") and not existing_v.bank_name:
-                                existing_v.bank_name = pv.get("bank_name")
-                            if pv.get("bank_account_no") and not existing_v.bank_account_no:
-                                existing_v.bank_account_no = pv.get("bank_account_no")
-                            if pv.get("bank_ifsc") and not existing_v.bank_ifsc:
-                                existing_v.bank_ifsc = pv.get("bank_ifsc")
-                            if pv.get("bank_holder_name") and not existing_v.bank_holder_name:
-                                existing_v.bank_holder_name = pv.get("bank_holder_name")
-                            if pv.get("company_name") and not existing_v.company_name:
-                                existing_v.company_name = pv.get("company_name")
+                                db.add(new_v)
+                                db.flush()
+                                if new_v.outstanding_due > 0:
+                                    ledger = VendorLedger(
+                                        vendor_id=new_v.id,
+                                        entry_type=VendorLedgerType.ADJUSTMENT,
+                                        reference_no="OPENING_BALANCE",
+                                        credit_amount=new_v.outstanding_due,
+                                        debit_amount=0.0,
+                                        balance_after=new_v.outstanding_due,
+                                        notes="Opening balance adjustment from mobile companion"
+                                    )
+                                    db.add(ledger)
+                            else:
+                                # Reactivate if vendor was inactive / soft-deleted
+                                if not existing_v.is_active:
+                                    existing_v.is_active = True
+                                # Update existing vendor with any new UPI/bank details
+                                if pv.get("vendor_upi_id") and not existing_v.vendor_upi_id:
+                                    existing_v.vendor_upi_id = pv.get("vendor_upi_id")
+                                if pv.get("bank_name") and not existing_v.bank_name:
+                                    existing_v.bank_name = pv.get("bank_name")
+                                if pv.get("bank_account_no") and not existing_v.bank_account_no:
+                                    existing_v.bank_account_no = pv.get("bank_account_no")
+                                if pv.get("bank_ifsc") and not existing_v.bank_ifsc:
+                                    existing_v.bank_ifsc = pv.get("bank_ifsc")
+                                if pv.get("bank_holder_name") and not existing_v.bank_holder_name:
+                                    existing_v.bank_holder_name = pv.get("bank_holder_name")
+                                if pv.get("company_name") and not existing_v.company_name:
+                                    existing_v.company_name = pv.get("company_name")
+                    except Exception:
+                        pass
 
                 # 5. Process pending vendor updates made remotely on mobile
                 pending_vendor_updates = res_data.get("pending_vendor_updates", [])
                 for vu in pending_vendor_updates:
-                    v_id = vu.get("vendor_id")
-                    v_name = (vu.get("vendor_name") or "").strip()
-                    v_phone = (vu.get("vendor_phone") or "").strip()
-                    updates = vu.get("updates", {})
-                    target_vendor = None
-                    if v_id:
-                        target_vendor = db.query(Vendor).filter(Vendor.id == v_id).first()
-                    if not target_vendor and v_name:
-                        target_vendor = db.query(Vendor).filter(func.lower(Vendor.name) == v_name.lower()).first()
-                    if not target_vendor and v_phone:
-                        target_vendor = db.query(Vendor).filter(Vendor.phone == v_phone).first()
+                    try:
+                        v_id = vu.get("vendor_id")
+                        v_name = (vu.get("vendor_name") or "").strip()
+                        v_phone = (vu.get("vendor_phone") or "").strip()
+                        updates = vu.get("updates", {})
+                        target_vendor = None
+                        if v_id:
+                            target_vendor = db.query(Vendor).filter(Vendor.id == v_id).first()
+                        if not target_vendor and v_name:
+                            target_vendor = db.query(Vendor).filter(func.lower(Vendor.name) == v_name.lower()).first()
+                        if not target_vendor and v_phone:
+                            target_vendor = db.query(Vendor).filter(Vendor.phone == v_phone).first()
 
-                    if target_vendor and updates:
-                        for k, val in updates.items():
-                            if hasattr(target_vendor, k) and val is not None:
-                                setattr(target_vendor, k, val)
+                        if target_vendor and updates:
+                            for k, val in updates.items():
+                                if hasattr(target_vendor, k) and val is not None:
+                                    setattr(target_vendor, k, val)
+                    except Exception:
+                        pass
 
                 # 6. Process pending vendor payments recorded remotely on mobile
                 pending_vendor_pmts = res_data.get("pending_vendor_payments", [])
                 for pvp in pending_vendor_pmts:
-                    v_id = pvp.get("vendor_id")
-                    amt = float(pvp.get("amount", 0.0))
-                    vendor_rec = db.query(Vendor).filter(Vendor.id == v_id).first()
-                    if vendor_rec and amt > 0:
-                        vendor_rec.outstanding_due = max(0.0, vendor_rec.outstanding_due - amt)
-                        v_ledger = VendorLedger(
-                            vendor_id=vendor_rec.id,
-                            entry_type=VendorLedgerType.PAYMENT_MADE,
-                            reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
-                            debit_amount=amt,
-                            credit_amount=0.0,
-                            balance_after=vendor_rec.outstanding_due,
-                            payment_mode=pvp.get("payment_mode") or "UPI",
-                            notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
-                        )
-                        db.add(v_ledger)
+                    try:
+                        v_id = pvp.get("vendor_id")
+                        amt = 0.0
+                        try:
+                            amt = float(pvp.get("amount") or 0.0)
+                        except (ValueError, TypeError):
+                            amt = 0.0
+                        vendor_rec = db.query(Vendor).filter(Vendor.id == v_id).first()
+                        if vendor_rec and amt > 0:
+                            vendor_rec.outstanding_due = max(0.0, vendor_rec.outstanding_due - amt)
+                            v_ledger = VendorLedger(
+                                vendor_id=vendor_rec.id,
+                                entry_type=VendorLedgerType.PAYMENT_MADE,
+                                reference_no=pvp.get("reference_no") or "MOBILE_UPI_PAYMENT",
+                                debit_amount=amt,
+                                credit_amount=0.0,
+                                balance_after=vendor_rec.outstanding_due,
+                                payment_mode=pvp.get("payment_mode") or "UPI",
+                                notes=pvp.get("notes") or "Paid via Dolly POS Mobile App"
+                            )
+                            db.add(v_ledger)
+                    except Exception:
+                        pass
 
                 db.commit()
 
