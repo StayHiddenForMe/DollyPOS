@@ -13,6 +13,7 @@ from app.models.product import Product
 from app.models.category import Category
 from app.models.vendor import Vendor
 from app.models.lost_demand import LostDemand, LostDemandStatus, LostDemandUrgency, ProcurementNote
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/procurement", tags=["Procurement & Smart Buying Planner"])
 
@@ -221,6 +222,7 @@ def log_customer_lost_demand(
     db.add(new_log)
     db.commit()
     db.refresh(new_log)
+    trigger_instant_cloud_sync()
 
     return {
         "success": True,
@@ -242,6 +244,7 @@ def update_lost_demand_status(
 
     log.status = req.status
     db.commit()
+    trigger_instant_cloud_sync()
     return {"success": True, "message": f"Updated status to {req.status.value}", "id": log.id}
 
 @router.delete("/lost-demand/{demand_id}")
@@ -257,6 +260,7 @@ def delete_lost_demand(
 
     db.delete(log)
     db.commit()
+    trigger_instant_cloud_sync()
     return {"success": True, "message": "Record removed"}
 
 @router.get("/seasonal-checklist")

@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 import requests
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
@@ -755,19 +756,31 @@ class CloudSyncService:
                     elif action == "UPDATE_STATUS":
                         new_st = m.get("status")
                         if new_st:
-                            row = None
-                            if did:
-                                row = db.query(LostDemand).filter(LostDemand.id == did).first()
-                            if not row and item_desc:
-                                q = db.query(LostDemand).filter(func.lower(LostDemand.item_description) == item_desc.lower())
-                                if cust_phone:
-                                    q = q.filter(LostDemand.customer_phone == cust_phone)
-                                row = q.first()
-                            if row:
+                            st_norm = str(new_st).strip().upper()
+                            target_enum = None
+                            if st_norm in ["ARRIVED", "FULFILLED", "STOCK ARRIVED", "COMPLETED", "RECEIVED"]:
+                                target_enum = LostDemandStatus.FULFILLED
+                            elif st_norm in ["ORDERED", "ORDERED_WITH_VENDOR"]:
+                                target_enum = LostDemandStatus.ORDERED_WITH_VENDOR
+                            elif st_norm in ["PENDING", "PENDING_PROCUREMENT", "PENDING BUY"]:
+                                target_enum = LostDemandStatus.PENDING_PROCUREMENT
+                            else:
                                 try:
-                                    row.status = LostDemandStatus(new_st)
+                                    target_enum = LostDemandStatus(st_norm)
                                 except Exception:
-                                    pass
+                                    target_enum = None
+
+                            if target_enum:
+                                row = None
+                                if item_desc:
+                                    q = db.query(LostDemand).filter(func.lower(LostDemand.item_description) == item_desc.lower())
+                                    if cust_phone:
+                                        q = q.filter(LostDemand.customer_phone == cust_phone)
+                                    row = q.first()
+                                if not row and did:
+                                    row = db.query(LostDemand).filter(LostDemand.id == did).first()
+                                if row:
+                                    row.status = target_enum
 
                 # 4. Process pending vendors created remotely on mobile
                 pending_vendors = res_data.get("pending_vendors", [])
@@ -775,13 +788,23 @@ class CloudSyncService:
                 for pv in pending_vendors:
                     pv_name = pv.get("name", "").strip()
                     pv_phone = pv.get("phone", "").strip()
-                    if pv_name and pv_phone:
-                        existing_v = db.query(Vendor).filter(Vendor.name == pv_name, Vendor.phone == pv_phone).first()
+                    if pv_name:
+                        existing_v = None
+                        if pv_phone:
+                            existing_v = db.query(Vendor).filter(
+                                or_(
+                                    and_(func.lower(Vendor.name) == pv_name.lower(), Vendor.phone == pv_phone),
+                                    Vendor.phone == pv_phone
+                                )
+                            ).first()
+                        if not existing_v:
+                            existing_v = db.query(Vendor).filter(func.lower(Vendor.name) == pv_name.lower()).first()
+
                         if not existing_v:
                             new_v = Vendor(
                                 name=pv_name,
                                 company_name=pv.get("company_name"),
-                                phone=pv_phone,
+                                phone=pv_phone or "N/A",
                                 alt_phone=pv.get("alt_phone"),
                                 email=pv.get("email"),
                                 gstin=pv.get("gstin"),
@@ -823,6 +846,8 @@ class CloudSyncService:
                                 existing_v.bank_ifsc = pv.get("bank_ifsc")
                             if pv.get("bank_holder_name") and not existing_v.bank_holder_name:
                                 existing_v.bank_holder_name = pv.get("bank_holder_name")
+                            if pv.get("company_name") and not existing_v.company_name:
+                                existing_v.company_name = pv.get("company_name")
 
                 # 5. Process pending vendor updates made remotely on mobile
                 pending_vendor_updates = res_data.get("pending_vendor_updates", [])
@@ -906,3 +931,32 @@ class CloudSyncService:
             return {"status": "error", "message": error_msg}
 
 cloud_sync_service = CloudSyncService()
+
+_instant_sync_lock = threading.Lock()
+
+def trigger_instant_cloud_sync():
+    """
+    Triggers an asynchronous, non-blocking push to Cloud Hub in a daemon thread.
+    Allows UI operations to return instantly while Cloud Hub & mobile reflect updates in ~1-2 seconds.
+    """
+    import threading as _th
+    import time as _t
+
+    def _worker():
+        if not _instant_sync_lock.acquire(blocking=False):
+            return  # Sync already in progress, avoid duplicate runs
+        try:
+            _t.sleep(0.4)  # Small debounce settle time
+            from app.core.database import SessionLocal
+            bg_db = SessionLocal()
+            try:
+                cloud_sync_service.sync_to_cloud(bg_db, force=True)
+            finally:
+                bg_db.close()
+        except Exception:
+            pass
+        finally:
+            _instant_sync_lock.release()
+
+    _th.Thread(target=_worker, daemon=True).start()
+

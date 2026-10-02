@@ -158,6 +158,24 @@ export const getActiveStore = (): BusinessStore | null => {
   return cachedActiveStore;
 };
 
+export const resolveActiveStore = async (): Promise<BusinessStore | null> => {
+  if (cachedActiveStore && cachedActiveStore.token) return cachedActiveStore;
+  try {
+    const businesses = await getSavedBusinesses();
+    const active = businesses.find((b) => b.is_active && b.token) || businesses.find((b) => b.token) || null;
+    if (active) {
+      cachedActiveStore = active;
+      if (active.hub_url) {
+        cachedHubUrl = active.hub_url;
+      }
+      return active;
+    }
+  } catch (err) {
+    console.warn('resolveActiveStore error:', err);
+  }
+  return cachedActiveStore;
+};
+
 // Create dynamic axios instance
 const getClient = (): AxiosInstance => {
   const instance = axios.create({
@@ -627,10 +645,11 @@ export const api = {
 
   // 10. Customer Demand Log / Lost Demand API (Cloud Hub & Local Sync)
   async getDemands(status?: string): Promise<DemandItem[]> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
-        const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, {
+        const res = await axios.get(`${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/demands`, {
           params: { status: status || undefined },
           timeout: 10000,
         });
@@ -656,10 +675,11 @@ export const api = {
     urgency?: 'NORMAL' | 'HIGH' | 'URGENT';
     notes?: string;
   }): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
-        const res = await axios.post(`${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands`, data, {
+        const res = await axios.post(`${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/demands`, data, {
           timeout: 10000,
         });
         return res.data;
@@ -673,11 +693,12 @@ export const api = {
   },
 
   async updateDemandStatus(id: number, status: string): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.put(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands/${id}/status`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/demands/${id}/status`,
           { status },
           { timeout: 10000 }
         );
@@ -692,11 +713,12 @@ export const api = {
   },
 
   async deleteDemand(id: number): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.delete(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/demands/${id}`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/demands/${id}`,
           { timeout: 10000 }
         );
         return res.data;
@@ -711,11 +733,12 @@ export const api = {
 
   // 11. Vendor Management System (Cloud Hub & Direct LAN)
   async getVendors(search?: string): Promise<VendorResponse> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get<VendorResponse>(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/vendors`,
           {
             params: { search: search || undefined },
             timeout: 15000,
@@ -751,11 +774,12 @@ export const api = {
   },
 
   async createVendor(data: Partial<Vendor>): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.post(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/vendors`,
           data,
           { timeout: 15000 }
         );
@@ -770,11 +794,12 @@ export const api = {
   },
 
   async updateVendor(id: number, data: Partial<Vendor>): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.put(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${id}`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/vendors/${id}`,
           data,
           { timeout: 15000 }
         );
@@ -792,11 +817,12 @@ export const api = {
     vendorId: number,
     data: { amount: number; payment_mode?: string; reference_no?: string; notes?: string }
   ): Promise<any> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.post(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${vendorId}/payment`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/vendors/${vendorId}/payment`,
           data,
           { timeout: 15000 }
         );
@@ -811,11 +837,12 @@ export const api = {
   },
 
   async getVendorLedger(vendorId: number): Promise<VendorLedgerEntry[]> {
-    if (cachedActiveStore && cachedActiveStore.token) {
-      const hub = (cachedActiveStore.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
+    const store = await resolveActiveStore();
+    if (store && store.token) {
+      const hub = (store.hub_url || cachedHubUrl || DEFAULT_HUB_URL).trim().replace(/\/$/, '');
       try {
         const res = await axios.get<VendorLedgerEntry[]>(
-          `${hub}/api/v1/hub/stores/${encodeURIComponent(cachedActiveStore.token)}/vendors/${vendorId}/ledger`,
+          `${hub}/api/v1/hub/stores/${encodeURIComponent(store.token)}/vendors/${vendorId}/ledger`,
           { timeout: 15000 }
         );
         return res.data || [];

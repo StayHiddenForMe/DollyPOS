@@ -18,7 +18,8 @@ import {
   Calendar,
   History,
   CreditCard,
-  Banknote
+  Banknote,
+  RotateCw
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 
@@ -77,10 +78,21 @@ export const VendorPage: React.FC = () => {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     fetchVendors();
   }, [search]);
+
+  // Gentle background auto-refresh every 10 seconds to pull changes from mobile
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!isModalOpen && !isSettleModalOpen && !selectedVendorForLedger) {
+        fetchVendors(true);
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [search, isModalOpen, isSettleModalOpen, selectedVendorForLedger]);
 
   // Close active modals on Escape key
   useEffect(() => {
@@ -102,8 +114,8 @@ export const VendorPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSettleModalOpen, selectedVendorForLedger, isModalOpen]);
 
-  const fetchVendors = async () => {
-    setLoading(true);
+  const fetchVendors = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.get(`/vendors${search ? `?search=${encodeURIComponent(search)}` : ''}`);
       setVendors(res.data);
@@ -115,7 +127,17 @@ export const VendorPage: React.FC = () => {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await api.post('/cloud-sync/trigger').catch(() => {});
+      await fetchVendors();
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -287,13 +309,25 @@ export const VendorPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-pink-600/20 transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Supplier / Vendor</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-xs flex items-center space-x-1.5 transition-all active:scale-95 disabled:opacity-50"
+            title="Pull latest vendors & dues from mobile / Cloud Hub"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-pink-500' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync with Mobile'}</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-pink-600/20 transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Supplier / Vendor</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}

@@ -144,8 +144,20 @@ export const ProcurementPlannerPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLogModalOpen, editingNote, restockItem]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Gentle background auto-refresh every 10 seconds to pull changes from mobile
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!isLogModalOpen && !editingNote && !restockItem) {
+        fetchData(true);
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [activeTab, notesStatusFilter, notesVendorFilter, notesSearch, isLogModalOpen, editingNote, restockItem]);
+
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (activeTab === 'LOW_STOCK') {
         const res = await api.get('/procurement/low-stock-sheet');
@@ -175,7 +187,17 @@ export const ProcurementPlannerPage: React.FC = () => {
     } catch (e) {
       console.error('Failed to load procurement data', e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await api.post('/cloud-sync/trigger').catch(() => {});
+      await fetchData();
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -705,6 +727,16 @@ export const ProcurementPlannerPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+            title="Sync latest demand status & notes with Mobile App / Cloud Hub"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-pink-500' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync with Mobile'}</span>
+          </button>
+
           {activeTab === 'LOW_STOCK' && (
             <button
               onClick={handlePrintBuyingSheet}
@@ -758,14 +790,6 @@ export const ProcurementPlannerPage: React.FC = () => {
               <span>Log Customer Request</span>
             </button>
           )}
-
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="p-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold hover:text-pink-600"
-          >
-            <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin text-pink-500' : ''}`} />
-          </button>
         </div>
       </div>
 

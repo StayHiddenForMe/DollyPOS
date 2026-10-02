@@ -1275,12 +1275,20 @@ def get_store_demands_for_mobile(
         HubDemand.store_token == t_clean
     ).order_by(HubDemand.created_at.desc()).limit(100).all()
 
+    desktop_map = {}
+    for dd in desktop_demands:
+        key = (dd.get("item_description", "").strip().lower(), (dd.get("customer_phone") or "").strip())
+        desktop_map[key] = dd
+
     items = []
     seen_keys = set()
     for d in mobile_demands:
         key = (d.item_description.strip().lower(), (d.customer_phone or "").strip())
         seen_keys.add(key)
-        cur_status = d.status or ("ORDERED_WITH_VENDOR" if d.synced_to_pos else "PENDING_PROCUREMENT")
+        desktop_item = desktop_map.get(key)
+        cur_status = d.status or (desktop_item.get("status") if desktop_item else "PENDING_PROCUREMENT")
+        if not cur_status:
+            cur_status = "PENDING_PROCUREMENT"
         items.append({
             "id": d.id,
             "item_description": d.item_description,
@@ -1351,7 +1359,15 @@ def update_store_demand_status(
 ):
     """Updates status of a customer demand request from mobile app and queues mutation for POS."""
     t_clean = token.strip().upper()
-    new_status = payload.status.strip()
+    raw_status = payload.status.strip().upper()
+    if raw_status in ["ARRIVED", "FULFILLED", "STOCK ARRIVED", "COMPLETED", "RECEIVED"]:
+        new_status = "FULFILLED"
+    elif raw_status in ["ORDERED", "ORDERED_WITH_VENDOR"]:
+        new_status = "ORDERED_WITH_VENDOR"
+    elif raw_status in ["PENDING", "PENDING_PROCUREMENT", "PENDING BUY"]:
+        new_status = "PENDING_PROCUREMENT"
+    else:
+        new_status = raw_status
 
     target_desc = None
     target_phone = None

@@ -14,6 +14,7 @@ from app.models.product import Product
 from app.schemas.vendor_schema import VendorCreate, VendorUpdate, VendorOut, VendorLedgerEntryCreate, VendorLedgerEntryOut
 from app.schemas.purchase_schema import PurchaseCreate, PurchaseOut
 from app.core.audit import log_action
+from app.services.cloud_sync_service import trigger_instant_cloud_sync
 
 router = APIRouter(prefix="/vendors", tags=["Vendor & Purchase Management"])
 
@@ -49,6 +50,7 @@ def create_vendor(vendor_in: VendorCreate, current_user: User = Depends(get_curr
     db.commit()
     db.refresh(vendor)
     log_action(db, user_id=current_user.id, action_type="CREATE_VENDOR", entity="VENDOR", entity_id=str(vendor.id))
+    trigger_instant_cloud_sync()
     return vendor
 
 @router.put("/{vendor_id}", response_model=VendorOut)
@@ -62,6 +64,7 @@ def update_vendor(vendor_id: int, vendor_in: VendorUpdate, current_user: User = 
         
     db.commit()
     db.refresh(vendor)
+    trigger_instant_cloud_sync()
     return vendor
 
 @router.get("/{vendor_id}/ledger", response_model=List[VendorLedgerEntryOut])
@@ -94,6 +97,7 @@ def make_vendor_payment(
     db.commit()
     db.refresh(ledger)
     log_action(db, user_id=current_user.id, action_type="VENDOR_PAYMENT", entity="VENDOR", entity_id=str(vendor.id), details={"amount": entry_in.amount})
+    trigger_instant_cloud_sync()
     return ledger
 
 # --- Purchase Inward Engine ---
@@ -192,6 +196,7 @@ def create_purchase_inward(
     db.commit()
     db.refresh(purchase)
     log_action(db, user_id=current_user.id, action_type="CREATE_PURCHASE", entity="PURCHASE", entity_id=str(purchase.id))
+    trigger_instant_cloud_sync()
     return purchase
 
 @router.get("/purchases/history", response_model=List[PurchaseOut])
