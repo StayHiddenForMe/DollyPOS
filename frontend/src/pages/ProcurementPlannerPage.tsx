@@ -1230,19 +1230,19 @@ export const ProcurementPlannerPage: React.FC = () => {
             </div>
 
             {/* Buying Notes Table List */}
-            <div className="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="flex-1 overflow-x-auto overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
+              <table className="w-full min-w-[950px] text-left text-xs border-collapse">
                 <thead className="bg-slate-50 dark:bg-slate-800/80 text-[10.5px] font-bold text-slate-400 uppercase sticky top-0 z-10 border-b">
                   <tr>
-                    <th className="py-2.5 px-3 w-8 text-center">Status</th>
-                    <th className="py-2.5 px-3">Item / Product Name & Notes</th>
-                    <th className="py-2.5 px-3 text-center">Qty</th>
-                    <th className="py-2.5 px-3">Supplier / Vendor</th>
-                    <th className="py-2.5 px-3 text-center">Priority</th>
-                    <th className="py-2.5 px-3 text-right">Est. Unit (₹)</th>
-                    <th className="py-2.5 px-3 text-right">Est. Total (₹)</th>
-                    <th className="py-2.5 px-3 text-center">Added Time</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
+                    <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">Status</th>
+                    <th className="py-2.5 px-3 min-w-[200px]">Item / Product Name & Notes</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[95px]">Qty</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[160px]">Supplier / Vendor</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[90px]">Priority</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[95px]">Est. Unit (₹)</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[95px]">Est. Total (₹)</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[95px]">Added Time</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[80px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -1266,7 +1266,7 @@ export const ProcurementPlannerPage: React.FC = () => {
                           }`}
                         >
                           {/* 1. Status Toggle Checkbox */}
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => handleToggleNoteStatus(note)}
@@ -1300,17 +1300,20 @@ export const ProcurementPlannerPage: React.FC = () => {
                           </td>
 
                           {/* 3. Quantity */}
-                          <td className="py-2 px-3 text-center font-mono font-black text-xs text-emerald-600">
-                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800">
+                          <td className="py-2 px-3 text-center whitespace-nowrap font-mono font-black text-xs text-emerald-600">
+                            <span className="inline-block whitespace-nowrap px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 font-bold">
                               {note.quantity} pcs
                             </span>
                           </td>
 
                           {/* 4. Vendor */}
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-3 whitespace-nowrap">
                             {note.vendor_name ? (
-                              <span className="font-semibold text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800/60">
-                                🏢 {note.vendor_name}
+                              <span 
+                                className="inline-flex items-center gap-1 font-semibold text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/60 max-w-[240px] truncate"
+                                title={note.vendor_name}
+                              >
+                                🏢 <span className="truncate">{note.vendor_name}</span>
                               </span>
                             ) : (
                               <span className="text-slate-400 text-[11px] italic">General Market</span>
@@ -1318,7 +1321,7 @@ export const ProcurementPlannerPage: React.FC = () => {
                           </td>
 
                           {/* 5. Priority Badge */}
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
                             <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
                               note.priority === 'URGENT' 
                                 ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
@@ -1333,22 +1336,22 @@ export const ProcurementPlannerPage: React.FC = () => {
                           </td>
 
                           {/* 6. Est. Unit Price */}
-                          <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-300 text-xs">
+                          <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-300 text-xs whitespace-nowrap">
                             {note.estimated_price ? formatINR(note.estimated_price) : '—'}
                           </td>
 
                           {/* 7. Est. Total */}
-                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white text-xs">
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white text-xs whitespace-nowrap">
                             {note.total_estimated_cost ? formatINR(note.total_estimated_cost) : '—'}
                           </td>
 
                           {/* 8. Timestamp */}
-                          <td className="py-2 px-3 text-center text-[10.5px] font-mono text-slate-400">
+                          <td className="py-2 px-3 text-center text-[10.5px] font-mono text-slate-400 whitespace-nowrap">
                             {note.created_at || '—'}
                           </td>
 
                           {/* 9. Actions */}
-                          <td className="py-2 px-3 text-right">
+                          <td className="py-2 px-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end space-x-1.5">
                               {/* Quick Cycle Status Button */}
                               <button

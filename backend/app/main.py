@@ -299,8 +299,8 @@ async def lifespan(app: FastAPI):
         from app.services.cloud_sync_service import check_cloud_has_pending
         seconds_elapsed = 0
         while True:
-            await asyncio.sleep(15)
-            seconds_elapsed += 15
+            await asyncio.sleep(60)
+            seconds_elapsed += 60
 
             has_pending = False
             try:

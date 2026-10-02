@@ -1,8 +1,9 @@
 import io
+import math
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, and_, func
 from typing import List, Optional
 from datetime import datetime
 
@@ -105,35 +106,62 @@ def record_customer_payment(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    customer.credit_balance = max(0.0, customer.credit_balance - entry_in.amount)
+    amount_paid = float(round(entry_in.amount, 2))
+
+    # Calculate new credit balance and round to nearest whole rupee if decimal (e.g. 0.50 -> 1, 0.70 -> 1)
+    raw_new_balance = customer.credit_balance - amount_paid
+    if raw_new_balance <= 0.05:
+        customer.credit_balance = 0.0
+    else:
+        customer.credit_balance = float(math.floor(raw_new_balance + 0.5))
 
     # FIFO Invoice Due Settlement: Clear oldest unpaid/due invoices first
-    remaining_payment = entry_in.amount
+    # Match by customer_id OR customer phone OR customer name
+    remaining_payment = amount_paid
+
+    unpaid_filter_clauses = [Invoice.customer_id == customer.id]
+    if customer.phone and customer.phone.strip():
+        unpaid_filter_clauses.append(and_(Invoice.customer_phone.isnot(None), Invoice.customer_phone == customer.phone.strip()))
+    if customer.name and customer.name.strip():
+        unpaid_filter_clauses.append(and_(Invoice.customer_name.isnot(None), func.lower(Invoice.customer_name) == customer.name.strip().lower()))
+
     unpaid_invoices = db.query(Invoice).filter(
-        Invoice.customer_id == customer.id,
-        Invoice.due_amount > 0,
+        or_(*unpaid_filter_clauses),
+        Invoice.due_amount > 0.01,
         Invoice.is_cancelled == False
     ).order_by(Invoice.created_at.asc()).all()
 
     for inv in unpaid_invoices:
-        if remaining_payment <= 0:
+        if remaining_payment <= 0.01:
             break
-        if remaining_payment >= inv.due_amount:
-            remaining_payment -= inv.due_amount
-            inv.paid_amount += inv.due_amount
+
+        # Associate customer_id if it was null
+        if not inv.customer_id:
+            inv.customer_id = customer.id
+
+        current_due = float(round(inv.due_amount, 2))
+        if remaining_payment >= current_due - 0.05:
+            # Clears this invoice completely
+            remaining_payment = float(round(remaining_payment - current_due, 2))
+            inv.paid_amount = float(round(inv.paid_amount + current_due, 2))
             inv.due_amount = 0.0
             inv.payment_status = PaymentStatus.PAID
         else:
-            inv.paid_amount += remaining_payment
-            inv.due_amount -= remaining_payment
-            inv.payment_status = PaymentStatus.PARTIAL
+            # Partially pays this invoice
+            inv.paid_amount = float(round(inv.paid_amount + remaining_payment, 2))
+            inv.due_amount = float(round(current_due - remaining_payment, 2))
+            if inv.due_amount <= 0.05:
+                inv.due_amount = 0.0
+                inv.payment_status = PaymentStatus.PAID
+            else:
+                inv.payment_status = PaymentStatus.PARTIAL
             remaining_payment = 0.0
 
     ledger = CustomerLedger(
         customer_id=customer.id,
         entry_type=entry_in.entry_type,
         reference_no=entry_in.reference_no,
-        debit_amount=entry_in.amount,
+        debit_amount=amount_paid,
         credit_amount=0.0,
         balance_after=customer.credit_balance,
         payment_mode=entry_in.payment_mode,
@@ -142,7 +170,7 @@ def record_customer_payment(
     db.add(ledger)
     db.commit()
     db.refresh(ledger)
-    log_action(db, user_id=current_user.id, action_type="CUSTOMER_PAYMENT", entity="CUSTOMER", entity_id=str(customer.id), details={"amount": entry_in.amount})
+    log_action(db, user_id=current_user.id, action_type="CUSTOMER_PAYMENT", entity="CUSTOMER", entity_id=str(customer.id), details={"amount": amount_paid})
     trigger_instant_cloud_sync()
     return ledger
 

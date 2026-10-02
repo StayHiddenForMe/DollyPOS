@@ -371,33 +371,53 @@ def get_yoy_comparison(
     }
 
 @router.get("/category-boom")
-def get_category_boom_analysis(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_category_boom_analysis(
+    mode: str = Query("rolling_30", description="rolling_30 or calendar_mtd"),
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
     """
     Category Boom & Growth Radar:
-    Compares category revenue and unit momentum for This Month vs Last Month and This Year vs Last Year.
+    Compares category revenue and unit momentum for equal time windows.
+    - rolling_30: Last 30 Days vs Prior 30 Days (prevents artificial -100% drops at month start)
+    - calendar_mtd: Month-to-Date (Day 1 to Current Day) vs Same Days of Last Month
     """
-    this_month_start, this_month_end = get_ist_month_bounds_in_utc()
+    from datetime import timedelta
+    now_utc = datetime.utcnow()
     ist_today = get_ist_today()
-    last_m_year = ist_today.year if ist_today.month > 1 else ist_today.year - 1
-    last_m_month = ist_today.month - 1 if ist_today.month > 1 else 12
-    last_month_start, last_month_end = get_ist_month_bounds_in_utc(last_m_year, last_m_month)
+
+    if mode == "calendar_mtd":
+        days_into_month = max(1, ist_today.day)
+        curr_start, _ = get_ist_month_bounds_in_utc()
+        curr_end = now_utc
+        last_m_year = ist_today.year if ist_today.month > 1 else ist_today.year - 1
+        last_m_month = ist_today.month - 1 if ist_today.month > 1 else 12
+        last_start, _ = get_ist_month_bounds_in_utc(last_m_year, last_m_month)
+        prev_start = last_start
+        prev_end = last_start + timedelta(days=days_into_month)
+    else:
+        # Default: Rolling 30-Day Velocity (Apples-to-Apples fair window)
+        curr_end = now_utc
+        curr_start = curr_end - timedelta(days=30)
+        prev_end = curr_start
+        prev_start = prev_end - timedelta(days=30)
 
     categories = db.query(Category).all()
     results = []
 
     for cat in categories:
-        # This Month Sales
+        # Current Period Sales
         this_month_items = db.query(func.sum(InvoiceItem.total_price).label("rev"), func.sum(InvoiceItem.quantity).label("qty"))\
                              .join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
                              .join(Product, Product.id == InvoiceItem.product_id)\
-                             .filter(Invoice.created_at >= this_month_start, Invoice.created_at <= this_month_end, Invoice.is_cancelled == False)\
+                             .filter(Invoice.created_at >= curr_start, Invoice.created_at <= curr_end, Invoice.is_cancelled == False)\
                              .filter(Product.category_id == cat.id).first()
 
-        # Last Month Sales
+        # Previous Period Sales
         last_month_items = db.query(func.sum(InvoiceItem.total_price).label("rev"), func.sum(InvoiceItem.quantity).label("qty"))\
                              .join(Invoice, Invoice.id == InvoiceItem.invoice_id)\
                              .join(Product, Product.id == InvoiceItem.product_id)\
-                             .filter(Invoice.created_at >= last_month_start, Invoice.created_at <= last_month_end, Invoice.is_cancelled == False)\
+                             .filter(Invoice.created_at >= prev_start, Invoice.created_at <= prev_end, Invoice.is_cancelled == False)\
                              .filter(Product.category_id == cat.id).first()
 
         this_rev = this_month_items.rev or 0.0

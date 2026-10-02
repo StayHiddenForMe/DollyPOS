@@ -60,6 +60,7 @@ export const ReportsPage: React.FC = () => {
   // Category Boom State
   const [categoryBoomData, setCategoryBoomData] = useState<any[]>([]);
   const [loadingBoom, setLoadingBoom] = useState<boolean>(false);
+  const [boomMode, setBoomMode] = useState<'rolling_30' | 'calendar_mtd'>('rolling_30');
 
   // Festival & Event Calendar State
   const [selectedCalendarYear, setSelectedCalendarYear] = useState<number>(new Date().getFullYear());
@@ -127,10 +128,10 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
-  const fetchCategoryBoom = async () => {
+  const fetchCategoryBoom = async (mode = boomMode) => {
     setLoadingBoom(true);
     try {
-      const res = await api.get('/reports/category-boom');
+      const res = await api.get(`/reports/category-boom?mode=${mode}`);
       setCategoryBoomData(res.data);
     } catch (e) {
       console.error('Failed to fetch category boom data', e);
@@ -324,9 +325,17 @@ export const ReportsPage: React.FC = () => {
                 />
                 <button
                   onClick={fetchReport}
-                  className="px-3 py-1 bg-pink-600 text-white font-bold rounded-lg text-xs hover:bg-pink-500 shadow-xs"
+                  disabled={loading}
+                  className="px-3.5 py-1 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-lg text-xs shadow-xs flex items-center space-x-1.5 transition-all disabled:opacity-50"
                 >
-                  Apply Range
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading...</span>
+                    </>
+                  ) : (
+                    <span>Apply Range</span>
+                  )}
                 </button>
               </div>
             )}
@@ -361,6 +370,14 @@ export const ReportsPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Loading Indicator Banner */}
+          {loading && (
+            <div className="flex items-center justify-center space-x-2 py-2 px-4 bg-pink-50/90 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-900/60 text-pink-700 dark:text-pink-300 rounded-2xl text-xs font-semibold animate-pulse shrink-0">
+              <Loader2 className="w-4 h-4 animate-spin text-pink-600" />
+              <span>Calculating P&L, wholesale COGS, margins, and sales metrics for selected date range...</span>
+            </div>
+          )}
 
           {/* Financial KPI Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 shrink-0">
@@ -762,12 +779,28 @@ export const ReportsPage: React.FC = () => {
                 Identifies which retail categories are surging this month compared to previous periods for optimal stocking.
               </p>
             </div>
-            <button
-              onClick={fetchCategoryBoom}
-              className="px-3 py-1.5 border rounded-xl text-xs font-bold hover:bg-slate-50"
-            >
-              Refresh Momentum
-            </button>
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                <button
+                  onClick={() => { setBoomMode('rolling_30'); fetchCategoryBoom('rolling_30'); }}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all text-xs ${boomMode === 'rolling_30' ? 'bg-pink-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                >
+                  ⚡ Recent 30 Days (Rolling Momentum)
+                </button>
+                <button
+                  onClick={() => { setBoomMode('calendar_mtd'); fetchCategoryBoom('calendar_mtd'); }}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all text-xs ${boomMode === 'calendar_mtd' ? 'bg-pink-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                >
+                  📆 Month-to-Date (MTD Like-for-Like)
+                </button>
+              </div>
+              <button
+                onClick={() => fetchCategoryBoom(boomMode)}
+                className="px-3 py-1.5 border rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                Refresh Momentum
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -775,9 +808,13 @@ export const ReportsPage: React.FC = () => {
               <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] font-bold text-slate-400 uppercase sticky top-0">
                 <tr>
                   <th className="py-2.5 px-3">Category Name</th>
-                  <th className="py-2.5 px-3 text-right">This Month Revenue</th>
+                  <th className="py-2.5 px-3 text-right">
+                    {boomMode === 'rolling_30' ? 'Recent 30 Days Revenue' : 'This Month (MTD) Revenue'}
+                  </th>
                   <th className="py-2.5 px-3 text-center">Units Sold</th>
-                  <th className="py-2.5 px-3 text-right">Last Month Revenue</th>
+                  <th className="py-2.5 px-3 text-right">
+                    {boomMode === 'rolling_30' ? 'Prior 30 Days Revenue' : 'Last Month (Same Period)'}
+                  </th>
                   <th className="py-2.5 px-3 text-center">Growth Rate (%)</th>
                   <th className="py-2.5 px-3 text-center">Momentum Status</th>
                 </tr>

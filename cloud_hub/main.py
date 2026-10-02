@@ -1668,7 +1668,7 @@ def get_store_vendors_for_mobile(
 
     if search and search.strip():
         s = search.strip().lower()
-        vendors = [v for v in vendors if s in str(v.get("name", "")).lower() or s in str(v.get("phone", "")).lower() or s in str(v.get("company_name", "")).lower()]
+        vendors = [v for v in vendors if s in str(v.get("name", "")).lower() or s in str(v.get("phone", "")).lower() or s in str(v.get("company_name", "")).lower() or s in str(v.get("vendor_code", "")).lower()]
 
     total_dues = sum(float(v.get("outstanding_due", 0.0)) for v in vendors)
 
@@ -1866,6 +1866,36 @@ def record_store_vendor_payment_from_mobile(
         "message": f"Payment of ₹{payload.amount:,.2f} recorded! Dues updated.",
         "new_due": new_due
     }
+
+@app.delete("/api/v1/hub/stores/{token}/vendors/{vendor_id}")
+def delete_store_vendor_from_mobile(
+    token: str,
+    vendor_id: int,
+    db: Session = Depends(get_db)
+):
+    """Deletes vendor from hub cache and queues removal for POS."""
+    t_clean = token.strip().upper()
+    v_record = db.query(HubStoreData).filter(
+        HubStoreData.store_token == t_clean,
+        HubStoreData.data_type == "VENDORS"
+    ).first()
+    if v_record and v_record.data_json:
+        try:
+            vendors = json.loads(v_record.data_json)
+            vendors = [v for v in vendors if v.get("id") != vendor_id]
+            v_record.data_json = json.dumps(vendors)
+            v_record.updated_at = datetime.utcnow()
+        except Exception:
+            pass
+
+    # Also clean pending vendor record if matching
+    db.query(HubPendingVendor).filter(
+        HubPendingVendor.store_token == t_clean,
+        HubPendingVendor.id == vendor_id
+    ).delete()
+
+    db.commit()
+    return {"status": "success", "message": "Vendor deleted"}
 
 @app.get("/api/v1/hub/stores/{token}/vendors/{vendor_id}/ledger")
 def get_store_vendor_ledger_for_mobile(

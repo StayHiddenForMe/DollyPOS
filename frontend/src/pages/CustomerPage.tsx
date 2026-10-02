@@ -484,7 +484,7 @@ export const CustomerPage: React.FC = () => {
 
                     <td className="py-2.5 px-3 text-right font-mono font-black text-sm">
                       <span className={c.credit_balance > 0 ? 'text-rose-600' : 'text-slate-400'}>
-                        {formatINR(c.credit_balance)}
+                        {formatINR(Math.round(c.credit_balance))}
                       </span>
                     </td>
 
@@ -511,7 +511,7 @@ export const CustomerPage: React.FC = () => {
 
                         {c.credit_balance > 0 && (
                           <button
-                            onClick={() => { setKhataCustomer(c); setKhataPayAmount(c.credit_balance); }}
+                            onClick={() => { setKhataCustomer(c); setKhataPayAmount(Math.round(c.credit_balance)); }}
                             className="px-2 py-1 bg-amber-500 text-white rounded-lg font-bold text-[10px] hover:bg-amber-600 transition-colors"
                             title="Collect Khata Payment"
                           >
@@ -674,7 +674,7 @@ export const CustomerPage: React.FC = () => {
               <h3 className="font-bold text-base text-slate-800 dark:text-white">Record Khata Credit Payment</h3>
               <button onClick={() => setKhataCustomer(null)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
-            <p>Customer: <strong>{khataCustomer.name}</strong> • Current Outstanding: <strong className="text-rose-600">{formatINR(khataCustomer.credit_balance)}</strong></p>
+            <p>Customer: <strong>{khataCustomer.name}</strong> • Current Outstanding: <strong className="text-rose-600">{formatINR(Math.round(khataCustomer.credit_balance))}</strong></p>
             <form onSubmit={handleKhataPayment} className="space-y-3">
               <div>
                 <label className="block font-bold mb-1">Payment Amount (₹)</label>
@@ -685,7 +685,7 @@ export const CustomerPage: React.FC = () => {
                   className="w-full px-3 py-2 font-mono font-bold text-lg text-emerald-600 bg-slate-50 dark:bg-slate-800 border rounded-xl"
                   required
                   min="1"
-                  max={khataCustomer.credit_balance}
+                  max={Math.round(khataCustomer.credit_balance)}
                 />
               </div>
               <div>

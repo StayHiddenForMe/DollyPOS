@@ -581,7 +581,7 @@ export const VendorsScreen: React.FC = () => {
           <Search size={16} color={themeColors.textMuted} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by vendor, company, phone..."
+            placeholder="Search by vendor, code, phone..."
             placeholderTextColor={themeColors.textMuted}
             value={search}
             onChangeText={handleSearch}

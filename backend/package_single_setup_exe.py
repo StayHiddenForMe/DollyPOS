@@ -36,6 +36,7 @@ wizard_code = r"""
 import os
 import sys
 import time
+import shutil
 import zipfile
 import subprocess
 import winreg

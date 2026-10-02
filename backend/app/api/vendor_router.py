@@ -23,7 +23,12 @@ def list_vendors(search: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(Vendor).filter(Vendor.is_active == True)
     if search:
         s = f"%{search}%"
-        query = query.filter(or_(Vendor.name.ilike(s), Vendor.phone.ilike(s), Vendor.company_name.ilike(s)))
+        query = query.filter(or_(
+            Vendor.name.ilike(s), 
+            Vendor.phone.ilike(s), 
+            Vendor.company_name.ilike(s),
+            Vendor.vendor_code.ilike(s)
+        ))
     return query.order_by(Vendor.name).all()
 
 @router.post("", response_model=VendorOut)
@@ -66,6 +71,29 @@ def update_vendor(vendor_id: int, vendor_in: VendorUpdate, current_user: User = 
     db.refresh(vendor)
     trigger_instant_cloud_sync()
     return vendor
+
+@router.delete("/{vendor_id}")
+def delete_vendor(
+    vendor_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Check if vendor has purchase bills
+    purchase_count = db.query(Purchase).filter(Purchase.vendor_id == vendor_id).count()
+    if purchase_count == 0:
+        db.delete(vendor)
+    else:
+        # Soft delete to preserve historical purchase and bookkeeping ledger
+        vendor.is_active = False
+
+    db.commit()
+    log_action(db, user_id=current_user.id, action_type="DELETE_VENDOR", entity="VENDOR", entity_id=str(vendor_id))
+    trigger_instant_cloud_sync()
+    return {"status": "success", "message": "Vendor deleted successfully", "id": vendor_id}
 
 @router.get("/{vendor_id}/ledger", response_model=List[VendorLedgerEntryOut])
 def get_vendor_ledger(vendor_id: int, db: Session = Depends(get_db)):

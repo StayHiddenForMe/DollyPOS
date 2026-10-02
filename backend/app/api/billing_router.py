@@ -4,6 +4,7 @@ from sqlalchemy import desc, or_, and_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import io
+import math
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -186,7 +187,7 @@ def create_invoice(
 
     # 4. If Credit Sale (Khata Due), update customer credit ledger
     if invoice_in.due_amount > 0 and customer:
-        customer.credit_balance += invoice_in.due_amount
+        customer.credit_balance = float(math.floor(customer.credit_balance + invoice_in.due_amount + 0.5))
         customer.total_spend += invoice_in.grand_total
         customer.visit_count += 1
         customer.last_visit_at = datetime.utcnow()

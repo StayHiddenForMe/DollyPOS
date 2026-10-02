@@ -19,7 +19,8 @@ import {
   History,
   CreditCard,
   Banknote,
-  RotateCw
+  RotateCw,
+  Trash2
 } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 
@@ -198,6 +199,18 @@ export const VendorPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleDeleteVendor = async (v: Vendor) => {
+    if (!window.confirm(`Are you sure you want to delete supplier "${v.name}" (${v.vendor_code || `V${v.id}`})?`)) {
+      return;
+    }
+    try {
+      await api.delete(`/vendors/${v.id}`);
+      fetchVendors();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete supplier');
+    }
+  };
+
   const handleOpenLedger = async (v: Vendor) => {
     setSelectedVendorForLedger(v);
     setBillTotalAmount(0);
@@ -373,13 +386,24 @@ export const VendorPage: React.FC = () => {
                       )}
                     </div>
 
-                    <button
-                      onClick={() => handleOpenEdit(v)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                      title="Edit Vendor Profile"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => handleOpenEdit(v)}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        title="Edit Vendor Profile"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      {isOwner() && (
+                        <button
+                          onClick={() => handleDeleteVendor(v)}
+                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                          title="Delete Vendor"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1 pt-2 text-xs text-slate-600 dark:text-slate-400">
