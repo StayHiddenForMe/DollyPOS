@@ -50,13 +50,13 @@ TARGET_DIR = os.path.expandvars(r"%LOCALAPPDATA%\\DollyPOS")
 UNINSTALL_BAT_CONTENT = r'''@echo off
 title Dolly POS - Uninstaller
 echo ======================================================================
-echo             Dolly Toys & Kids Wear - Dolly POS Uninstaller
+echo           Dolly Toys and Kids Wear - Dolly POS Uninstaller
 echo ======================================================================
 echo.
 set /p CONFIRM="Are you sure you want to uninstall Dolly POS? (Y/N): "
 if /i not "%CONFIRM%"=="Y" (
     echo Uninstall cancelled.
-    timeout /t 2 >nul
+    ping -n 3 127.0.0.1 >nul
     exit /b 0
 )
 
@@ -65,23 +65,23 @@ echo Stopping any running Dolly POS processes...
 taskkill /F /IM DollyPOS.exe /T >nul 2>&1
 
 echo Removing Desktop and Start Menu Shortcuts...
-del /f /q "%USERPROFILE%\\Desktop\\Dolly POS.lnk" >nul 2>&1
-rd /s /q "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Dolly POS" >nul 2>&1
+del /f /q "%USERPROFILE%\Desktop\Dolly POS.lnk" >nul 2>&1
+rd /s /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Dolly POS" >nul 2>&1
 
 echo Removing Windows Control Panel Registration...
-reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DollyPOS" /f >nul 2>&1
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS" /f >nul 2>&1
 
 echo.
 echo ======================================================================
 echo Dolly POS application files removed successfully!
-echo [NOTE] Your database and store backups in "%USERPROFILE%\\DollyPOS_Backups"
+echo [NOTE] Your database and store backups in "%USERPROFILE%\DollyPOS_Backups"
 echo have been safely preserved.
 echo ======================================================================
 echo.
 pause
 
 :: Cleanly remove installation directory in background after exit
-start /b "" cmd /c "timeout /t 2 /nobreak >nul & rd /s /q \"%~dp0\" >nul 2>&1"
+start /b "" cmd /c "ping -n 3 127.0.0.1 >nul & rd /s /q "%~dp0" >nul 2>&1"
 exit
 '''
 
