@@ -271,19 +271,33 @@ def handle_app_close_backup(
 
 @router.post("/shutdown")
 def shutdown_system_server():
-    """Cleanly terminates the desktop backend process when user closes the app (standalone/frozen only)."""
+    """Cleanly terminates the desktop backend process and application window when user closes the app."""
     import sys
-    # If running in development mode (e.g. uvicorn dev server), do not kill the server
-    if not getattr(sys, "frozen", False) and os.environ.get("ENVIRONMENT") != "production":
-        return {"success": True, "message": "Development mode active: backend kept alive for dev reload."}
-
+    import subprocess
     import threading
     import time
+
     def _delayed_exit():
-        time.sleep(0.3)
+        time.sleep(0.4)
+        # 1. Terminate DollyPOS dedicated browser windows (Chrome / Edge with DollyPOS_BrowserProfile)
+        try:
+            cmd = [
+                'powershell', '-NoProfile', '-Command',
+                "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe' or Name = 'msedge.exe'\" | "
+                "Where-Object { $_.CommandLine -like '*DollyPOS_BrowserProfile*' } | "
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+            ]
+            subprocess.run(cmd, capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+        # 2. Cleanly exit the Python process
+        time.sleep(0.2)
         os._exit(0)
+
     threading.Thread(target=_delayed_exit, daemon=True).start()
-    return {"success": True, "message": "Dolly POS server shutting down cleanly."}
+    return {"success": True, "message": "Dolly POS server and application window shutting down cleanly."}
+
 
 
 

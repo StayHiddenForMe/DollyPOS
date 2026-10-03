@@ -187,7 +187,7 @@ def perform_on_close_sync():
     except Exception:
         pass
 
-def open_browser():
+def open_browser(server=None):
     """Wait for backend health endpoint, then open Chrome/Edge in app mode."""
     for _ in range(120):  # Wait up to 24s for PostgreSQL connection & migrations
         try:
@@ -204,7 +204,7 @@ def open_browser():
             profile_dir = os.path.join(tempfile.gettempdir(), "DollyPOS_BrowserProfile")
             os.makedirs(profile_dir, exist_ok=True)
             log_boot(f"open_browser(): Launching browser {browser_exe}...")
-            subprocess.Popen([
+            proc = subprocess.Popen([
                 browser_exe,
                 f"--user-data-dir={profile_dir}",
                 "--no-first-run",
@@ -213,6 +213,17 @@ def open_browser():
                 "--app=http://127.0.0.1:8000"
             ])
             log_boot("open_browser(): Browser launched successfully.")
+
+            if server:
+                def _watch_exit():
+                    try:
+                        proc.wait()
+                        log_boot("Browser window closed by user. Triggering server shutdown...")
+                        server.should_exit = True
+                    except Exception:
+                        pass
+                threading.Thread(target=_watch_exit, daemon=True).start()
+
             return
         except Exception as e:
             log_boot(f"open_browser(): Browser launch error: {e}")
@@ -227,11 +238,7 @@ def main():
     check_single_instance_or_focus()
     log_boot("Single instance check passed.")
 
-    # 2. Start browser opener thread
-    log_boot("Starting open_browser thread...")
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    # 3. Configure Uvicorn server
+    # 2. Configure Uvicorn server
     log_boot("Configuring Uvicorn server...")
     log_config = uvicorn.config.LOGGING_CONFIG.copy()
     if "formatters" in log_config:
@@ -248,6 +255,11 @@ def main():
         log_config=log_config
     )
     server = uvicorn.Server(config)
+
+    # 3. Start browser opener thread with server reference
+    log_boot("Starting open_browser thread...")
+    threading.Thread(target=open_browser, args=(server,), daemon=True).start()
+
 
     # 4. Run Uvicorn server on main thread - stays permanently running
     try:

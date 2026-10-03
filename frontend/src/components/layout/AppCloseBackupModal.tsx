@@ -44,16 +44,47 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
   });
   const [summaryMsg, setSummaryMsg] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSafeToCloseManually, setIsSafeToCloseManually] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setStep('CONFIRM');
       setStatusLog({ snapshot: 'PENDING', cloudHub: 'PENDING', cloud: 'PENDING', retention: 'PENDING' });
       setErrorMessage(null);
+      setIsSafeToCloseManually(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const forceCloseBrowser = () => {
+    try {
+      if ((window as any).electronAPI?.confirmAppClose) {
+        (window as any).electronAPI.confirmAppClose();
+        return;
+      }
+      window.open('', '_self', '');
+      window.close();
+      setTimeout(() => {
+        try {
+          window.location.href = 'about:blank';
+        } catch (e) {
+          // Ignored
+        }
+      }, 300);
+    } catch (e) {
+      // Ignored
+    }
+  };
+
+  const triggerActualExit = async () => {
+    try {
+      await api.post('/backup/shutdown');
+    } catch (e) {
+      // Ignored
+    }
+    forceCloseBrowser();
+  };
 
   const handleStartBackupAndExit = async () => {
     setStep('IN_PROGRESS');
@@ -83,10 +114,16 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
       setSummaryMsg(`✓ Saved ${fileName} to local disk${hubMsg}${cloudMsg}. Purged expired backups (${retentionDays > 0 ? retentionDays + 'd' : 'None'}).`);
       setStep('DONE');
 
-      // Trigger shutdown & clean exit after 1.5 seconds
+      // Trigger shutdown & clean exit after 1.2 seconds
       setTimeout(() => {
         triggerActualExit();
-      }, 1500);
+      }, 1200);
+
+      // If browser window remains open after 2.5 seconds (e.g. standard browser tab),
+      // reveal friendly confirmation and manual close button so user is never left waiting
+      setTimeout(() => {
+        setIsSafeToCloseManually(true);
+      }, 2500);
 
     } catch (err: any) {
       setStatusLog({
@@ -100,18 +137,6 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
     }
   };
 
-  const triggerActualExit = async () => {
-    try {
-      await api.post('/backup/shutdown');
-    } catch (e) {
-      // Ignored
-    }
-    if ((window as any).electronAPI?.confirmAppClose) {
-      (window as any).electronAPI.confirmAppClose();
-    } else {
-      window.close();
-    }
-  };
 
   const handleDirectShutdown = () => {
     triggerActualExit();
@@ -293,9 +318,33 @@ export const AppCloseBackupModal: React.FC<AppCloseBackupModalProps> = ({
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
               {summaryMsg}
             </p>
-            <p className="text-[11px] text-slate-400 animate-pulse">
-              Closing application...
-            </p>
+            {isSafeToCloseManually ? (
+              <div className="pt-2 space-y-3 animate-in fade-in duration-300">
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs">
+                  <p className="font-bold flex items-center justify-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    All Data Safely Preserved & Synced
+                  </p>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                    Your database snapshot and 24/7 Cloud Hub sync are complete. You may safely close this window now.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={forceCloseBrowser}
+                    className="px-5 py-2.5 bg-slate-900 dark:bg-white hover:bg-slate-800 text-white dark:text-slate-900 rounded-xl text-xs font-bold transition shadow-md cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <Power className="w-3.5 h-3.5" />
+                    <span>Close Window Now</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-400 animate-pulse">
+                Closing application...
+              </p>
+            )}
           </div>
         )}
 
