@@ -479,8 +479,15 @@ export const InventoryPage: React.FC = () => {
                       </td>
 
                       {/* Selling Price */}
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-pink-600 dark:text-pink-400">
-                        {formatINR(p.selling_price)}
+                      <td className="py-2.5 px-3 text-right">
+                        <span className="font-mono font-bold text-pink-600 dark:text-pink-400 block">
+                          {formatINR(p.selling_price)}
+                        </span>
+                        {p.gst_percent > 0 && (
+                          <span className="text-[9.5px] text-emerald-600 font-mono font-bold block" title={`CGST: ${p.cgst_percent ?? (p.gst_percent / 2)}%, SGST: ${p.sgst_percent ?? (p.gst_percent / 2)}%`}>
+                            GST {p.gst_percent}%
+                          </span>
+                        )}
                       </td>
 
                       {/* Stock */}

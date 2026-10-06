@@ -80,13 +80,27 @@ def process_exchange_order(
         qty = item.get("quantity", 1)
         is_def = item.get("is_defective", False)
 
+        r_tax_pct = item.get("tax_percent", 0.0) or 0.0
+        r_cgst_pct = item.get("cgst_percent", 0.0) or (r_tax_pct / 2.0 if r_tax_pct else 0.0)
+        r_sgst_pct = item.get("sgst_percent", 0.0) or (r_tax_pct / 2.0 if r_tax_pct else 0.0)
+        r_refund_price = item.get("refund_price", 0.0)
+        r_tax_amt = item.get("tax_amount", 0.0) or round((r_refund_price * r_tax_pct / 100.0) * qty, 2)
+        r_cgst_amt = item.get("cgst_amount", 0.0) or round((r_refund_price * r_cgst_pct / 100.0) * qty, 2)
+        r_sgst_amt = item.get("sgst_amount", 0.0) or round((r_refund_price * r_sgst_pct / 100.0) * qty, 2)
+
         ret_item = ReturnItem(
             return_id=return_order.id,
             product_id=prod_id,
             item_name=item.get("item_name", "Returned Item"),
             barcode=item.get("barcode"),
             quantity=qty,
-            refund_price=item.get("refund_price", 0.0),
+            refund_price=r_refund_price,
+            tax_percent=r_tax_pct,
+            tax_amount=r_tax_amt,
+            cgst_percent=r_cgst_pct,
+            cgst_amount=r_cgst_amt,
+            sgst_percent=r_sgst_pct,
+            sgst_amount=r_sgst_amt,
             is_defective=is_def,
             restocked=not is_def
         )
@@ -103,6 +117,10 @@ def process_exchange_order(
 
     # 2. If new replacement items chosen, generate Exchange Invoice
     new_bill_number = None
+    total_exchange_tax = 0.0
+    total_exchange_cgst = 0.0
+    total_exchange_sgst = 0.0
+
     if req.exchange_items:
         new_bill_number = generate_bill_number(db)
         exchange_invoice = Invoice(
@@ -114,6 +132,8 @@ def process_exchange_order(
             discount_amount=req.total_returned_value,  # Value of returned item applied as discount
             discount_type="RETURN_EXCHANGE",
             tax_amount=0.0,
+            cgst_amount=0.0,
+            sgst_amount=0.0,
             round_off=0.0,
             grand_total=max(0.0, req.net_difference),
             paid_amount=max(0.0, req.net_difference),
@@ -131,6 +151,18 @@ def process_exchange_order(
             p = db.query(Product).filter(Product.id == ex_item.product_id).first()
             if p:
                 p.stock_quantity = max(0, p.stock_quantity - ex_item.quantity)
+                cgst_pct = getattr(p, 'cgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0)
+                sgst_pct = getattr(p, 'sgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0)
+                tax_pct = getattr(p, 'gst_percent', 0.0) or (cgst_pct + sgst_pct)
+
+                cgst_amt = round((ex_item.unit_price * cgst_pct / 100.0) * ex_item.quantity, 2)
+                sgst_amt = round((ex_item.unit_price * sgst_pct / 100.0) * ex_item.quantity, 2)
+                tax_amt = round(cgst_amt + sgst_amt, 2)
+
+                total_exchange_cgst += cgst_amt
+                total_exchange_sgst += sgst_amt
+                total_exchange_tax += tax_amt
+
                 inv_item = InvoiceItem(
                     invoice_id=exchange_invoice.id,
                     product_id=p.id,
@@ -142,12 +174,20 @@ def process_exchange_order(
                     unit_price=ex_item.unit_price,
                     cost_price=p.purchase_price,
                     discount_amount=0.0,
-                    tax_percent=0.0,
-                    tax_amount=0.0,
+                    tax_percent=tax_pct,
+                    tax_amount=tax_amt,
+                    cgst_percent=cgst_pct,
+                    cgst_amount=cgst_amt,
+                    sgst_percent=sgst_pct,
+                    sgst_amount=sgst_amt,
                     total_price=ex_item.unit_price * ex_item.quantity,
                     is_unlisted=False
                 )
                 db.add(inv_item)
+
+        exchange_invoice.tax_amount = round(total_exchange_tax, 2)
+        exchange_invoice.cgst_amount = round(total_exchange_cgst, 2)
+        exchange_invoice.sgst_amount = round(total_exchange_sgst, 2)
 
     db.commit()
     db.refresh(return_order)
@@ -160,6 +200,9 @@ def process_exchange_order(
         "return_number": ret_number,
         "new_bill_number": new_bill_number,
         "net_difference": req.net_difference,
+        "tax_amount": total_exchange_tax if req.exchange_items else 0.0,
+        "cgst_amount": total_exchange_cgst if req.exchange_items else 0.0,
+        "sgst_amount": total_exchange_sgst if req.exchange_items else 0.0,
         "action": "COLLECT_DIFFERENCE" if req.net_difference > 0 else ("REFUND_DIFFERENCE" if req.net_difference < 0 else "EVEN_EXCHANGE"),
         "message": "Return / Exchange completed and stock adjusted."
     }

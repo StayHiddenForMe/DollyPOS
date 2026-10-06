@@ -71,6 +71,12 @@ class ReceiptService:
                 "quantity": item.quantity,
                 "unit_price": item.unit_price if not is_gift_receipt else 0.0,
                 "discount_amount": item.discount_amount if not is_gift_receipt else 0.0,
+                "tax_percent": getattr(item, 'tax_percent', 0.0) if not is_gift_receipt else 0.0,
+                "tax_amount": getattr(item, 'tax_amount', 0.0) if not is_gift_receipt else 0.0,
+                "cgst_percent": getattr(item, 'cgst_percent', 0.0) if not is_gift_receipt else 0.0,
+                "cgst_amount": getattr(item, 'cgst_amount', 0.0) if not is_gift_receipt else 0.0,
+                "sgst_percent": getattr(item, 'sgst_percent', 0.0) if not is_gift_receipt else 0.0,
+                "sgst_amount": getattr(item, 'sgst_amount', 0.0) if not is_gift_receipt else 0.0,
                 "total_price": item.total_price if not is_gift_receipt else 0.0,
             })
 
@@ -134,6 +140,8 @@ class ReceiptService:
             "subtotal": invoice.subtotal if not is_gift_receipt else 0.0,
             "discount_amount": invoice.discount_amount if not is_gift_receipt else 0.0,
             "tax_amount": invoice.tax_amount if not is_gift_receipt else 0.0,
+            "cgst_amount": getattr(invoice, 'cgst_amount', 0.0) if not is_gift_receipt else 0.0,
+            "sgst_amount": getattr(invoice, 'sgst_amount', 0.0) if not is_gift_receipt else 0.0,
             "extra_charges_amount": getattr(invoice, 'extra_charges_amount', 0.0) if not is_gift_receipt else 0.0,
             "extra_charges_breakdown": getattr(invoice, 'extra_charges_breakdown', None) if not is_gift_receipt else None,
             "round_off": invoice.round_off if not is_gift_receipt else 0.0,

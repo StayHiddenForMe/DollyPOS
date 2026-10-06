@@ -37,6 +37,8 @@ export const BillingPage: React.FC = () => {
     subtotal,
     discountVal,
     taxAmount,
+    cgstAmount,
+    sgstAmount,
     grandTotal,
     addTab,
     switchTab,
@@ -504,9 +506,19 @@ export const BillingPage: React.FC = () => {
                   </div>
 
                   {taxAmount() > 0 && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>GST Tax:</span>
-                      <span className="font-semibold font-mono">{formatINR(taxAmount())}</span>
+                    <div className="space-y-1 bg-emerald-50/70 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-xs">
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>CGST:</span>
+                        <span className="font-semibold font-mono text-slate-800 dark:text-slate-200">{formatINR(cgstAmount())}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>SGST:</span>
+                        <span className="font-semibold font-mono text-slate-800 dark:text-slate-200">{formatINR(sgstAmount())}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-emerald-700 dark:text-emerald-400 border-t border-emerald-200/60 dark:border-emerald-900/40 pt-1">
+                        <span>Total GST:</span>
+                        <span className="font-mono">{formatINR(taxAmount())}</span>
+                      </div>
                     </div>
                   )}
 

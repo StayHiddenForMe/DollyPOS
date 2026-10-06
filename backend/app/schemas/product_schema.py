@@ -23,6 +23,8 @@ class ProductBase(BaseModel):
     selling_price: float = 0.0
     mrp: float = 0.0
     gst_percent: float = 0.0
+    cgst_percent: float = 0.0
+    sgst_percent: float = 0.0
     margin_percent: float = 0.0
     stock_quantity: int = 0
     min_stock_alert: int = 3
@@ -53,6 +55,8 @@ class ProductMultiSizeCreate(BaseModel):
     selling_price: float = 0.0
     mrp: float = 0.0
     gst_percent: float = 0.0
+    cgst_percent: float = 0.0
+    sgst_percent: float = 0.0
     stock_per_size: int = 1
     min_stock_alert: int = 3
     is_speed_dial: bool = False
@@ -80,6 +84,8 @@ class ProductUpdate(BaseModel):
     selling_price: Optional[float] = None
     mrp: Optional[float] = None
     gst_percent: Optional[float] = None
+    cgst_percent: Optional[float] = None
+    sgst_percent: Optional[float] = None
     margin_percent: Optional[float] = None
     stock_quantity: Optional[int] = None
     min_stock_alert: Optional[int] = None

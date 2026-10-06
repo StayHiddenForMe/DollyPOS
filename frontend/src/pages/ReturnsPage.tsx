@@ -33,6 +33,12 @@ interface ReturnItemState {
   quantity: number;
   max_quantity: number;
   unit_price: number;
+  tax_percent?: number;
+  tax_amount?: number;
+  cgst_percent?: number;
+  cgst_amount?: number;
+  sgst_percent?: number;
+  sgst_amount?: number;
   selected: boolean;
   is_defective: boolean;
 }
@@ -204,6 +210,12 @@ export const ReturnsPage: React.FC = () => {
         quantity: 1,
         max_quantity: i.quantity,
         unit_price: i.unit_price,
+        tax_percent: i.tax_percent || 0,
+        tax_amount: i.tax_amount || 0,
+        cgst_percent: i.cgst_percent ?? (i.tax_percent ? i.tax_percent / 2 : 0),
+        cgst_amount: i.cgst_amount ?? 0,
+        sgst_percent: i.sgst_percent ?? (i.tax_percent ? i.tax_percent / 2 : 0),
+        sgst_amount: i.sgst_amount ?? 0,
         selected: false,
         is_defective: false
       }));
@@ -238,6 +250,9 @@ export const ReturnsPage: React.FC = () => {
     if (existing) {
       setReturnItems(returnItems.map(r => r.product_id === prod.id ? { ...r, quantity: r.quantity + 1, selected: true } : r));
     } else {
+      const cPct = prod.cgst_percent !== undefined ? prod.cgst_percent : ((prod.gst_percent || 0) / 2);
+      const sPct = prod.sgst_percent !== undefined ? prod.sgst_percent : ((prod.gst_percent || 0) / 2);
+      const tPct = prod.gst_percent || (cPct + sPct);
       setReturnItems([...returnItems, {
         product_id: prod.id,
         item_name: prod.name,
@@ -247,6 +262,12 @@ export const ReturnsPage: React.FC = () => {
         quantity: 1,
         max_quantity: 99,
         unit_price: prod.selling_price,
+        tax_percent: tPct,
+        tax_amount: (prod.selling_price * tPct) / 100,
+        cgst_percent: cPct,
+        cgst_amount: (prod.selling_price * cPct) / 100,
+        sgst_percent: sPct,
+        sgst_amount: (prod.selling_price * sPct) / 100,
         selected: true,
         is_defective: false
       }]);
@@ -290,6 +311,12 @@ export const ReturnsPage: React.FC = () => {
           barcode: r.barcode,
           quantity: r.quantity,
           refund_price: r.unit_price,
+          tax_percent: r.tax_percent || 0,
+          tax_amount: r.tax_amount || 0,
+          cgst_percent: r.cgst_percent || (r.tax_percent ? r.tax_percent / 2 : 0),
+          cgst_amount: r.cgst_amount || 0,
+          sgst_percent: r.sgst_percent || (r.tax_percent ? r.tax_percent / 2 : 0),
+          sgst_amount: r.sgst_amount || 0,
           is_defective: r.is_defective
         })),
         exchange_items: exchangeItems.map(e => ({
@@ -319,6 +346,9 @@ export const ReturnsPage: React.FC = () => {
         total_returned_value: totalReturnValue,
         total_new_items_value: totalExchangeValue,
         net_difference: netDifference,
+        tax_amount: res.data.tax_amount || 0,
+        cgst_amount: res.data.cgst_amount || 0,
+        sgst_amount: res.data.sgst_amount || 0,
         settlement_mode: settlementMode,
         reason: returnReason,
         date: formatISTDate(new Date())
@@ -845,9 +875,10 @@ export const ReturnsPage: React.FC = () => {
                         <div key={`ret-${idx}`} className="py-1 flex justify-between items-start text-[10.5px] text-black">
                           <div className="flex-1 min-w-0 pr-1 flex flex-col text-left">
                             <span className="font-bold text-black line-clamp-2 leading-tight break-words">[RETURN] {r.item_name}</span>
-                            {(r.size || r.color) && (
+                            {(r.size || r.color || Number(r.tax_percent || 0) > 0) && (
                               <span className="text-[10px] font-semibold text-black">
-                                {r.size ? `Sz:${r.size} ` : ''}{r.color ? `Col:${r.color}` : ''}
+                                {r.size ? `Sz:${r.size} ` : ''}{r.color ? `Col:${r.color} ` : ''}
+                                {Number(r.tax_percent || 0) > 0 ? `(GST ${r.tax_percent}%)` : ''}
                               </span>
                             )}
                           </div>
@@ -863,13 +894,15 @@ export const ReturnsPage: React.FC = () => {
                       const name = e.product ? e.product.name : e.item_name;
                       const size = e.product?.size || e.size;
                       const color = e.product?.color || e.color;
+                      const gstRate = e.product?.gst_percent || e.tax_percent || 0;
                       return (
                         <div key={`ex-${idx}`} className="py-1 flex justify-between items-start text-[10.5px] text-black">
                           <div className="flex-1 min-w-0 pr-1 flex flex-col text-left">
                             <span className="font-bold text-black line-clamp-2 leading-tight break-words">[EXCH] {name}</span>
-                            {(size || color) && (
+                            {(size || color || Number(gstRate) > 0) && (
                               <span className="text-[10px] font-semibold text-black">
-                                {size ? `Sz:${size} ` : ''}{color ? `Col:${color}` : ''}
+                                {size ? `Sz:${size} ` : ''}{color ? `Col:${color} ` : ''}
+                                {Number(gstRate) > 0 ? `(GST ${gstRate}%)` : ''}
                               </span>
                             )}
                           </div>
@@ -893,6 +926,24 @@ export const ReturnsPage: React.FC = () => {
                       <span>New Exchange Items:</span>
                       <span className="font-bold text-black">+ {formatINR(exchangeReceipt.total_new_items_value)}</span>
                     </div>
+                  )}
+
+                  {/* GST Breakdown if applicable */}
+                  {(Number(exchangeReceipt.tax_amount || 0) > 0 || Number(exchangeReceipt.cgst_amount || 0) > 0 || Number(exchangeReceipt.sgst_amount || 0) > 0) && (
+                    <>
+                      <div className="flex justify-between text-[10.5px]">
+                        <span>CGST:</span>
+                        <span>₹{Number(exchangeReceipt.cgst_amount || ((exchangeReceipt.tax_amount || 0) / 2)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10.5px]">
+                        <span>SGST:</span>
+                        <span>₹{Number(exchangeReceipt.sgst_amount || ((exchangeReceipt.tax_amount || 0) / 2)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Total GST:</span>
+                        <span>₹{Number(exchangeReceipt.tax_amount || 0).toFixed(2)}</span>
+                      </div>
+                    </>
                   )}
 
                   {/* Net Settlement */}

@@ -151,6 +151,21 @@ def seed_initial_data():
             "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_upi_id VARCHAR(100)",
             "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS outstanding_due FLOAT DEFAULT 0.0",
             "CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments (invoice_id)",
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS cgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS sgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cgst_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS sgst_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS cgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS cgst_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS sgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS sgst_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS tax_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS tax_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS cgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS cgst_amount FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS sgst_percent FLOAT DEFAULT 0.0",
+            "ALTER TABLE return_items ADD COLUMN IF NOT EXISTS sgst_amount FLOAT DEFAULT 0.0",
+            "UPDATE products SET cgst_percent = ROUND((gst_percent / 2.0)::numeric, 2), sgst_percent = ROUND((gst_percent / 2.0)::numeric, 2) WHERE gst_percent > 0 AND (cgst_percent IS NULL OR cgst_percent = 0);",
         ]
         log_main(f"Executing {len(migration_statements)} migration statements...")
         for stmt in migration_statements:

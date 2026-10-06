@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, Category, Vendor } from '../../types';
 import api from '../../utils/api';
-import { X, Tag, Check, Truck, Lock, Unlock, Zap, Sparkles } from 'lucide-react';
+import { X, Tag, Check, Truck, Lock, Unlock, Zap, Sparkles, Percent } from 'lucide-react';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -76,6 +76,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     gender: 'Unisex',
     age_group: '',
     gst_percent: 0,
+    cgst_percent: 0,
+    sgst_percent: 0,
     margin_percent: 0,
     price_change_reason: 'Price Update'
   });
@@ -135,7 +137,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           brand: product.brand || '',
           gender: product.gender || 'Unisex',
           age_group: product.age_group || '',
-          gst_percent: product.gst_percent,
+          gst_percent: product.gst_percent || 0,
+          cgst_percent: product.cgst_percent !== undefined ? product.cgst_percent : ((product.gst_percent || 0) / 2),
+          sgst_percent: product.sgst_percent !== undefined ? product.sgst_percent : ((product.gst_percent || 0) / 2),
           margin_percent: product.margin_percent,
           price_change_reason: 'Price Update'
         });
@@ -179,6 +183,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       gender: 'Unisex',
       age_group: '',
       gst_percent: 0,
+      cgst_percent: 0,
+      sgst_percent: 0,
       margin_percent: 0,
       price_change_reason: 'Price Update'
     });
@@ -197,6 +203,44 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       selling_price: selling,
       margin_percent: margin
     }));
+  };
+
+  // Quick GST Presets & Split Handlers
+  const GST_PRESETS = [0, 2, 5, 12, 18, 28];
+
+  const handleTotalGstChange = (total: number) => {
+    const validTotal = Math.max(0, total);
+    const half = Math.round((validTotal / 2) * 100) / 100;
+    setFormData(prev => ({
+      ...prev,
+      gst_percent: validTotal,
+      cgst_percent: half,
+      sgst_percent: half
+    }));
+  };
+
+  const handleCgstChange = (cgst: number) => {
+    const validCgst = Math.max(0, cgst);
+    setFormData(prev => {
+      const newTotal = Math.round((validCgst + prev.sgst_percent) * 100) / 100;
+      return {
+        ...prev,
+        cgst_percent: validCgst,
+        gst_percent: newTotal
+      };
+    });
+  };
+
+  const handleSgstChange = (sgst: number) => {
+    const validSgst = Math.max(0, sgst);
+    setFormData(prev => {
+      const newTotal = Math.round((prev.cgst_percent + validSgst) * 100) / 100;
+      return {
+        ...prev,
+        sgst_percent: validSgst,
+        gst_percent: newTotal
+      };
+    });
   };
 
   const toggleSize = (sz: string) => {
@@ -269,6 +313,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             selling_price: formData.selling_price,
             mrp: formData.mrp || 0.0,
             gst_percent: formData.gst_percent,
+            cgst_percent: formData.cgst_percent,
+            sgst_percent: formData.sgst_percent,
             stock_per_size: formData.stock_quantity || 1,
             min_stock_alert: formData.min_stock_alert,
             is_speed_dial: formData.is_speed_dial,
@@ -437,6 +483,112 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 required
               />
             </div>
+          </div>
+
+          {/* GST Rates & Tax Breakdown (CGST & SGST with Manual Split) */}
+          <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Percent className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-bold text-slate-800 dark:text-white">GST Rates (CGST &amp; SGST)</span>
+                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                  {formData.gst_percent > 0 ? `Total GST: ${formData.gst_percent}%` : 'Non-GST / Exempt (0%)'}
+                </span>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-500 font-semibold mr-1">Presets:</span>
+                {GST_PRESETS.map((rate) => (
+                  <button
+                    type="button"
+                    key={rate}
+                    onClick={() => handleTotalGstChange(rate)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
+                      formData.gst_percent === rate
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-50'
+                    }`}
+                  >
+                    {rate}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {/* Total GST % Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Total GST Rate (%)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.gst_percent === 0 ? '' : formData.gst_percent}
+                    onChange={(e) => handleTotalGstChange(parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 18, 5, 2"
+                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                </div>
+                <span className="text-[9.5px] text-slate-500 block mt-0.5">Typing auto-splits 50/50</span>
+              </div>
+
+              {/* CGST % Manual Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  CGST Rate (%) (Manual)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.cgst_percent === 0 ? '' : formData.cgst_percent}
+                    onChange={(e) => handleCgstChange(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                </div>
+                <span className="text-[9.5px] text-slate-500 block mt-0.5">Central GST share</span>
+              </div>
+
+              {/* SGST % Manual Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  SGST Rate (%) (Manual)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.sgst_percent === 0 ? '' : formData.sgst_percent}
+                    onChange={(e) => handleSgstChange(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                </div>
+                <span className="text-[9.5px] text-slate-500 block mt-0.5">State GST share</span>
+              </div>
+            </div>
+
+            {/* Live Calculation Preview Banner */}
+            {formData.gst_percent > 0 && formData.selling_price > 0 && (
+              <div className="text-[11px] font-mono bg-white dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span>
+                  For ₹{formData.selling_price} item:
+                </span>
+                <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                  CGST ({formData.cgst_percent}%): ₹{((formData.selling_price * formData.cgst_percent) / 100).toFixed(2)} + SGST ({formData.sgst_percent}%): ₹{((formData.selling_price * formData.sgst_percent) / 100).toFixed(2)} = Tax: ₹{((formData.selling_price * formData.gst_percent) / 100).toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Row 3: (7) Category, (8) Sub Category, (9) Color, (10) Assign Speed Dial */}

@@ -43,6 +43,14 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
   const itemCount = receiptData.items?.length || receiptData.items_count || 0;
   const totalQty = receiptData.total_quantity || receiptData.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || receiptData.total_items || 0;
 
+  const cgstVal = receiptData.cgst_amount !== undefined && receiptData.cgst_amount !== null
+    ? Number(receiptData.cgst_amount).toFixed(2)
+    : (receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00');
+
+  const sgstVal = receiptData.sgst_amount !== undefined && receiptData.sgst_amount !== null
+    ? Number(receiptData.sgst_amount).toFixed(2)
+    : (receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00');
+
   const halfTax = receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00';
 
   const handleShareWhatsApp = () => {
@@ -181,9 +189,10 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                   <div key={idx} className="py-1 flex justify-between items-start text-[10.5px] text-black">
                     <div className="flex-1 min-w-0 pr-1 flex flex-col text-left">
                       <span className="font-bold text-black line-clamp-2 leading-tight break-words">{item.item_name}</span>
-                      {(item.size || item.color) && (
+                      {(item.size || item.color || Number(item.tax_percent || 0) > 0) && (
                         <span className="text-[10px] font-semibold text-black">
-                          {item.size ? `Sz:${item.size} ` : ''}{item.color ? `Col:${item.color}` : ''}
+                          {item.size ? `Sz:${item.size} ` : ''}{item.color ? `Col:${item.color} ` : ''}
+                          {Number(item.tax_percent || 0) > 0 ? `(GST ${item.tax_percent}%)` : ''}
                         </span>
                       )}
                     </div>
@@ -214,11 +223,11 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                     <>
                       <div className="flex justify-between text-[10.5px]">
                         <span>CGST:</span>
-                        <span>₹{halfTax}</span>
+                        <span>₹{cgstVal}</span>
                       </div>
                       <div className="flex justify-between text-[10.5px]">
                         <span>SGST:</span>
-                        <span>₹{halfTax}</span>
+                        <span>₹{sgstVal}</span>
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>Total GST:</span>

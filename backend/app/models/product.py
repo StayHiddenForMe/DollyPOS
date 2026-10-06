@@ -33,6 +33,8 @@ class Product(Base):
     selling_price = Column(Float, default=0.0, nullable=False)
     mrp = Column(Float, default=0.0, nullable=False)
     gst_percent = Column(Float, default=0.0, nullable=False)
+    cgst_percent = Column(Float, default=0.0, nullable=False)
+    sgst_percent = Column(Float, default=0.0, nullable=False)
     margin_percent = Column(Float, default=0.0, nullable=False)
     
     # Stock & Inventory

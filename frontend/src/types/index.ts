@@ -64,6 +64,8 @@ export interface Product {
   selling_price: number;
   mrp: number;
   gst_percent: number;
+  cgst_percent?: number;
+  sgst_percent?: number;
   margin_percent: number;
   stock_quantity: number;
   min_stock_alert: number;
@@ -96,6 +98,10 @@ export interface CartItem {
   discount_amount: number;
   tax_percent: number;
   tax_amount: number;
+  cgst_percent?: number;
+  cgst_amount?: number;
+  sgst_percent?: number;
+  sgst_amount?: number;
   total_price: number;
   is_unlisted: boolean;
   max_stock?: number;
@@ -134,6 +140,10 @@ export interface InvoiceItem {
   discount_amount: number;
   tax_percent: number;
   tax_amount: number;
+  cgst_percent?: number;
+  cgst_amount?: number;
+  sgst_percent?: number;
+  sgst_amount?: number;
   total_price: number;
   is_unlisted: boolean;
 }
@@ -157,6 +167,8 @@ export interface Invoice {
   discount_amount: number;
   discount_type: string;
   tax_amount: number;
+  cgst_amount?: number;
+  sgst_amount?: number;
   extra_charges_amount?: number;
   extra_charges_breakdown?: string;
   round_off: number;

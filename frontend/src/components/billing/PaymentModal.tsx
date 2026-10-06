@@ -36,6 +36,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     subtotal, 
     discountVal, 
     taxAmount, 
+    cgstAmount,
+    sgstAmount,
     grandTotal, 
     tabs, 
     activeTabId, 
@@ -228,6 +230,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         discount_amount: item.discount_amount,
         tax_percent: item.tax_percent,
         tax_amount: item.tax_amount,
+        cgst_percent: item.cgst_percent ?? (item.tax_percent ? item.tax_percent / 2 : 0),
+        cgst_amount: item.cgst_amount ?? 0,
+        sgst_percent: item.sgst_percent ?? (item.tax_percent ? item.tax_percent / 2 : 0),
+        sgst_amount: item.sgst_amount ?? 0,
         total_price: item.total_price,
         is_unlisted: item.is_unlisted
       }));
@@ -272,6 +278,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         discount_amount: discountVal(),
         discount_type: currentTab?.discountType || 'FLAT',
         tax_amount: taxAmount(),
+        cgst_amount: cgstAmount(),
+        sgst_amount: sgstAmount(),
         extra_charges_amount: extraCharges.totalCharges,
         extra_charges_breakdown: extraCharges.breakdownJson,
         round_off: 0,

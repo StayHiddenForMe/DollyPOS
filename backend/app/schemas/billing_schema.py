@@ -16,6 +16,10 @@ class InvoiceItemCreate(BaseModel):
     discount_amount: float = 0.0
     tax_percent: float = 0.0
     tax_amount: float = 0.0
+    cgst_percent: float = 0.0
+    cgst_amount: float = 0.0
+    sgst_percent: float = 0.0
+    sgst_amount: float = 0.0
     total_price: float
     is_unlisted: bool = False
 
@@ -32,6 +36,10 @@ class InvoiceItemOut(BaseModel):
     discount_amount: float
     tax_percent: float
     tax_amount: float
+    cgst_percent: Optional[float] = 0.0
+    cgst_amount: Optional[float] = 0.0
+    sgst_percent: Optional[float] = 0.0
+    sgst_amount: Optional[float] = 0.0
     total_price: float
     is_unlisted: bool
 
@@ -61,6 +69,8 @@ class InvoiceCreate(BaseModel):
     discount_amount: float = 0.0
     discount_type: str = "FLAT"
     tax_amount: float = 0.0
+    cgst_amount: float = 0.0
+    sgst_amount: float = 0.0
     extra_charges_amount: float = 0.0
     extra_charges_breakdown: Optional[str] = None
     round_off: float = 0.0
@@ -87,6 +97,8 @@ class InvoiceOut(BaseModel):
     discount_amount: float
     discount_type: str
     tax_amount: float
+    cgst_amount: Optional[float] = 0.0
+    sgst_amount: Optional[float] = 0.0
     extra_charges_amount: float = 0.0
     extra_charges_breakdown: Optional[str] = None
     round_off: float

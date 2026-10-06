@@ -41,6 +41,12 @@ class ReturnItem(Base):
     barcode = Column(String(50), nullable=True)
     quantity = Column(Integer, default=1, nullable=False)
     refund_price = Column(Float, default=0.0, nullable=False)
+    tax_percent = Column(Float, default=0.0, nullable=False)
+    tax_amount = Column(Float, default=0.0, nullable=False)
+    cgst_percent = Column(Float, default=0.0, nullable=False)
+    cgst_amount = Column(Float, default=0.0, nullable=False)
+    sgst_percent = Column(Float, default=0.0, nullable=False)
+    sgst_amount = Column(Float, default=0.0, nullable=False)
     is_defective = Column(Boolean, default=False, nullable=False)  # Restock vs Damaged pool
     restocked = Column(Boolean, default=True, nullable=False)
 

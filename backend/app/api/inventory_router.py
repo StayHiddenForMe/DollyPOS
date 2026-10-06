@@ -224,6 +224,22 @@ def create_product(
 
     product_dict = product_in.model_dump(exclude={"category_name", "subcategory_name"})
     product_dict["margin_percent"] = margin_percent
+
+    # Ensure GST, CGST, and SGST consistency
+    gst_val = product_dict.get("gst_percent", 0.0) or 0.0
+    cgst_val = product_dict.get("cgst_percent", 0.0) or 0.0
+    sgst_val = product_dict.get("sgst_percent", 0.0) or 0.0
+
+    if gst_val > 0 and cgst_val == 0.0 and sgst_val == 0.0:
+        cgst_val = round(gst_val / 2.0, 2)
+        sgst_val = round(gst_val / 2.0, 2)
+    elif (cgst_val > 0 or sgst_val > 0):
+        gst_val = round(cgst_val + sgst_val, 2)
+
+    product_dict["gst_percent"] = gst_val
+    product_dict["cgst_percent"] = cgst_val
+    product_dict["sgst_percent"] = sgst_val
+
     product = Product(**product_dict)
     
     db.add(product)
@@ -304,6 +320,8 @@ def create_multi_size_products(
             selling_price=payload.selling_price,
             mrp=payload.mrp or 0.0,
             gst_percent=payload.gst_percent,
+            cgst_percent=payload.cgst_percent if (payload.cgst_percent or payload.sgst_percent) else round(payload.gst_percent / 2.0, 2),
+            sgst_percent=payload.sgst_percent if (payload.cgst_percent or payload.sgst_percent) else round(payload.gst_percent / 2.0, 2),
             margin_percent=margin_percent,
             stock_quantity=payload.stock_per_size,
             min_stock_alert=payload.min_stock_alert,
@@ -378,6 +396,16 @@ def update_product(
 
     if p_price > 0 and s_price > 0:
         update_data["margin_percent"] = round(((s_price - p_price) / p_price) * 100, 2)
+
+    # Sync GST / CGST / SGST if any is updated
+    if "cgst_percent" in update_data or "sgst_percent" in update_data:
+        c_val = update_data.get("cgst_percent", product.cgst_percent or 0.0)
+        s_val = update_data.get("sgst_percent", product.sgst_percent or 0.0)
+        update_data["gst_percent"] = round((c_val or 0.0) + (s_val or 0.0), 2)
+    elif "gst_percent" in update_data:
+        g_val = update_data["gst_percent"] or 0.0
+        update_data["cgst_percent"] = round(g_val / 2.0, 2)
+        update_data["sgst_percent"] = round(g_val / 2.0, 2)
 
     price_changed = (p_price != p_price_old) or (s_price != s_price_old) or (mrp_new != mrp_old)
 
@@ -574,7 +602,9 @@ def export_inventory_excel(
             "Margin (%)": p.margin_percent,
             "Stock Quantity": p.stock_quantity,
             "Min Alert Qty": p.min_stock_alert,
-            "GST (%)": p.gst_percent
+            "GST (%)": p.gst_percent,
+            "CGST (%)": getattr(p, 'cgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0),
+            "SGST (%)": getattr(p, 'sgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0)
         })
 
     import pandas as pd
@@ -679,6 +709,13 @@ async def import_inventory_excel(
         stock_qty = safe_int(row.get("stock_quantity", row.get("stock", row.get("qty", 0))))
         min_alert = safe_int(row.get("min_alert_qty", row.get("min_stock_alert", 3)), default=3)
         gst = safe_float(row.get("gst", row.get("gst_percent", 0.0)))
+        cgst = safe_float(row.get("cgst", row.get("cgst_percent", 0.0)))
+        sgst = safe_float(row.get("sgst", row.get("sgst_percent", 0.0)))
+        if gst > 0 and cgst == 0 and sgst == 0:
+            cgst = round(gst / 2.0, 2)
+            sgst = round(gst / 2.0, 2)
+        elif (cgst > 0 or sgst > 0) and gst == 0:
+            gst = round(cgst + sgst, 2)
 
         margin_percent = round(((selling_price - purchase_price) / purchase_price * 100), 2) if purchase_price > 0 else 0.0
 
@@ -700,6 +737,8 @@ async def import_inventory_excel(
             existing.stock_quantity = stock_qty
             existing.min_stock_alert = min_alert
             existing.gst_percent = gst
+            existing.cgst_percent = cgst
+            existing.sgst_percent = sgst
             existing.margin_percent = margin_percent
             updated_count += 1
         else:
@@ -719,6 +758,8 @@ async def import_inventory_excel(
                 selling_price=selling_price,
                 mrp=mrp,
                 gst_percent=gst,
+                cgst_percent=cgst,
+                sgst_percent=sgst,
                 margin_percent=margin_percent,
                 stock_quantity=stock_qty,
                 min_stock_alert=min_alert,

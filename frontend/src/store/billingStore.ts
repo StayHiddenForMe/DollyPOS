@@ -23,6 +23,8 @@ interface BillingState {
   subtotal: () => number;
   discountVal: () => number;
   taxAmount: () => number;
+  cgstAmount: () => number;
+  sgstAmount: () => number;
   grandTotal: () => number;
   
   // Actions
@@ -91,6 +93,16 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     return items.reduce((sum, item) => sum + (item.tax_amount * item.quantity), 0);
   },
 
+  cgstAmount: () => {
+    const items = get().activeItems();
+    return items.reduce((sum, item) => sum + ((item.cgst_amount || 0) * item.quantity), 0);
+  },
+
+  sgstAmount: () => {
+    const items = get().activeItems();
+    return items.reduce((sum, item) => sum + ((item.sgst_amount || 0) * item.quantity), 0);
+  },
+
   grandTotal: () => {
     const sub = get().subtotal();
     const disc = get().discountVal();
@@ -122,7 +134,13 @@ export const useBillingStore = create<BillingState>((set, get) => ({
         };
       } else {
         // Add new item row
-        const taxVal = (product.selling_price * (product.gst_percent || 0)) / 100;
+        const cgstPct = product.cgst_percent !== undefined ? product.cgst_percent : ((product.gst_percent || 0) / 2);
+        const sgstPct = product.sgst_percent !== undefined ? product.sgst_percent : ((product.gst_percent || 0) / 2);
+        const taxPct = product.gst_percent !== undefined ? product.gst_percent : (cgstPct + sgstPct);
+        const cgstVal = (product.selling_price * cgstPct) / 100;
+        const sgstVal = (product.selling_price * sgstPct) / 100;
+        const taxVal = cgstVal + sgstVal;
+
         const newItem: CartItem = {
           cart_item_id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           product_id: product.id,
@@ -135,8 +153,12 @@ export const useBillingStore = create<BillingState>((set, get) => ({
           unit_price: product.selling_price,
           cost_price: product.purchase_price || 0,
           discount_amount: 0,
-          tax_percent: product.gst_percent || 0,
+          tax_percent: taxPct,
           tax_amount: taxVal,
+          cgst_percent: cgstPct,
+          cgst_amount: cgstVal,
+          sgst_percent: sgstPct,
+          sgst_amount: sgstVal,
           total_price: product.selling_price * quantity,
           is_unlisted: false,
           max_stock: product.stock_quantity
@@ -211,10 +233,20 @@ export const useBillingStore = create<BillingState>((set, get) => ({
       const currentTab = state.tabs[activeIndex];
       const updatedItems = currentTab.items.map(item => {
         if (item.cart_item_id === cartItemId) {
+          const validPrice = Math.max(0, newPrice);
+          const cgstPct = item.cgst_percent !== undefined ? item.cgst_percent : ((item.tax_percent || 0) / 2);
+          const sgstPct = item.sgst_percent !== undefined ? item.sgst_percent : ((item.tax_percent || 0) / 2);
+          const cgstVal = (validPrice * cgstPct) / 100;
+          const sgstVal = (validPrice * sgstPct) / 100;
+          const taxVal = cgstVal + sgstVal;
+
           return {
             ...item,
-            unit_price: Math.max(0, newPrice),
-            total_price: (Math.max(0, newPrice) - item.discount_amount) * item.quantity
+            unit_price: validPrice,
+            cgst_amount: cgstVal,
+            sgst_amount: sgstVal,
+            tax_amount: taxVal,
+            total_price: (validPrice - item.discount_amount) * item.quantity
           };
         }
         return item;

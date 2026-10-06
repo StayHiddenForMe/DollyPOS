@@ -9,6 +9,12 @@ class ReturnItemCreate(BaseModel):
     barcode: Optional[str] = None
     quantity: int = 1
     refund_price: float
+    tax_percent: float = 0.0
+    tax_amount: float = 0.0
+    cgst_percent: float = 0.0
+    cgst_amount: float = 0.0
+    sgst_percent: float = 0.0
+    sgst_amount: float = 0.0
     is_defective: bool = False
     restocked: bool = True
 
@@ -19,6 +25,12 @@ class ReturnItemOut(BaseModel):
     barcode: Optional[str] = None
     quantity: int
     refund_price: float
+    tax_percent: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    cgst_percent: Optional[float] = 0.0
+    cgst_amount: Optional[float] = 0.0
+    sgst_percent: Optional[float] = 0.0
+    sgst_amount: Optional[float] = 0.0
     is_defective: bool
     restocked: bool
 

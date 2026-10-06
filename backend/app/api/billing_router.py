@@ -112,6 +112,13 @@ def create_invoice(
         final_customer_name = clean_name or ("Customer" if clean_phone else None)
         final_customer_phone = clean_phone
 
+    # Resolve invoice-level CGST and SGST
+    calc_cgst_amount = getattr(invoice_in, 'cgst_amount', 0.0) or 0.0
+    calc_sgst_amount = getattr(invoice_in, 'sgst_amount', 0.0) or 0.0
+    if (calc_cgst_amount == 0.0 and calc_sgst_amount == 0.0) and invoice_in.tax_amount > 0:
+        calc_cgst_amount = round(invoice_in.tax_amount / 2.0, 2)
+        calc_sgst_amount = round(invoice_in.tax_amount - calc_cgst_amount, 2)
+
     invoice = Invoice(
         bill_number=bill_no,
         customer_id=customer_id,
@@ -122,6 +129,8 @@ def create_invoice(
         discount_amount=invoice_in.discount_amount,
         discount_type=invoice_in.discount_type,
         tax_amount=invoice_in.tax_amount,
+        cgst_amount=calc_cgst_amount,
+        sgst_amount=calc_sgst_amount,
         extra_charges_amount=invoice_in.extra_charges_amount,
         extra_charges_breakdown=invoice_in.extra_charges_breakdown,
         round_off=invoice_in.round_off,
@@ -140,7 +149,21 @@ def create_invoice(
     db.flush()
 
     # 2. Process Items & Deduct Stock
+    sum_items_cgst = 0.0
+    sum_items_sgst = 0.0
     for item in invoice_in.items:
+        i_cgst_pct = getattr(item, 'cgst_percent', 0.0) or (item.tax_percent / 2.0 if item.tax_percent else 0.0)
+        i_sgst_pct = getattr(item, 'sgst_percent', 0.0) or (item.tax_percent / 2.0 if item.tax_percent else 0.0)
+        i_cgst_amt = getattr(item, 'cgst_amount', 0.0) or 0.0
+        i_sgst_amt = getattr(item, 'sgst_amount', 0.0) or 0.0
+
+        if (i_cgst_amt == 0.0 and i_sgst_amt == 0.0) and item.tax_amount > 0:
+            i_cgst_amt = round((item.unit_price * i_cgst_pct / 100.0) * item.quantity, 2)
+            i_sgst_amt = round((item.unit_price * i_sgst_pct / 100.0) * item.quantity, 2)
+
+        sum_items_cgst += i_cgst_amt
+        sum_items_sgst += i_sgst_amt
+
         inv_item = InvoiceItem(
             invoice_id=invoice.id,
             product_id=item.product_id,
@@ -155,6 +178,10 @@ def create_invoice(
             discount_amount=item.discount_amount,
             tax_percent=item.tax_percent,
             tax_amount=item.tax_amount,
+            cgst_percent=i_cgst_pct,
+            cgst_amount=i_cgst_amt,
+            sgst_percent=i_sgst_pct,
+            sgst_amount=i_sgst_amt,
             total_price=item.total_price,
             is_unlisted=item.is_unlisted
         )
@@ -165,6 +192,10 @@ def create_invoice(
             if prod:
                 prod.stock_quantity = max(0, prod.stock_quantity - item.quantity)
                 prod.last_sold_at = datetime.utcnow()
+
+    if sum_items_cgst > 0 or sum_items_sgst > 0:
+        invoice.cgst_amount = round(sum_items_cgst, 2)
+        invoice.sgst_amount = round(sum_items_sgst, 2)
 
     # 3. Process Payments (Single mode or multi-tender SPLIT)
     if invoice_in.payments and len(invoice_in.payments) > 0:

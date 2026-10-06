@@ -32,6 +32,8 @@ class Invoice(Base):
     discount_amount = Column(Float, default=0.0, nullable=False)
     discount_type = Column(String(20), default="FLAT", nullable=False)  # 'FLAT' or 'PERCENT'
     tax_amount = Column(Float, default=0.0, nullable=False)
+    cgst_amount = Column(Float, default=0.0, nullable=False)
+    sgst_amount = Column(Float, default=0.0, nullable=False)
     extra_charges_amount = Column(Float, default=0.0, nullable=False)
     extra_charges_breakdown = Column(Text, nullable=True)
     round_off = Column(Float, default=0.0, nullable=False)
@@ -88,6 +90,10 @@ class InvoiceItem(Base):
     discount_amount = Column(Float, default=0.0, nullable=False)
     tax_percent = Column(Float, default=0.0, nullable=False)
     tax_amount = Column(Float, default=0.0, nullable=False)
+    cgst_percent = Column(Float, default=0.0, nullable=False)
+    cgst_amount = Column(Float, default=0.0, nullable=False)
+    sgst_percent = Column(Float, default=0.0, nullable=False)
+    sgst_amount = Column(Float, default=0.0, nullable=False)
     total_price = Column(Float, default=0.0, nullable=False)
     
     # Special flags

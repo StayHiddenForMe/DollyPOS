@@ -60,6 +60,11 @@ export const CartItemRow: React.FC<CartItemRowProps> = ({ item, index, isSelecte
                 {item.color}
               </span>
             )}
+            {item.tax_percent > 0 && (
+              <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 px-1.5 py-0.2 rounded text-[10px] font-bold font-mono">
+                GST {item.tax_percent}% (C:{item.cgst_percent ?? (item.tax_percent / 2)}% S:{item.sgst_percent ?? (item.tax_percent / 2)}%)
+              </span>
+            )}
           </div>
         </div>
       </td>
