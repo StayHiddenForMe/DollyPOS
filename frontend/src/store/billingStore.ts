@@ -90,17 +90,20 @@ export const useBillingStore = create<BillingState>((set, get) => ({
 
   taxAmount: () => {
     const items = get().activeItems();
-    return items.reduce((sum, item) => sum + (item.tax_amount * item.quantity), 0);
+    const sum = items.reduce((acc, item) => acc + (item.tax_amount * item.quantity), 0);
+    return Math.round(sum * 100) / 100;
   },
 
   cgstAmount: () => {
     const items = get().activeItems();
-    return items.reduce((sum, item) => sum + ((item.cgst_amount || 0) * item.quantity), 0);
+    const sum = items.reduce((acc, item) => acc + ((item.cgst_amount || 0) * item.quantity), 0);
+    return Math.round(sum * 100) / 100;
   },
 
   sgstAmount: () => {
     const items = get().activeItems();
-    return items.reduce((sum, item) => sum + ((item.sgst_amount || 0) * item.quantity), 0);
+    const sum = items.reduce((acc, item) => acc + ((item.sgst_amount || 0) * item.quantity), 0);
+    return Math.round(sum * 100) / 100;
   },
 
   grandTotal: () => {
@@ -137,9 +140,9 @@ export const useBillingStore = create<BillingState>((set, get) => ({
         const cgstPct = product.cgst_percent !== undefined ? product.cgst_percent : ((product.gst_percent || 0) / 2);
         const sgstPct = product.sgst_percent !== undefined ? product.sgst_percent : ((product.gst_percent || 0) / 2);
         const taxPct = product.gst_percent !== undefined ? product.gst_percent : (cgstPct + sgstPct);
-        const cgstVal = (product.selling_price * cgstPct) / 100;
-        const sgstVal = (product.selling_price * sgstPct) / 100;
-        const taxVal = cgstVal + sgstVal;
+        const cgstVal = Math.round(((product.selling_price * cgstPct) / 100) * 100) / 100;
+        const sgstVal = Math.round(((product.selling_price * sgstPct) / 100) * 100) / 100;
+        const taxVal = Math.round((cgstVal + sgstVal) * 100) / 100;
 
         const newItem: CartItem = {
           cart_item_id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -236,9 +239,9 @@ export const useBillingStore = create<BillingState>((set, get) => ({
           const validPrice = Math.max(0, newPrice);
           const cgstPct = item.cgst_percent !== undefined ? item.cgst_percent : ((item.tax_percent || 0) / 2);
           const sgstPct = item.sgst_percent !== undefined ? item.sgst_percent : ((item.tax_percent || 0) / 2);
-          const cgstVal = (validPrice * cgstPct) / 100;
-          const sgstVal = (validPrice * sgstPct) / 100;
-          const taxVal = cgstVal + sgstVal;
+          const cgstVal = Math.round(((validPrice * cgstPct) / 100) * 100) / 100;
+          const sgstVal = Math.round(((validPrice * sgstPct) / 100) * 100) / 100;
+          const taxVal = Math.round((cgstVal + sgstVal) * 100) / 100;
 
           return {
             ...item,

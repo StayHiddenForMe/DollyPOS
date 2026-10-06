@@ -45,13 +45,15 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
 
   const cgstVal = receiptData.cgst_amount !== undefined && receiptData.cgst_amount !== null
     ? Number(receiptData.cgst_amount).toFixed(2)
-    : (receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00');
+    : (receiptData.tax_amount ? (Number(receiptData.tax_amount) / 2).toFixed(2) : '0.00');
 
   const sgstVal = receiptData.sgst_amount !== undefined && receiptData.sgst_amount !== null
     ? Number(receiptData.sgst_amount).toFixed(2)
-    : (receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00');
+    : (receiptData.tax_amount ? (Number(receiptData.tax_amount) / 2).toFixed(2) : '0.00');
 
-  const halfTax = receiptData.tax_amount ? (receiptData.tax_amount / 2).toFixed(2) : '0.00';
+  const totalTaxVal = receiptData.tax_amount !== undefined && receiptData.tax_amount !== null
+    ? Number(receiptData.tax_amount).toFixed(2)
+    : (Number(cgstVal) + Number(sgstVal)).toFixed(2);
 
   const handleShareWhatsApp = () => {
     const phone = receiptData.customer_phone ? receiptData.customer_phone.replace(/\D/g, '') : '';
@@ -231,7 +233,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>Total GST:</span>
-                        <span>₹{receiptData.tax_amount}</span>
+                        <span>₹{totalTaxVal}</span>
                       </div>
                     </>
                   )}

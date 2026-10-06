@@ -218,6 +218,9 @@ class BackupService:
                     "min_stock_alert": p.min_stock_alert,
                     "speed_dial_code": p.speed_dial_code,
                     "is_speed_dial": p.is_speed_dial,
+                    "gst_percent": p.gst_percent,
+                    "cgst_percent": getattr(p, 'cgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0),
+                    "sgst_percent": getattr(p, 'sgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0),
                     "is_active": p.is_active
                 }
                 for p in db.query(Product).options(joinedload(Product.category), joinedload(Product.subcategory)).all()
@@ -323,6 +326,8 @@ class BackupService:
                     "discount_amount": inv.discount_amount,
                     "discount_type": inv.discount_type,
                     "tax_amount": inv.tax_amount,
+                    "cgst_amount": getattr(inv, 'cgst_amount', 0.0),
+                    "sgst_amount": getattr(inv, 'sgst_amount', 0.0),
                     "extra_charges_amount": getattr(inv, 'extra_charges_amount', 0.0),
                     "extra_charges_breakdown": getattr(inv, 'extra_charges_breakdown', None),
                     "round_off": inv.round_off,
@@ -348,7 +353,12 @@ class BackupService:
                             "unit_price": item.unit_price,
                             "cost_price": item.cost_price,
                             "discount_amount": item.discount_amount,
+                            "tax_percent": getattr(item, 'tax_percent', 0.0),
                             "tax_amount": item.tax_amount,
+                            "cgst_percent": getattr(item, 'cgst_percent', 0.0),
+                            "cgst_amount": getattr(item, 'cgst_amount', 0.0),
+                            "sgst_percent": getattr(item, 'sgst_percent', 0.0),
+                            "sgst_amount": getattr(item, 'sgst_amount', 0.0),
                             "total_price": item.total_price,
                             "is_unlisted": item.is_unlisted
                         }
@@ -383,6 +393,12 @@ class BackupService:
                             "barcode": ritem.barcode,
                             "quantity": ritem.quantity,
                             "refund_price": ritem.refund_price,
+                            "tax_percent": getattr(ritem, 'tax_percent', 0.0),
+                            "tax_amount": getattr(ritem, 'tax_amount', 0.0),
+                            "cgst_percent": getattr(ritem, 'cgst_percent', 0.0),
+                            "cgst_amount": getattr(ritem, 'cgst_amount', 0.0),
+                            "sgst_percent": getattr(ritem, 'sgst_percent', 0.0),
+                            "sgst_amount": getattr(ritem, 'sgst_amount', 0.0),
                             "is_defective": ritem.is_defective,
                             "restocked": ritem.restocked
                         }
@@ -868,6 +884,10 @@ class BackupService:
             sc_name = (p_data.get("subcategory_name") or "").lower()
             sc_id = subcat_map.get(f"{c_id}_{sc_name}") or p_data.get("subcategory_id")
 
+            p_gst = float(p_data.get("gst_percent") or 0.0)
+            p_cgst = float(p_data.get("cgst_percent") or (p_gst / 2.0 if p_gst else 0.0))
+            p_sgst = float(p_data.get("sgst_percent") or (p_gst / 2.0 if p_gst else 0.0))
+
             prod = Product(
                 barcode=barcode,
                 sku=p_data.get("sku") or barcode,
@@ -884,6 +904,9 @@ class BackupService:
                 selling_price=float(p_data.get("selling_price") or 0.0),
                 mrp=float(p_data.get("mrp") or p_data.get("selling_price") or 0.0),
                 margin_percent=float(p_data.get("margin_percent") or 0.0),
+                gst_percent=p_gst,
+                cgst_percent=p_cgst,
+                sgst_percent=p_sgst,
                 stock_quantity=int(p_data.get("stock_quantity") or 0),
                 damaged_quantity=int(p_data.get("damaged_quantity") or 0),
                 min_stock_alert=int(p_data.get("min_stock_alert") or 3),
@@ -981,6 +1004,10 @@ class BackupService:
             except Exception:
                 inv_pay_status = PaymentStatus.PAID
 
+            tax_amt = float(inv_data.get("tax_amount") or 0.0)
+            cgst_amt = float(inv_data.get("cgst_amount") or (tax_amt / 2.0 if tax_amt else 0.0))
+            sgst_amt = float(inv_data.get("sgst_amount") or (tax_amt / 2.0 if tax_amt else 0.0))
+
             inv = Invoice(
                 bill_number=b_num,
                 customer_id=c_id,
@@ -989,7 +1016,9 @@ class BackupService:
                 subtotal=float(inv_data.get("subtotal") or 0.0),
                 discount_amount=float(inv_data.get("discount_amount") or 0.0),
                 discount_type=inv_data.get("discount_type") or "FIXED",
-                tax_amount=float(inv_data.get("tax_amount") or 0.0),
+                tax_amount=tax_amt,
+                cgst_amount=cgst_amt,
+                sgst_amount=sgst_amt,
                 extra_charges_amount=float(inv_data.get("extra_charges_amount") or 0.0),
                 extra_charges_breakdown=inv_data.get("extra_charges_breakdown"),
                 round_off=float(inv_data.get("round_off") or 0.0),
@@ -1012,6 +1041,13 @@ class BackupService:
 
             for itm in inv_data.get("items", []):
                 p_id = prod_id_by_barcode.get(itm.get("barcode") or "")
+                i_tax_pct = float(itm.get("tax_percent") or 0.0)
+                i_tax_amt = float(itm.get("tax_amount") or 0.0)
+                i_cgst_pct = float(itm.get("cgst_percent") or (i_tax_pct / 2.0 if i_tax_pct else 0.0))
+                i_cgst_amt = float(itm.get("cgst_amount") or (i_tax_amt / 2.0 if i_tax_amt else 0.0))
+                i_sgst_pct = float(itm.get("sgst_percent") or (i_tax_pct / 2.0 if i_tax_pct else 0.0))
+                i_sgst_amt = float(itm.get("sgst_amount") or (i_tax_amt / 2.0 if i_tax_amt else 0.0))
+
                 inv_item = InvoiceItem(
                     invoice_id=inv.id,
                     product_id=p_id,
@@ -1024,7 +1060,12 @@ class BackupService:
                     unit_price=float(itm.get("unit_price") or 0.0),
                     cost_price=float(itm.get("cost_price") or 0.0),
                     discount_amount=float(itm.get("discount_amount") or 0.0),
-                    tax_amount=float(itm.get("tax_amount") or 0.0),
+                    tax_percent=i_tax_pct,
+                    tax_amount=i_tax_amt,
+                    cgst_percent=i_cgst_pct,
+                    cgst_amount=i_cgst_amt,
+                    sgst_percent=i_sgst_pct,
+                    sgst_amount=i_sgst_amt,
                     total_price=float(itm.get("total_price") or 0.0),
                     is_unlisted=bool(itm.get("is_unlisted", False))
                 )
@@ -1078,6 +1119,13 @@ class BackupService:
 
             for ritem in ret_data.get("items", []):
                 p_id = prod_id_by_barcode.get(ritem.get("barcode") or "")
+                r_tax_pct = float(ritem.get("tax_percent") or 0.0)
+                r_tax_amt = float(ritem.get("tax_amount") or 0.0)
+                r_cgst_pct = float(ritem.get("cgst_percent") or (r_tax_pct / 2.0 if r_tax_pct else 0.0))
+                r_cgst_amt = float(ritem.get("cgst_amount") or (r_tax_amt / 2.0 if r_tax_amt else 0.0))
+                r_sgst_pct = float(ritem.get("sgst_percent") or (r_tax_pct / 2.0 if r_tax_pct else 0.0))
+                r_sgst_amt = float(ritem.get("sgst_amount") or (r_tax_amt / 2.0 if r_tax_amt else 0.0))
+
                 ro_item = ReturnItem(
                     return_id=ret_order.id,
                     product_id=p_id,
@@ -1085,6 +1133,12 @@ class BackupService:
                     barcode=ritem.get("barcode"),
                     quantity=int(ritem.get("quantity") or 1),
                     refund_price=float(ritem.get("refund_price") or ritem.get("refund_amount") or ritem.get("unit_price") or 0.0),
+                    tax_percent=r_tax_pct,
+                    tax_amount=r_tax_amt,
+                    cgst_percent=r_cgst_pct,
+                    cgst_amount=r_cgst_amt,
+                    sgst_percent=r_sgst_pct,
+                    sgst_amount=r_sgst_amt,
                     is_defective=bool(ritem.get("is_defective", False)),
                     restocked=bool(ritem.get("restocked", True))
                 )

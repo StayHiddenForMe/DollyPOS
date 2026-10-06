@@ -177,11 +177,11 @@ def create_invoice(
             cost_price=item.cost_price,
             discount_amount=item.discount_amount,
             tax_percent=item.tax_percent,
-            tax_amount=item.tax_amount,
-            cgst_percent=i_cgst_pct,
-            cgst_amount=i_cgst_amt,
-            sgst_percent=i_sgst_pct,
-            sgst_amount=i_sgst_amt,
+            tax_amount=round(item.tax_amount or 0.0, 2),
+            cgst_percent=round(i_cgst_pct or 0.0, 2),
+            cgst_amount=round(i_cgst_amt or 0.0, 2),
+            sgst_percent=round(i_sgst_pct or 0.0, 2),
+            sgst_amount=round(i_sgst_amt or 0.0, 2),
             total_price=item.total_price,
             is_unlisted=item.is_unlisted
         )
@@ -196,6 +196,11 @@ def create_invoice(
     if sum_items_cgst > 0 or sum_items_sgst > 0:
         invoice.cgst_amount = round(sum_items_cgst, 2)
         invoice.sgst_amount = round(sum_items_sgst, 2)
+        invoice.tax_amount = round(sum_items_cgst + sum_items_sgst, 2)
+    else:
+        invoice.tax_amount = round(invoice.tax_amount or 0.0, 2)
+        invoice.cgst_amount = round(calc_cgst_amount, 2)
+        invoice.sgst_amount = round(calc_sgst_amount, 2)
 
     # 3. Process Payments (Single mode or multi-tender SPLIT)
     if invoice_in.payments and len(invoice_in.payments) > 0:
