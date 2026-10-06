@@ -5,10 +5,25 @@ export interface VersionRelease {
   highlights: string[];
 }
 
-export const APP_VERSION = 'v1.5.0';
-export const RELEASE_DATE = '2026-09-27';
+export const APP_VERSION = 'v1.6.0';
+export const RELEASE_DATE = '2026-10-06';
 
 export const VERSION_HISTORY: VersionRelease[] = [
+  {
+    version: 'v1.6.0',
+    date: '2026-10-06',
+    title: 'Custom CGST & SGST Tax Engine, Itemized Thermal Receipts & Returns Tax Preservation',
+    highlights: [
+      'Interactive CGST & SGST rate configuration in Add/Edit Product & Multi-Size generators',
+      'Configurable tax rates (0%, 2%, 5%, 12%, 18%, 28%) with instant 50/50 split or manual custom split',
+      'Live item-level GST rate badges (GST X% [C:Y% S:Z%]) across Inventory catalog and Billing cart',
+      'Real-time calculation and financial breakdown of CGST, SGST, and Total Tax in Billing checkout',
+      'Full itemized CGST & SGST breakdown printed on 80mm/58mm thermal receipts',
+      'Accurate tax preservation and calculation for Return items and Exchange replacement bills',
+      'Zero-hang application exit with automated background process and browser synchronization',
+      'Automated installer process-terminator preventing locked file permission issues on upgrades'
+    ]
+  },
   {
     version: 'v1.5.0',
     date: '2026-09-27',

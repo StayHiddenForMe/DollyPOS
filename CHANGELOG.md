@@ -2,6 +2,17 @@
 
 All notable changes to the Dolly POS application will be documented in this file.
 
+## [v1.6.0] - 2026-10-06
+### Added & Enhanced
+- **Custom CGST & SGST Tax Engine**: Full manual and 50/50 split controls for GST rates (0%, 2%, 5%, 12%, 18%, 28%, or custom) when adding or editing products (single & multi-size variant generator).
+- **Item-Level GST Badges**: Visual indicator tags (`GST X% (C:Y% S:Z%)`) rendered in the Inventory catalog and Billing cart item rows.
+- **Billing Checkout GST Breakdown**: Real-time financial summary displaying CGST, SGST, and Total GST with separate database persistence across invoices.
+- **Itemized Thermal Receipts**: Printed 80mm and 58mm thermal receipts now clearly feature individual CGST and SGST line items and taxable values.
+- **Return & Exchange Tax Preservation**: Accurately tracks, calculates, and prints CGST and SGST on return vouchers and exchange replacement bills.
+- **Zero-Hang Process Termination**: Fixed exit hanging on the top-right close button by synchronizing Chrome window termination and immediately clearing background worker threads.
+- **Installer Upgrade Engine**: Upgrades now terminate any running Dolly POS instances automatically to avoid locked DLLs and ensure seamless zero-downtime updates.
+- **Desktop Cache-Busting**: Configured no-cache headers and disabled HTTP caching in Chrome app mode to guarantee the latest UI assets load immediately.
+
 ## [v1.5.0] - 2026-09-27
 ### Added & Redesigned
 - **Unified Backups & 1-Click Disaster Recovery Hub**: Merged separate Cloud and Local backup lists into a single, scrollable table with real-time filters (`All Backups`, `Google Drive Cloud`, `Local Disk`), search bar, file size, timestamp, and location indicators (`Cloud + Local Disk`, `Google Drive Cloud`, `Local Disk Storage`).

@@ -71,14 +71,24 @@ if os.path.exists(FRONTEND_DIST_DIR):
     if os.path.exists(assets_dir):
         api_app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+    NO_CACHE_HEADERS = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+
+    @api_app.get("/")
+    async def serve_root():
+        return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"), headers=NO_CACHE_HEADERS)
+
     @api_app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         if full_path.startswith("api") or full_path == "health" or full_path.startswith("docs") or full_path.startswith("openapi.json"):
             return None
         file_path = os.path.join(FRONTEND_DIST_DIR, full_path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
+        if os.path.exists(file_path) and os.path.isfile(file_path) and not file_path.endswith("index.html"):
             return FileResponse(file_path)
-        return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"))
+        return FileResponse(os.path.join(FRONTEND_DIST_DIR, "index.html"), headers=NO_CACHE_HEADERS)
 
 # -------------------------------------------------------------
 # Heartbeat & Liveness State
@@ -209,6 +219,7 @@ def open_browser(server=None):
                 f"--user-data-dir={profile_dir}",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--disable-http-cache",
                 "--start-maximized",
                 "--app=http://127.0.0.1:8000"
             ])
@@ -271,7 +282,9 @@ def main():
     finally:
         log_boot("Running perform_on_close_sync()...")
         perform_on_close_sync()
-        log_boot("perform_on_close_sync() finished.")
+        log_boot("perform_on_close_sync() finished. Terminating process cleanly.")
+        time.sleep(0.2)
+        os._exit(0)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
