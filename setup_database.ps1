@@ -229,6 +229,34 @@ if ($checkDb -match "1") {
     }
 }
 
+# 7b. Initialize Database Tables, Schemas & Seed Data
+Write-Host ""
+Write-Host "[STEP 5b/5] Initializing Database Tables, Schemas & Starter Data..." -ForegroundColor Cyan
+
+$pyCandidates = @(
+    (Join-Path $PSScriptRoot "backend\venv\Scripts\python.exe"),
+    (Join-Path $PSScriptRoot "venv\Scripts\python.exe"),
+    (Join-Path (Split-Path -Path $PSScriptRoot -Parent) "backend\venv\Scripts\python.exe")
+)
+$chosenPy = $null
+foreach ($cand in $pyCandidates) {
+    if (Test-Path $cand) { $chosenPy = $cand; break }
+}
+if (-not $chosenPy) {
+    $sysPy = Get-Command python -ErrorAction SilentlyContinue
+    if ($sysPy) { $chosenPy = $sysPy.Source }
+}
+
+$initPy = Join-Path $PSScriptRoot "scripts\init_database.py"
+if (-not (Test-Path $initPy)) {
+    $initPy = Join-Path (Split-Path -Path $PSScriptRoot -Parent) "scripts\init_database.py"
+}
+
+if ($chosenPy -and (Test-Path $initPy)) {
+    Write-Host "  [*] Generating all 23 database tables and seeding defaults..." -ForegroundColor Yellow
+    & "$chosenPy" "$initPy" --dbname "$dbName" --user "$dbUser" --password "$dbPass" --port "$dbPort" --host "127.0.0.1" --non-interactive
+}
+
 # 8. Persist Database Configuration to .env Files
 Write-Host ""
 Write-Host "Saving configuration settings to environment files (.env)..." -ForegroundColor Cyan
