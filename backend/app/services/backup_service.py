@@ -205,10 +205,16 @@ class BackupService:
                     "subcategory_id": p.subcategory_id,
                     "vendor_code": p.vendor_code,
                     "brand": p.brand,
+                    "gender": p.gender,
+                    "age_group": p.age_group,
                     "size": p.size,
                     "color": p.color,
                     "fabric": p.fabric,
                     "season": p.season,
+                    "tags": p.tags,
+                    "description": p.description,
+                    "manufacture_code": p.manufacture_code,
+                    "location_shelf": p.location_shelf,
                     "purchase_price": p.purchase_price,
                     "selling_price": p.selling_price,
                     "mrp": p.mrp,
@@ -217,6 +223,7 @@ class BackupService:
                     "damaged_quantity": p.damaged_quantity,
                     "min_stock_alert": p.min_stock_alert,
                     "speed_dial_code": p.speed_dial_code,
+                    "speed_dial_color": p.speed_dial_color,
                     "is_speed_dial": p.is_speed_dial,
                     "gst_percent": p.gst_percent,
                     "cgst_percent": getattr(p, 'cgst_percent', 0.0) or (p.gst_percent / 2.0 if p.gst_percent else 0.0),
@@ -234,6 +241,10 @@ class BackupService:
                     "email": c.email,
                     "address": c.address,
                     "city": c.city,
+                    "date_of_birth": c.date_of_birth,
+                    "anniversary_date": c.anniversary_date,
+                    "notes": c.notes,
+                    "favorite_category": c.favorite_category,
                     "credit_balance": c.credit_balance,
                     "total_spend": c.total_spend,
                     "visit_count": c.visit_count,
@@ -270,6 +281,8 @@ class BackupService:
                     "bank_name": v.bank_name,
                     "bank_account_no": v.bank_account_no,
                     "bank_ifsc": v.bank_ifsc,
+                    "bank_holder_name": v.bank_holder_name,
+                    "vendor_upi_id": v.vendor_upi_id,
                     "ledgers": [
                         {
                             "entry_type": vl.entry_type.value if hasattr(vl.entry_type, 'value') else str(vl.entry_type),
@@ -727,7 +740,47 @@ class BackupService:
         imported_invoices = 0
         imported_returns = 0
 
-        # 1. Store Settings: Intentionally preserved untouched per safety rule
+        # 1. Restore Store Settings
+        st_data = data.get("store_settings")
+        if st_data:
+            st = db.query(StoreSettings).first()
+            if not st:
+                st = StoreSettings()
+                db.add(st)
+                db.flush()
+            for k, val in st_data.items():
+                if hasattr(st, k) and val is not None:
+                    # Do not overwrite cloud tokens / secrets if already set locally
+                    if k in ["store_id", "store_token", "store_secret", "google_drive_access_token", "google_drive_refresh_token", "google_drive_token_expires_at"]:
+                        if getattr(st, k, None):
+                            continue
+                    setattr(st, k, val)
+            db.commit()
+
+        # 1b. Restore Users
+        for u_data in data.get("users", []):
+            username = (u_data.get("username") or "").strip()
+            if not username:
+                continue
+            u = db.query(User).filter(User.username == username).first()
+            if not u:
+                from app.core.security import get_password_hash
+                plain_pass = u_data.get("plain_password") or "admin"
+                from app.models.user import UserRole
+                try:
+                    u_role = UserRole(u_data.get("role", "OWNER"))
+                except Exception:
+                    u_role = UserRole.OWNER
+                u = User(
+                    username=username,
+                    full_name=u_data.get("full_name") or username,
+                    role=u_role,
+                    password_hash=get_password_hash(plain_pass),
+                    plain_password=plain_pass,
+                    is_active=bool(u_data.get("is_active", True))
+                )
+                db.add(u)
+        db.commit()
 
         # 2. Restore Categories & Subcategories with in-memory map
         cat_map: Dict[str, int] = {c.name.lower(): c.id for c in db.query(Category.name, Category.id).all()}
@@ -792,7 +845,9 @@ class BackupService:
                     notes=v_data.get("notes"),
                     bank_name=v_data.get("bank_name"),
                     bank_account_no=v_data.get("bank_account_no"),
-                    bank_ifsc=v_data.get("bank_ifsc")
+                    bank_ifsc=v_data.get("bank_ifsc"),
+                    bank_holder_name=v_data.get("bank_holder_name"),
+                    vendor_upi_id=v_data.get("vendor_upi_id")
                 )
                 db.add(vend)
                 db.flush()
@@ -840,7 +895,11 @@ class BackupService:
                     city=c_data.get("city", "Dhule"),
                     credit_balance=float(c_data.get("credit_balance") or 0.0),
                     total_spend=float(c_data.get("total_spend") or 0.0),
-                    visit_count=int(c_data.get("visit_count") or 1)
+                    visit_count=int(c_data.get("visit_count") or 1),
+                    date_of_birth=c_data.get("date_of_birth"),
+                    anniversary_date=c_data.get("anniversary_date"),
+                    notes=c_data.get("notes"),
+                    favorite_category=c_data.get("favorite_category")
                 )
                 db.add(cust)
                 db.flush()
@@ -896,10 +955,16 @@ class BackupService:
                 subcategory_id=sc_id,
                 vendor_code=p_data.get("vendor_code"),
                 brand=p_data.get("brand"),
+                gender=p_data.get("gender"),
+                age_group=p_data.get("age_group"),
                 size=p_data.get("size"),
                 color=p_data.get("color"),
                 fabric=p_data.get("fabric"),
                 season=p_data.get("season"),
+                tags=p_data.get("tags"),
+                description=p_data.get("description"),
+                manufacture_code=p_data.get("manufacture_code"),
+                location_shelf=p_data.get("location_shelf"),
                 purchase_price=float(p_data.get("purchase_price") or 0.0),
                 selling_price=float(p_data.get("selling_price") or 0.0),
                 mrp=float(p_data.get("mrp") or p_data.get("selling_price") or 0.0),
@@ -911,6 +976,7 @@ class BackupService:
                 damaged_quantity=int(p_data.get("damaged_quantity") or 0),
                 min_stock_alert=int(p_data.get("min_stock_alert") or 3),
                 speed_dial_code=p_data.get("speed_dial_code"),
+                speed_dial_color=p_data.get("speed_dial_color", "#3B82F6"),
                 is_speed_dial=bool(p_data.get("is_speed_dial", False)),
                 is_active=bool(p_data.get("is_active", True))
             )
@@ -924,6 +990,26 @@ class BackupService:
 
         # Preload product barcode -> ID map for purchases and invoices
         prod_id_by_barcode = {p[0]: p[1] for p in db.query(Product.barcode, Product.id).all()}
+
+        # 5b. Restore Product Price History
+        for pph_data in data.get("product_price_history", []):
+            p_barcode = pph_data.get("barcode")
+            p_id = prod_id_by_barcode.get(p_barcode) if p_barcode else None
+            if p_id:
+                pph = ProductPriceHistory(
+                    product_id=p_id,
+                    old_purchase_price=pph_data.get("old_purchase_price"),
+                    new_purchase_price=pph_data.get("new_purchase_price"),
+                    old_selling_price=pph_data.get("old_selling_price"),
+                    new_selling_price=pph_data.get("new_selling_price"),
+                    old_mrp=pph_data.get("old_mrp"),
+                    new_mrp=pph_data.get("new_mrp"),
+                    reason=pph_data.get("reason"),
+                    changed_by=pph_data.get("changed_by"),
+                    created_at=parse_iso_datetime(pph_data.get("created_at")) or datetime.utcnow()
+                )
+                db.add(pph)
+        db.commit()
 
         # 6. Restore Purchases & Purchase Items
         existing_purch_numbers = {p[0] for p in db.query(Purchase.purchase_number).all()}
