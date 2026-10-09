@@ -115,6 +115,7 @@ export const ReturnsPage: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [exchangeReceipt, setExchangeReceipt] = useState<any | null>(null);
 
+
   // History State
   const [returnsHistory, setReturnsHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -745,13 +746,18 @@ export const ReturnsPage: React.FC = () => {
       )}
 
       {/* Return & Exchange Thermal Bill Print Modal (Matching Main Thermal Receipt View) */}
-      {exchangeReceipt && (
+      {exchangeReceipt && (() => {
+        const is58mm = settings?.thermal_width === '58mm';
+        const printWidth = is58mm ? '48mm' : '72mm';
+        const pageWidth = is58mm ? '58mm' : 'auto';
+
+        return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none animate-in fade-in duration-150">
           <style>{`
             @media print {
               @page {
                 margin: 0mm !important;
-                size: 80mm auto;
+                size: ${pageWidth};
               }
               html, body {
                 margin: 0 !important;
@@ -774,25 +780,34 @@ export const ReturnsPage: React.FC = () => {
               #printable-voucher {
                 position: absolute !important;
                 left: 0 !important;
+                right: 0 !important;
                 top: 0 !important;
-                margin: 0 !important;
                 width: 100% !important;
-                max-width: 80mm !important;
+                max-width: ${printWidth} !important;
+                margin: 0 auto !important;
                 border: none !important;
                 box-shadow: none !important;
                 padding: 0 1mm 2mm 1mm !important;
-                font-weight: 600 !important;
+                font-weight: 700 !important;
+                -webkit-text-stroke: 0.12px #000000 !important;
                 box-sizing: border-box !important;
+                background: #ffffff !important;
               }
             }
           `}</style>
 
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
-              <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
-                <Printer className="w-4 h-4 text-pink-500" />
-                Return & Exchange Bill (80mm)
-              </h3>
+            <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+              <div>
+                <h3 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                  <Printer className="w-4 h-4 text-pink-500" />
+                  Return & Exchange Bill ({is58mm ? '58mm' : '79mm / 80mm'})
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  High-contrast crisp thermal layout • Press Enter to Print
+                </p>
+              </div>
+
               <button onClick={() => setExchangeReceipt(null)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100" title="Close (Esc)">
                 <X className="w-5 h-5" />
               </button>
@@ -802,7 +817,13 @@ export const ReturnsPage: React.FC = () => {
             <div className="p-6 overflow-y-auto flex-1 bg-slate-100 dark:bg-slate-950 flex justify-center">
               <div 
                 id="printable-voucher" 
-                className="w-full max-w-[80mm] min-h-fit bg-white text-black px-[3px] pt-1.5 pb-3 font-mono text-[11px] leading-tight border border-slate-300 shadow-md flex flex-col box-border"
+                style={{ 
+                  maxWidth: printWidth, 
+                  width: '100%',
+                  paddingLeft: '1mm',
+                  paddingRight: '1mm'
+                }}
+                className="w-full min-h-fit bg-white text-black pt-1.5 pb-3 font-mono text-[11px] leading-tight border border-slate-300 shadow-md flex flex-col box-border font-bold mx-auto"
               >
                 {/* Shop Header */}
                 <div className="text-center pb-1 space-y-0.5">
@@ -811,7 +832,7 @@ export const ReturnsPage: React.FC = () => {
                   </h2>
                   {settings?.tag_line && (
                     <p 
-                      className={`text-[10px] text-black italic ${settings?.is_tagline_bold ? 'font-black tracking-tight' : 'font-semibold'}`}
+                      className={`text-[10px] text-black italic ${settings?.is_tagline_bold ? 'font-black tracking-tight' : 'font-bold'}`}
                       style={settings?.is_tagline_bold ? { fontWeight: 900, WebkitTextStroke: '0.4px #000' } : {}}
                     >
                       {settings?.is_tagline_bold ? <strong>{settings.tag_line}</strong> : settings.tag_line}
@@ -822,7 +843,7 @@ export const ReturnsPage: React.FC = () => {
                     <p className="text-[11px] font-bold text-black mt-[2px]">Mob: {settings.mobile}</p>
                   )}
                   {settings?.show_gst_on_bill && settings?.gstin && (
-                    <p className="text-[10.5px] font-bold text-black my-[3px] uppercase tracking-wider bg-slate-100 py-0.5">
+                    <p className="text-[10.5px] font-black text-black my-[3px] uppercase tracking-wider py-0.5 border border-black">
                       GSTIN: {settings.gstin}
                     </p>
                   )}
@@ -859,10 +880,10 @@ export const ReturnsPage: React.FC = () => {
                 {/* Items Table */}
                 <div className="py-1.5 border-b border-dashed border-black">
                   <div className="flex justify-between font-black pb-1 text-[10.5px] uppercase text-black">
-                    <span className="flex-1 min-w-0 pr-1 text-left">Item</span>
+                    <span className="flex-1 min-w-0 pr-1.5 text-left">Item</span>
                     <span className="w-7 text-center shrink-0">Qty</span>
-                    <span className="w-12 text-right shrink-0">Rate</span>
-                    <span className="w-14 text-right shrink-0">Total</span>
+                    <span className="w-14 text-right shrink-0 pr-2">Rate</span>
+                    <span className="w-16 text-right shrink-0">Total</span>
                   </div>
                   {/* Divider Line immediately after column headers */}
                   <div className="border-b border-dashed border-black mb-1"></div>
@@ -873,7 +894,7 @@ export const ReturnsPage: React.FC = () => {
                       const price = r.unit_price || r.refund_price || 0;
                       return (
                         <div key={`ret-${idx}`} className="py-1 flex justify-between items-start text-[10.5px] text-black">
-                          <div className="flex-1 min-w-0 pr-1 flex flex-col text-left">
+                          <div className="flex-1 min-w-0 pr-1.5 flex flex-col text-left">
                             <span className="font-bold text-black line-clamp-2 leading-tight break-words">[RETURN] {r.item_name}</span>
                             {(r.size || r.color || Number(r.tax_percent || 0) > 0) && (
                               <span className="text-[10px] font-semibold text-black">
@@ -882,9 +903,9 @@ export const ReturnsPage: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <span className="w-7 text-center font-bold text-black shrink-0">{r.quantity}</span>
-                          <span className="w-12 text-right font-medium text-black shrink-0">₹{price}</span>
-                          <span className="w-14 text-right font-bold text-black shrink-0">-₹{price * r.quantity}</span>
+                          <span className="w-7 text-center font-black text-black shrink-0">{r.quantity}</span>
+                          <span className="w-14 text-right font-bold text-black shrink-0 pr-2">₹{price}</span>
+                          <span className="w-16 text-right font-black text-black shrink-0">-₹{price * r.quantity}</span>
                         </div>
                       );
                     })}
@@ -897,18 +918,18 @@ export const ReturnsPage: React.FC = () => {
                       const gstRate = e.product?.gst_percent || e.tax_percent || 0;
                       return (
                         <div key={`ex-${idx}`} className="py-1 flex justify-between items-start text-[10.5px] text-black">
-                          <div className="flex-1 min-w-0 pr-1 flex flex-col text-left">
+                          <div className="flex-1 min-w-0 pr-1.5 flex flex-col text-left">
                             <span className="font-bold text-black line-clamp-2 leading-tight break-words">[EXCH] {name}</span>
                             {(size || color || Number(gstRate) > 0) && (
-                              <span className="text-[10px] font-semibold text-black">
+                              <span className="text-[10px] font-bold text-black">
                                 {size ? `Sz:${size} ` : ''}{color ? `Col:${color} ` : ''}
                                 {Number(gstRate) > 0 ? `(GST ${gstRate}%)` : ''}
                               </span>
                             )}
                           </div>
-                          <span className="w-7 text-center font-bold text-black shrink-0">{e.quantity}</span>
-                          <span className="w-12 text-right font-medium text-black shrink-0">₹{e.unit_price}</span>
-                          <span className="w-14 text-right font-bold text-black shrink-0">+₹{e.unit_price * e.quantity}</span>
+                          <span className="w-7 text-center font-black text-black shrink-0">{e.quantity}</span>
+                          <span className="w-14 text-right font-bold text-black shrink-0 pr-2">₹{e.unit_price}</span>
+                          <span className="w-16 text-right font-black text-black shrink-0">+₹{e.unit_price * e.quantity}</span>
                         </div>
                       );
                     })}
@@ -1028,7 +1049,7 @@ export const ReturnsPage: React.FC = () => {
 
                 {/* Terms & Conditions */}
                 {settings?.show_terms_on_bill && settings?.terms_and_conditions && (
-                  <div className="py-2 text-left text-[9.5px] text-black border-b border-dashed border-black space-y-0.5 font-medium">
+                  <div className="py-2 text-left text-[9.5px] text-black border-b border-dashed border-black space-y-0.5 font-bold">
                     <span className="font-black uppercase tracking-wider block text-center text-[10px] text-black">Terms & Conditions</span>
                     <p className="whitespace-pre-line leading-tight text-black font-semibold">{settings.terms_and_conditions}</p>
                   </div>
@@ -1080,7 +1101,8 @@ export const ReturnsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
