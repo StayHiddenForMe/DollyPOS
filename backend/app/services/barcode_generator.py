@@ -13,25 +13,25 @@ class BarcodeGenerator:
         code128 = barcode.get_barcode_class('code128')
         writer = ImageWriter()
         
-        # Load high-contrast bold font on Windows if available
-        bold_font_candidates = [
-            "C:/Windows/Fonts/arialbd.ttf",
-            "C:/Windows/Fonts/calibrib.ttf",
-            "C:/Windows/Fonts/segoeuib.ttf"
+        # Load normal font on Windows if available
+        normal_font_candidates = [
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/calibri.ttf",
+            "C:/Windows/Fonts/segoeui.ttf"
         ]
-        for f_path in bold_font_candidates:
+        for f_path in normal_font_candidates:
             if os.path.exists(f_path):
                 writer.font_path = f_path
                 break
                 
-        writer.font_size = 14
-        writer.text_distance = 2.5
+        writer.font_size = 13
+        writer.text_distance = 2.0
         
         buffer = io.BytesIO()
         barcode_instance = code128(code, writer=writer)
         barcode_instance.write(buffer, options={
             "module_width": 0.46,
-            "module_height": 10.5,
+            "module_height": 11.0,
             "quiet_zone": 1.0,
             "write_text": True
         })
@@ -49,6 +49,7 @@ class BarcodeGenerator:
         sku: Optional[str] = None,
         size: Optional[str] = None,
         color: Optional[str] = None,
+        fabric: Optional[str] = None,
         label_size_mm: str = "50x25mm"
     ) -> Dict[str, Any]:
         """
@@ -67,6 +68,7 @@ class BarcodeGenerator:
             "sku": sku or "",
             "size": size or "",
             "color": color or "",
+            "fabric": fabric or "",
             "label_size_mm": label_size_mm
         }
 

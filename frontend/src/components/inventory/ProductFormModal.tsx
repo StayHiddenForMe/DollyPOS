@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, Category, Vendor } from '../../types';
 import api from '../../utils/api';
-import { X, Tag, Check, Truck, Lock, Unlock, Zap, Sparkles, Percent } from 'lucide-react';
+import { X, Tag, Check, Truck, Lock, Unlock, Percent, Plus } from 'lucide-react';
+import {
+  GARMENT_STYLE_OPTIONS,
+  parseProductStyleCode,
+  parseStyleCodeString,
+  toggleStyleCodeValue,
+  formatSizeAndColor,
+  formatStickerRate
+} from '../../utils/printBarcode';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -35,6 +43,8 @@ const FESTIVAL_PRESETS = [
   'Custom'
 ];
 
+const CUSTOM_STYLE_CODES_KEY = 'dollypos_custom_style_codes';
+
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   isOpen,
   product,
@@ -48,7 +58,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [lockedVendorCode, setLockedVendorCode] = useState<string>('');
   const [isVendorLocked, setIsVendorLocked] = useState<boolean>(true);
 
-  // Category & Subcategory Lock (Point 6)
+  // Category & Subcategory Lock
   const [lockedCategoryId, setLockedCategoryId] = useState<number | undefined>(undefined);
   const [lockedSubcategoryId, setLockedSubcategoryId] = useState<number | undefined>(undefined);
   const [isCategoryLocked, setIsCategoryLocked] = useState<boolean>(true);
@@ -84,6 +94,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [customSize, setCustomSize] = useState('');
+  const [customStyleInput, setCustomStyleInput] = useState('');
+  const [customStyleCodes, setCustomStyleCodes] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOM_STYLE_CODES_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
@@ -115,8 +134,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (product) {
+        const parsedExisting = parseProductStyleCode(product.name, product.fabric);
         setFormData({
-          name: product.name,
+          name: parsedExisting.baseName,
           barcode: product.barcode,
           sku: product.sku || '',
           purchase_price: product.purchase_price,
@@ -133,7 +153,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           vendor_code: product.vendor_code || '',
           season: FESTIVAL_PRESETS.includes(product.season || '') ? (product.season || 'All-Season') : 'Custom',
           custom_season: FESTIVAL_PRESETS.includes(product.season || '') ? '' : (product.season || ''),
-          fabric: product.fabric || '',
+          fabric: parsedExisting.styleCode || '',
           brand: product.brand || '',
           gender: product.gender || 'Unisex',
           age_group: product.age_group || '',
@@ -190,6 +210,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     });
     setSelectedSizes([]);
     setCustomSize('');
+    setCustomStyleInput('');
   };
 
   const handlePriceChange = (purchase: number, selling: number) => {
@@ -205,7 +226,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }));
   };
 
-  // Quick GST Presets & Split Handlers
   const GST_PRESETS = [0, 2, 5, 12, 18, 28];
 
   const handleTotalGstChange = (total: number) => {
@@ -249,14 +269,43 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     );
   };
 
-  const handleAddCustomSize = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddCustomSize = () => {
     if (customSize.trim()) {
       const clean = customSize.trim();
       if (!selectedSizes.includes(clean)) {
         setSelectedSizes(prev => [...prev, clean]);
       }
       setCustomSize('');
+    }
+  };
+
+  const handleAddCustomStyleCode = () => {
+    const clean = customStyleInput.trim().toUpperCase().replace(/[^A-Z0-9\/\-]/g, '').slice(0, 6);
+    if (!clean) return;
+    const presetCodes = GARMENT_STYLE_OPTIONS.map(o => o.code);
+    if (!presetCodes.includes(clean) && !customStyleCodes.includes(clean)) {
+      const updated = [...customStyleCodes, clean];
+      setCustomStyleCodes(updated);
+      try {
+        localStorage.setItem(CUSTOM_STYLE_CODES_KEY, JSON.stringify(updated));
+      } catch {}
+    }
+    const nextCodeStr = toggleStyleCodeValue(formData.fabric, clean);
+    setFormData(prev => ({ ...prev, fabric: nextCodeStr }));
+    setCustomStyleInput('');
+  };
+
+  const handleRemoveCustomStyleCode = (codeToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customStyleCodes.filter(c => c !== codeToRemove);
+    setCustomStyleCodes(updated);
+    try {
+      localStorage.setItem(CUSTOM_STYLE_CODES_KEY, JSON.stringify(updated));
+    } catch {}
+    const currentCodes = parseStyleCodeString(formData.fabric);
+    if (currentCodes.includes(codeToRemove)) {
+      const nextCodeStr = toggleStyleCodeValue(formData.fabric, codeToRemove);
+      setFormData(prev => ({ ...prev, fabric: nextCodeStr }));
     }
   };
 
@@ -283,7 +332,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
     try {
       if (product) {
-        // Update Single Product
         const payload = {
           ...formData,
           size: selectedSizes[0] || undefined,
@@ -296,7 +344,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         onSaveSuccess();
         setTimeout(() => onClose(), 600);
       } else {
-        // Multi-size or Single Create
         if (selectedSizes.length > 1) {
           const multiPayload = {
             name: formData.name.trim(),
@@ -358,28 +405,34 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  const parsedName = parseProductStyleCode(formData.name, formData.fabric);
+
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 select-none">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in duration-150">
-        {/* Header */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
-          <div>
-            <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <Tag className="w-5 h-5 text-pink-500" />
-              {product ? 'Edit Product' : 'Add New Kids Product (Continuous Entry Mode)'}
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Press <kbd className="px-1 py-0.5 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[10px]">Esc</kbd> anytime to close • Category, Subcategory & Vendor code stay locked for fast multi-product entry.
-            </p>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 select-none">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in duration-150">
+        {/* Compact Header */}
+        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-pink-50 dark:bg-pink-950/60 text-pink-600">
+              <Tag className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
+                {product ? 'Edit Product' : 'Add Product (Fast Continuous Entry)'}
+              </h2>
+              <p className="text-[10.5px] text-slate-500">
+                Press <kbd className="px-1 py-0.2 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[9.5px]">Esc</kbd> to close • Category &amp; Vendor stay locked for rapid entry
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100" title="Close (Esc)">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800" title="Close (Esc)">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Continuous Success Banner */}
         {successBanner && (
-          <div className="p-2.5 bg-emerald-50 text-emerald-800 border-b border-emerald-200 text-xs font-bold flex items-center justify-between px-6 animate-in fade-in">
+          <div className="py-2 px-5 bg-emerald-50 text-emerald-800 border-b border-emerald-200 text-xs font-bold flex items-center justify-between animate-in fade-in">
             <span className="flex items-center gap-1.5">
               <Check className="w-4 h-4 text-emerald-600" />
               {successBanner}
@@ -390,461 +443,557 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
         )}
 
-        {/* Form Body - 14 Requested Sequence Fields */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
-          
-          {/* Row 1: (1) Product Name & (2) Barcode */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                1. Product Name *
-              </label>
-              <input
-                ref={nameInputRef}
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Boys Cotton T-Shirt, Remote Control Monster Car"
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-xl focus:outline-none font-semibold text-slate-900 dark:text-white"
-                required
-              />
-            </div>
+        {/* Clean, Compact Form Body */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
+            
+            {/* SECTION 1: Product Name + Short Codes (1 or 2 codes + Custom) & Barcode */}
+            <div className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-8">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                      Product Name *
+                    </label>
+                    {(formData.name.trim() || parsedName.styleCode) && (
+                      <div className="text-[11px] bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-2xs">
+                        <span className="text-slate-400 text-[10px]">Sticker 2nd Line:</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {[
+                            formatSizeAndColor(selectedSizes[0], formData.color),
+                            parsedName.styleCode || '',
+                            formatStickerRate(formData.mrp || formData.selling_price || 0)
+                          ].filter(Boolean).join('  |  ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. Dress, Dress for some kids at 1yr"
+                    className="w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg focus:outline-none font-semibold text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                2. Barcode
-              </label>
-              <input
-                type="text"
-                value={formData.barcode}
-                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                className="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Row 2: (3) Purchase Cost, (4) Selling Price, (5) MRP, (6) Qty */}
-          <div className="grid grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                3. Purchase Cost (₹)
-              </label>
-              <input
-                type="number"
-                value={formData.purchase_price || ''}
-                onChange={(e) => handlePriceChange(parseFloat(e.target.value) || 0, formData.selling_price)}
-                placeholder="0"
-                className="w-full px-3 py-1.5 font-mono font-bold bg-white dark:bg-slate-800 border rounded-xl"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                4. Selling Price (₹) *
-              </label>
-              <input
-                type="number"
-                value={formData.selling_price || ''}
-                onChange={(e) => handlePriceChange(formData.purchase_price, parseFloat(e.target.value) || 0)}
-                placeholder="0"
-                className="w-full px-3 py-1.5 font-mono font-bold bg-white dark:bg-slate-800 border rounded-xl"
-                required
-                min="1"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                5. MRP (₹)
-              </label>
-              <input
-                type="number"
-                value={formData.mrp || ''}
-                onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
-                placeholder="0"
-                className="w-full px-3 py-1.5 font-mono bg-white dark:bg-slate-800 border rounded-xl"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                6. Quantity (Pcs) *
-              </label>
-              <input
-                type="number"
-                value={formData.stock_quantity || ''}
-                onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 1 })}
-                placeholder="1"
-                className="w-full px-3 py-1.5 font-mono font-bold bg-white dark:bg-slate-800 border rounded-xl"
-                min="1"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Row 3: (7) Category, (8) Sub Category, (9) Color, (10) Assign Speed Dial */}
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  7. Category
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryLocked(!isCategoryLocked)}
-                  className={`text-[10px] flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded-md transition-colors ${
-                    isCategoryLocked 
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                  title={isCategoryLocked ? 'Category locked for continuous adds' : 'Category unlocks on save'}
-                >
-                  {isCategoryLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
-                  <span>{isCategoryLocked ? 'Locked' : 'Unlocked'}</span>
-                </button>
+                <div className="col-span-4">
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Barcode
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none"
+                    required
+                  />
+                </div>
               </div>
-              <select
-                value={formData.category_id || ''}
-                onChange={(e) => {
-                  const catId = parseInt(e.target.value) || undefined;
-                  const catObj = categories.find(c => c.id === catId);
-                  const subId = catObj?.subcategories[0]?.id || undefined;
-                  setFormData({
-                    ...formData,
-                    category_id: catId,
-                    subcategory_id: subId
-                  });
-                  setLockedCategoryId(catId);
-                  setLockedSubcategoryId(subId);
-                }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-semibold"
-              >
-                <option value="">Select Category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  8. Sub Category
-                </label>
-              </div>
-              <select
-                value={formData.subcategory_id || ''}
-                onChange={(e) => {
-                  const subId = parseInt(e.target.value) || undefined;
-                  setFormData({ ...formData, subcategory_id: subId });
-                  setLockedSubcategoryId(subId);
-                }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-semibold"
-              >
-                <option value="">Select Subcategory</option>
-                {subcategoriesList.map((sc) => (
-                  <option key={sc.id} value={sc.id}>{sc.name}</option>
-                ))}
-              </select>
-            </div>
+              {/* Short Codes Bar: F/S, H/S, C/S, R/N, FNY + Custom Code (Pick 1 or 2) */}
+              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-500 mr-0.5">
+                    Short Code <span className="text-slate-400 font-normal">(Pick 1 or 2):</span>
+                  </span>
 
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                9. Color
-              </label>
-              <input
-                type="text"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                placeholder="e.g. Red, Navy Blue, Pink"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-medium"
-              />
-            </div>
+                  {/* Preset Short Codes */}
+                  {GARMENT_STYLE_OPTIONS.map((opt) => {
+                    const isActive = parsedName.styleCodes.includes(opt.code);
+                    const orderIdx = parsedName.styleCodes.indexOf(opt.code);
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        onClick={() => {
+                          const nextCodeStr = toggleStyleCodeValue(formData.fabric, opt.code);
+                          setFormData({ ...formData, fabric: nextCodeStr });
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[11px] transition-all border flex items-center gap-1 ${
+                          isActive
+                            ? 'bg-pink-600 text-white border-pink-600 font-black shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-pink-400 font-semibold'
+                        }`}
+                        title={`${opt.label} (${opt.code}) — Click to toggle (up to 2 codes)`}
+                      >
+                        <span>{opt.label}</span>
+                        <span className="font-black">({opt.code})</span>
+                        {isActive && parsedName.styleCodes.length > 1 && (
+                          <span className="text-[9px] bg-white/25 px-1 rounded">{orderIdx + 1}</span>
+                        )}
+                      </button>
+                    );
+                  })}
 
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>10. Speed Dial</span>
-                <span className="text-[10px] text-pink-600 font-normal">#1 to #M10</span>
-              </label>
-              <div className="flex items-center space-x-1.5">
-                <input
-                  type="checkbox"
-                  id="is_speed_dial"
-                  checked={formData.is_speed_dial}
-                  onChange={(e) => setFormData({ ...formData, is_speed_dial: e.target.checked })}
-                  className="w-4 h-4 text-pink-600 rounded border-slate-300"
-                />
-                <input
-                  type="text"
-                  placeholder="Code e.g. 1 or M1"
-                  value={formData.speed_dial_code}
-                  disabled={!formData.is_speed_dial}
-                  onChange={(e) => setFormData({ ...formData, speed_dial_code: e.target.value.toUpperCase() })}
-                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs uppercase disabled:opacity-40"
-                />
-              </div>
-            </div>
-          </div>
+                  {/* Saved Custom Short Codes */}
+                  {customStyleCodes.map((code) => {
+                    const isActive = parsedName.styleCodes.includes(code);
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => {
+                          const nextCodeStr = toggleStyleCodeValue(formData.fabric, code);
+                          setFormData({ ...formData, fabric: nextCodeStr });
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[11px] transition-all border flex items-center gap-1 ${
+                          isActive
+                            ? 'bg-pink-600 text-white border-pink-600 font-black shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-pink-400 font-bold'
+                        }`}
+                        title={`Custom Code (${code})`}
+                      >
+                        <span>{code}</span>
+                        <span
+                          onClick={(e) => handleRemoveCustomStyleCode(code, e)}
+                          className={`ml-0.5 text-[10px] hover:text-rose-300 ${isActive ? 'text-white/80' : 'text-slate-400 hover:text-rose-500'}`}
+                          title="Delete custom code"
+                        >
+                          ×
+                        </span>
+                      </button>
+                    );
+                  })}
 
-          {/* Row 4: (11) Sizes / Custom Sizes Multi-selector */}
-          <div className="space-y-1.5 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-700 dark:text-slate-300">
-                11. Sizes (Pick Single or Multiple Sizes to Auto-generate Variants)
-              </label>
-              {selectedSizes.length > 0 && (
-                <span className="text-[11px] font-bold text-pink-600">
-                  {selectedSizes.length} Size(s): {selectedSizes.join(', ')}
-                </span>
-              )}
-            </div>
+                  {parsedName.styleCodes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, fabric: '' });
+                      }}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-bold text-rose-600 hover:bg-rose-50"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
 
-            <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto py-1">
-              {PRESET_SIZES.map((sz) => {
-                const isSelected = selectedSizes.includes(sz);
-                return (
+                {/* Inline Custom Short Code Input */}
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={customStyleInput}
+                    onChange={(e) => setCustomStyleInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomStyleCode();
+                      }
+                    }}
+                    placeholder="Custom e.g. COT"
+                    maxLength={6}
+                    className="w-28 px-2 py-0.5 text-[11px] font-mono font-bold uppercase bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md focus:border-pink-500 focus:outline-none"
+                  />
                   <button
                     type="button"
-                    key={sz}
-                    onClick={() => toggleSize(sz)}
-                    className={`px-2.5 py-1 rounded-lg font-bold font-mono text-xs transition-all flex items-center space-x-1 ${
-                      isSelected
-                        ? 'bg-pink-600 text-white shadow-xs scale-105'
-                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-100'
-                    }`}
+                    onClick={handleAddCustomStyleCode}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-md text-[11px] flex items-center gap-0.5"
+                    title="Add & select custom short code"
                   >
-                    <span>{sz}</span>
-                    {isSelected && <Check className="w-3 h-3 ml-0.5 inline" />}
+                    <Plus className="w-3 h-3" />
+                    <span>Code</span>
                   </button>
-                );
-              })}
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-2 pt-1">
-              <input
-                type="text"
-                placeholder="Custom size (e.g. 6-12M, 32, 4-5Y)..."
-                value={customSize}
-                onChange={(e) => setCustomSize(e.target.value)}
-                className="flex-1 px-3 py-1 bg-white dark:bg-slate-800 border rounded-xl text-xs"
-              />
-              <button
-                type="button"
-                onClick={handleAddCustomSize}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs"
-              >
-                + Add Custom Size
-              </button>
-            </div>
-          </div>
-
-          {/* Row 5: (12) Min Stock Alert, (13) Vendor Code (Locked), (14) Season / Festival */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                12. Min Stock Alert Qty
-              </label>
-              <input
-                type="number"
-                value={formData.min_stock_alert}
-                onChange={(e) => setFormData({ ...formData, min_stock_alert: parseInt(e.target.value) || 3 })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <Truck className="w-3.5 h-3.5 text-pink-500" />
-                  13. Vendor Code
+            {/* SECTION 2: Pricing & Stock (4 Columns) */}
+            <div className="grid grid-cols-4 gap-3 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
+              <div>
+                <label className="block font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  Purchase Cost (₹)
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsVendorLocked(!isVendorLocked)}
-                  className={`text-[10px] flex items-center gap-0.5 px-1.5 py-0.5 rounded font-bold ${
-                    isVendorLocked ? 'bg-pink-100 text-pink-700' : 'bg-slate-200 text-slate-600'
-                  }`}
-                  title={isVendorLocked ? 'Vendor Code locked across product saves' : 'Vendor Code unlocks each save'}
-                >
-                  {isVendorLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  <span>{isVendorLocked ? 'Locked' : 'Unlocked'}</span>
-                </button>
-              </div>
-
-              <input
-                type="text"
-                list="vendors-datalist"
-                value={formData.vendor_code}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFormData({ ...formData, vendor_code: val });
-                  setLockedVendorCode(val);
-                }}
-                placeholder="e.g. VEN-001 or VENDOR NAME"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs font-semibold"
-              />
-              <datalist id="vendors-datalist">
-                {vendors.map(v => (
-                  <option key={v.id} value={v.vendor_code || v.name}>{v.name} ({v.vendor_code || 'No code'})</option>
-                ))}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                14. Season / Festival Tag
-              </label>
-              <select
-                value={formData.season}
-                onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-semibold"
-              >
-                {FESTIVAL_PRESETS.map((fest) => (
-                  <option key={fest} value={fest}>{fest}</option>
-                ))}
-              </select>
-              {formData.season === 'Custom' && (
                 <input
-                  type="text"
-                  placeholder="Type custom festival / season..."
-                  value={formData.custom_season}
-                  onChange={(e) => setFormData({ ...formData, custom_season: e.target.value })}
-                  className="w-full mt-1.5 px-3 py-1 bg-white dark:bg-slate-800 border rounded-xl text-xs font-semibold"
+                  type="number"
+                  value={formData.purchase_price || ''}
+                  onChange={(e) => handlePriceChange(parseFloat(e.target.value) || 0, formData.selling_price)}
+                  placeholder="0"
+                  className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  min="0"
                 />
-              )}
-            </div>
-          </div>
-
-          {/* 15. GST Rates & Tax Breakdown (CGST & SGST with Manual Split) */}
-          <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Percent className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span className="font-bold text-slate-800 dark:text-white">15. GST Rates (CGST &amp; SGST)</span>
-                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                  {formData.gst_percent > 0 ? `Total GST: ${formData.gst_percent}%` : 'Non-GST / Exempt (0%)'}
-                </span>
               </div>
 
-              {/* Quick Presets */}
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-500 font-semibold mr-1">Presets:</span>
-                {GST_PRESETS.map((rate) => (
+              <div>
+                <label className="block font-bold text-pink-600 dark:text-pink-400 mb-1">
+                  Selling Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  value={formData.selling_price || ''}
+                  onChange={(e) => handlePriceChange(formData.purchase_price, parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-pink-300 dark:border-pink-800 focus:border-pink-600 rounded-lg focus:outline-none"
+                  required
+                  min="1"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  MRP (₹)
+                </label>
+                <input
+                  type="number"
+                  value={formData.mrp || ''}
+                  onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  Quantity (Pcs) *
+                </label>
+                <input
+                  type="number"
+                  value={formData.stock_quantity || ''}
+                  onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 1 })}
+                  placeholder="1"
+                  className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  min="1"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* SECTION 3: Category, Subcategory, Vendor & Color (4 Columns) */}
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Category</label>
                   <button
                     type="button"
-                    key={rate}
-                    onClick={() => handleTotalGstChange(rate)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
-                      formData.gst_percent === rate
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-50'
+                    onClick={() => setIsCategoryLocked(!isCategoryLocked)}
+                    className={`text-[9.5px] flex items-center gap-0.5 font-bold px-1.5 py-0.2 rounded transition-colors ${
+                      isCategoryLocked 
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
+                        : 'bg-slate-100 text-slate-500'
                     }`}
                   >
-                    {rate}%
+                    {isCategoryLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                    <span>{isCategoryLocked ? 'Locked' : 'Unlock'}</span>
                   </button>
-                ))}
+                </div>
+                <select
+                  value={formData.category_id || ''}
+                  onChange={(e) => {
+                    const catId = parseInt(e.target.value) || undefined;
+                    const catObj = categories.find(c => c.id === catId);
+                    const subId = catObj?.subcategories[0]?.id || undefined;
+                    setFormData({
+                      ...formData,
+                      category_id: catId,
+                      subcategory_id: subId
+                    });
+                    setLockedCategoryId(catId);
+                    setLockedSubcategoryId(subId);
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Sub Category
+                </label>
+                <select
+                  value={formData.subcategory_id || ''}
+                  onChange={(e) => {
+                    const subId = parseInt(e.target.value) || undefined;
+                    setFormData({ ...formData, subcategory_id: subId });
+                    setLockedSubcategoryId(subId);
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
+                >
+                  <option value="">Select Subcategory</option>
+                  {subcategoriesList.map((sc) => (
+                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Truck className="w-3 h-3 text-pink-500" />
+                    <span>Vendor</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsVendorLocked(!isVendorLocked)}
+                    className={`text-[9.5px] flex items-center gap-0.5 px-1.5 py-0.2 rounded font-bold ${
+                      isVendorLocked ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {isVendorLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                    <span>{isVendorLocked ? 'Locked' : 'Unlock'}</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  list="vendors-datalist"
+                  value={formData.vendor_code}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, vendor_code: val });
+                    setLockedVendorCode(val);
+                  }}
+                  placeholder="e.g. VEN-001"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-mono text-xs font-semibold"
+                />
+                <datalist id="vendors-datalist">
+                  {vendors.map(v => (
+                    <option key={v.id} value={v.vendor_code || v.name}>{v.name} ({v.vendor_code || 'No code'})</option>
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Color
+                </label>
+                <input
+                  type="text"
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  placeholder="e.g. Red, Pink, Blue"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {/* Total GST % Input */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Total GST Rate (%)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.gst_percent === 0 ? '' : formData.gst_percent}
-                    onChange={(e) => handleTotalGstChange(parseFloat(e.target.value) || 0)}
-                    placeholder="e.g. 18, 5, 2"
-                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+            {/* SECTION 4: Compact Sizes Bar (with inline custom size input) */}
+            <div className="p-2.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Sizes <span className="text-slate-400 font-normal">(Pick 1 or multiple variants)</span>
+                  </label>
+                  {selectedSizes.length > 0 && (
+                    <span className="text-[10.5px] bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 px-2 py-0.2 rounded-full font-bold">
+                      {selectedSizes.join(', ')}
+                    </span>
+                  )}
                 </div>
-                <span className="text-[9.5px] text-slate-500 block mt-0.5">Typing auto-splits 50/50</span>
+
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    placeholder="Custom size (e.g. 4-5Y)"
+                    value={customSize}
+                    onChange={(e) => setCustomSize(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomSize();
+                      }
+                    }}
+                    className="w-36 px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-[11px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSize}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-md text-[11px]"
+                  >
+                    + Size
+                  </button>
+                </div>
               </div>
 
-              {/* CGST % Manual Input */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  CGST Rate (%) (Manual)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.cgst_percent === 0 ? '' : formData.cgst_percent}
-                    onChange={(e) => handleCgstChange(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
-                </div>
-                <span className="text-[9.5px] text-slate-500 block mt-0.5">Central GST share</span>
-              </div>
-
-              {/* SGST % Manual Input */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  SGST Rate (%) (Manual)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.sgst_percent === 0 ? '' : formData.sgst_percent}
-                    onChange={(e) => handleSgstChange(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-full px-3 py-1.5 font-mono font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:border-emerald-600 focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
-                </div>
-                <span className="text-[9.5px] text-slate-500 block mt-0.5">State GST share</span>
+              <div className="flex flex-wrap gap-1">
+                {PRESET_SIZES.map((sz) => {
+                  const isSelected = selectedSizes.includes(sz);
+                  return (
+                    <button
+                      type="button"
+                      key={sz}
+                      onClick={() => toggleSize(sz)}
+                      className={`px-2 py-0.5 rounded-md font-bold font-mono text-[11px] transition-all flex items-center gap-0.5 ${
+                        isSelected
+                          ? 'bg-pink-600 text-white shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-pink-300'
+                      }`}
+                    >
+                      <span>{sz}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Live Calculation Preview Banner */}
-            {formData.gst_percent > 0 && formData.selling_price > 0 && (
-              <div className="text-[11px] font-mono bg-white dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 flex items-center justify-between text-slate-700 dark:text-slate-300">
-                <span>
-                  For ₹{formData.selling_price} item:
-                </span>
-                <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                  CGST ({formData.cgst_percent}%): ₹{((formData.selling_price * formData.cgst_percent) / 100).toFixed(2)} + SGST ({formData.sgst_percent}%): ₹{((formData.selling_price * formData.sgst_percent) / 100).toFixed(2)} = Tax: ₹{((formData.selling_price * formData.gst_percent) / 100).toFixed(2)}
-                </span>
+            {/* SECTION 5: Compact Split Row — Left: Season, Alert, Speed Dial | Right: GST */}
+            <div className="grid grid-cols-12 gap-3">
+              {/* Left 6 cols: Season, Min Stock, Speed Dial */}
+              <div className="col-span-6 grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                    Season / Tag
+                  </label>
+                  <select
+                    value={formData.season}
+                    onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+                    className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold text-[11px]"
+                  >
+                    {FESTIVAL_PRESETS.map((fest) => (
+                      <option key={fest} value={fest}>{fest}</option>
+                    ))}
+                  </select>
+                  {formData.season === 'Custom' && (
+                    <input
+                      type="text"
+                      placeholder="Custom season..."
+                      value={formData.custom_season}
+                      onChange={(e) => setFormData({ ...formData, custom_season: e.target.value })}
+                      className="w-full mt-1 px-2 py-0.5 bg-white dark:bg-slate-900 border rounded text-[10.5px]"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                    Low Stock Alert
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.min_stock_alert}
+                    onChange={(e) => setFormData({ ...formData, min_stock_alert: parseInt(e.target.value) || 3 })}
+                    className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono text-[11px]"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                    Speed Dial
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_speed_dial}
+                      onChange={(e) => setFormData({ ...formData, is_speed_dial: e.target.checked })}
+                      className="w-3.5 h-3.5 text-pink-600 rounded border-slate-300"
+                    />
+                    <input
+                      type="text"
+                      placeholder="#1 / M1"
+                      value={formData.speed_dial_code}
+                      disabled={!formData.is_speed_dial}
+                      onChange={(e) => setFormData({ ...formData, speed_dial_code: e.target.value.toUpperCase() })}
+                      className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono text-[11px] uppercase disabled:opacity-40"
+                    />
+                  </div>
+                </div>
               </div>
-            )}
+
+              {/* Right 6 cols: Compact GST Rates */}
+              <div className="col-span-6 p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-slate-800 dark:text-white flex items-center gap-1 text-[11px]">
+                    <Percent className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>GST Rate</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {GST_PRESETS.map((rate) => (
+                      <button
+                        type="button"
+                        key={rate}
+                        onClick={() => handleTotalGstChange(rate)}
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-bold font-mono transition-all ${
+                          formData.gst_percent === rate
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {rate}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1">
+                    <span className="text-[10px] text-slate-400 font-bold mr-1">Total:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.gst_percent === 0 ? '' : formData.gst_percent}
+                      onChange={(e) => handleTotalGstChange(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 ml-0.5">%</span>
+                  </div>
+
+                  <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1">
+                    <span className="text-[10px] text-slate-400 font-bold mr-1">CGST:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.cgst_percent === 0 ? '' : formData.cgst_percent}
+                      onChange={(e) => handleCgstChange(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 ml-0.5">%</span>
+                  </div>
+
+                  <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1">
+                    <span className="text-[10px] text-slate-400 font-bold mr-1">SGST:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.sgst_percent === 0 ? '' : formData.sgst_percent}
+                      onChange={(e) => handleSgstChange(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 ml-0.5">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Footer Submit Action */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
-            <div className="text-[11px] text-slate-500 font-mono">
-              Margin: <strong className="text-emerald-600">{formData.margin_percent}%</strong>
+          {/* Sticky Footer Submit Action */}
+          <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3 text-xs font-mono text-slate-500">
+              <span>
+                Margin: <strong className="text-emerald-600">{formData.margin_percent}%</strong>
+              </span>
+              {formData.gst_percent > 0 && formData.selling_price > 0 && (
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  • Tax: ₹{((formData.selling_price * formData.gst_percent) / 100).toFixed(2)}
+                </span>
+              )}
             </div>
 
             <div className="flex space-x-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs"
+                className="px-4 py-1.5 bg-white hover:bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs"
               >
                 Close (Esc)
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-600/30 active:scale-95 transition-all"
+                className="px-6 py-1.5 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-600/25 active:scale-95 transition-all"
               >
-                {isSubmitting ? 'Saving Product...' : (product ? 'Update Product' : '+ Save Product (Enter)')}
+                {isSubmitting ? 'Saving...' : (product ? 'Update Product' : '+ Save Product (Enter)')}
               </button>
             </div>
           </div>
@@ -853,3 +1002,4 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     </div>
   );
 };
+

@@ -5,7 +5,13 @@ import { X, Printer, Check, Info, FileSpreadsheet } from 'lucide-react';
 import { formatINR } from '../../utils/formatters';
 import { useSettingStore } from '../../store/settingStore';
 import { BarcodeSticker } from './BarcodeSticker';
-import { printBarcodeStickers, exportBarTenderCsv, PrintStickerItem, LabelRollType, StartSlot } from '../../utils/printBarcode';
+import {
+  printBarcodeStickers,
+  exportBarTenderCsv,
+  PrintStickerItem,
+  LabelRollType,
+  StartSlot
+} from '../../utils/printBarcode';
 
 interface LabelPreviewModalProps {
   isOpen: boolean;
@@ -76,6 +82,7 @@ export const LabelPreviewModal: React.FC<LabelPreviewModalProps> = ({
   const getStickerItems = (): PrintStickerItem[] => {
     return Array.from({ length: numCopies }, () => ({
       productName: product.name,
+      styleCode: product.fabric || undefined,
       size: product.size || undefined,
       color: product.color || undefined,
       barcode: product.barcode,
@@ -210,12 +217,13 @@ export const LabelPreviewModal: React.FC<LabelPreviewModalProps> = ({
               <BarcodeSticker
                 key={idx}
                 productName={product.name}
+                styleCode={product.fabric || undefined}
                 size={product.size || undefined}
                 color={product.color || undefined}
                 barcode={product.barcode}
                 mrp={displayMrp}
                 barcodeImage={b64}
-                labelSize="50x25mm"
+                labelSize={rollType.includes('38x25') ? '38x25mm' : '50x25mm'}
               />
             ))}
           </div>

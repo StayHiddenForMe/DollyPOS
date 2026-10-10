@@ -4,7 +4,13 @@ import { Product } from '../types';
 import { Barcode as BarcodeIcon, Printer, Plus, Trash2, Tag, Search, RotateCcw, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { formatINR } from '../utils/formatters';
 import { BarcodeSticker } from '../components/barcode/BarcodeSticker';
-import { printBarcodeStickers, exportBarTenderCsv, PrintStickerItem, LabelRollType, StartSlot } from '../utils/printBarcode';
+import {
+  printBarcodeStickers,
+  exportBarTenderCsv,
+  PrintStickerItem,
+  LabelRollType,
+  StartSlot
+} from '../utils/printBarcode';
 import { useSettingStore } from '../store/settingStore';
 import { useBarcodeStore } from '../store/barcodeStore';
 
@@ -47,7 +53,14 @@ export const BarcodePage: React.FC = () => {
         items: queue.map(q => ({ product_id: q.product.id, copies: q.copies }))
       };
       const res = await api.post('/barcode/batch-labels', payload);
-      setGeneratedLabels(res.data.labels);
+      const enrichedLabels = (res.data.labels || []).map((lbl: any) => {
+        const matchedQueueItem = queue.find(q => q.product.barcode === lbl.barcode);
+        return {
+          ...lbl,
+          fabric: lbl.fabric || matchedQueueItem?.product.fabric || undefined
+        };
+      });
+      setGeneratedLabels(enrichedLabels);
     } catch (e) {
       console.error(e);
     } finally {
@@ -59,6 +72,7 @@ export const BarcodePage: React.FC = () => {
     if (generatedLabels.length === 0) return;
     const stickerItems: PrintStickerItem[] = generatedLabels.map(lbl => ({
       productName: lbl.product_name,
+      styleCode: lbl.fabric || undefined,
       size: lbl.size || undefined,
       color: lbl.color || undefined,
       barcode: lbl.barcode,
@@ -77,6 +91,7 @@ export const BarcodePage: React.FC = () => {
       for (let i = 0; i < q.copies; i++) {
         stickerItems.push({
           productName: q.product.name,
+          styleCode: q.product.fabric || undefined,
           size: q.product.size || undefined,
           color: q.product.color || undefined,
           barcode: q.product.barcode,
@@ -270,12 +285,13 @@ export const BarcodePage: React.FC = () => {
                     <BarcodeSticker
                       key={idx}
                       productName={lbl.product_name}
+                      styleCode={lbl.fabric || undefined}
                       size={lbl.size || undefined}
                       color={lbl.color || undefined}
                       barcode={lbl.barcode}
                       mrp={lbl.mrp || lbl.selling_price}
                       barcodeImage={lbl.barcode_image}
-                      labelSize="50x25mm"
+                      labelSize={rollType.includes('38x25') ? '38x25mm' : '50x25mm'}
                     />
                   ))}
                 </div>

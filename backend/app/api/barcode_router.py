@@ -80,6 +80,7 @@ def generate_batch_labels(req: BatchBarcodeRequest, db: Session = Depends(get_db
                 sku=prod.sku,
                 size=prod.size,
                 color=prod.color,
+                fabric=prod.fabric,
                 label_size_mm=label_size
             )
             for _ in range(item.copies):
