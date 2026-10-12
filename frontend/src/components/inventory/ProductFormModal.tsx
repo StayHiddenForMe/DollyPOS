@@ -61,6 +61,11 @@ const FESTIVAL_PRESETS = [
 const CUSTOM_STYLE_CODES_KEY = 'dollypos_custom_style_codes';
 const BARCODE_QUEUE_ENABLED_KEY = 'dollypos_form_barcode_queue_enabled';
 
+const capitalizeFirstWord = (val: string): string => {
+  if (!val) return val;
+  return val.replace(/^(\s*)([a-z])/, (_, spaces, ch) => `${spaces}${ch.toUpperCase()}`);
+};
+
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   isOpen,
   product,
@@ -78,6 +83,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [lockedCategoryId, setLockedCategoryId] = useState<number | undefined>(undefined);
   const [lockedSubcategoryId, setLockedSubcategoryId] = useState<number | undefined>(undefined);
   const [isCategoryLocked, setIsCategoryLocked] = useState<boolean>(true);
+
+  // Low Stock Alert Lock (kept until modal is closed)
+  const [lockedMinStockAlert, setLockedMinStockAlert] = useState<number>(3);
+  const [isMinStockLocked, setIsMinStockLocked] = useState<boolean>(true);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -236,6 +245,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         setLockedVendorCode(product.vendor_code || '');
         setLockedCategoryId(product.category_id);
         setLockedSubcategoryId(product.subcategory_id);
+        setLockedMinStockAlert(product.min_stock_alert);
       } else {
         resetFormForNewItem();
       }
@@ -247,8 +257,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
   }, [product, isOpen]);
 
-  const resetFormForNewItem = () => {
+  const resetFormForNewItem = (nextMinAlert?: number) => {
     const timestamp = Date.now().toString();
+    const effectiveMinAlert = nextMinAlert !== undefined ? nextMinAlert : lockedMinStockAlert;
     setFormData({
       name: '',
       barcode: `890${timestamp.slice(-9)}`,
@@ -263,7 +274,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       is_speed_dial: false,
       speed_dial_code: '',
       speed_dial_color: '#EC4899',
-      min_stock_alert: 3,
+      min_stock_alert: isMinStockLocked ? effectiveMinAlert : 3,
       vendor_code: isVendorLocked ? lockedVendorCode : '',
       season: 'All-Season',
       custom_season: '',
@@ -488,9 +499,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           setLockedCategoryId(formData.category_id);
           setLockedSubcategoryId(formData.subcategory_id);
         }
+        setLockedMinStockAlert(formData.min_stock_alert);
 
         onSaveSuccess();
-        resetFormForNewItem();
+        resetFormForNewItem(formData.min_stock_alert);
         requestAnimationFrame(() => {
           nameInputRef.current?.focus();
         });
@@ -533,7 +545,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 {product ? 'Edit Product' : 'Add Product (Fast Continuous Entry)'}
               </h2>
               <p className="text-[10.5px] text-slate-500">
-                Press <kbd className="px-1 py-0.2 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[9.5px]">Esc</kbd> to close • Category &amp; Vendor stay locked for rapid entry
+                Press <kbd className="px-1 py-0.2 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[9.5px]">Esc</kbd> to close • Category, Vendor &amp; Low Stock stay locked for rapid entry
               </p>
             </div>
           </div>
@@ -586,7 +598,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       ref={nameInputRef}
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, name: capitalizeFirstWord(e.target.value) })}
                       placeholder="e.g. Dress, Dress for some kids at 1yr"
                       className="w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg focus:outline-none font-semibold text-slate-900 dark:text-white"
                       required
@@ -881,7 +893,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <input
                   type="text"
                   value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, color: capitalizeFirstWord(e.target.value) })}
                   placeholder="e.g. Red, Pink, Blue"
                   className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium"
                 />
@@ -976,9 +988,24 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
-                    Low Stock Alert
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300 text-[11px]">
+                      Low Stock
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsMinStockLocked(!isMinStockLocked)}
+                      className={`text-[9px] flex items-center gap-0.5 px-1 py-0.2 rounded font-bold transition-colors ${
+                        isMinStockLocked
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                      title="Keep Low Stock Alert limit locked until modal is closed"
+                    >
+                      {isMinStockLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                      <span>{isMinStockLocked ? 'Locked' : 'Unlock'}</span>
+                    </button>
+                  </div>
                   <input
                     type="number"
                     value={formData.min_stock_alert}
@@ -988,13 +1015,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       const raw = e.target.value;
                       if (raw === '') {
                         setFormData({ ...formData, min_stock_alert: 0 });
+                        setLockedMinStockAlert(0);
                         return;
                       }
                       const parsed = parseInt(raw, 10);
+                      const nextVal = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
                       setFormData({
                         ...formData,
-                        min_stock_alert: Number.isNaN(parsed) ? 0 : Math.max(0, parsed)
+                        min_stock_alert: nextVal
                       });
+                      setLockedMinStockAlert(nextVal);
                     }}
                     className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg font-mono text-[11px] focus:outline-none"
                     min="0"
