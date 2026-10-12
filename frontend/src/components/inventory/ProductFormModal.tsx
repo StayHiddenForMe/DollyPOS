@@ -491,14 +491,25 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
         onSaveSuccess();
         resetFormForNewItem();
+        requestAnimationFrame(() => {
+          nameInputRef.current?.focus();
+        });
         setTimeout(() => {
           nameInputRef.current?.focus();
-        }, 100);
+        }, 50);
+        setTimeout(() => {
+          nameInputRef.current?.focus();
+        }, 180);
       }
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to save product. Check barcode/code uniqueness.');
     } finally {
       setIsSubmitting(false);
+      if (!product) {
+        setTimeout(() => {
+          nameInputRef.current?.focus();
+        }, 20);
+      }
     }
   };
 
@@ -971,8 +982,21 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   <input
                     type="number"
                     value={formData.min_stock_alert}
-                    onChange={(e) => setFormData({ ...formData, min_stock_alert: parseInt(e.target.value) || 3 })}
-                    className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono text-[11px]"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onClick={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setFormData({ ...formData, min_stock_alert: 0 });
+                        return;
+                      }
+                      const parsed = parseInt(raw, 10);
+                      setFormData({
+                        ...formData,
+                        min_stock_alert: Number.isNaN(parsed) ? 0 : Math.max(0, parsed)
+                      });
+                    }}
+                    className="w-full px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg font-mono text-[11px] focus:outline-none"
                     min="0"
                   />
                 </div>
