@@ -35,7 +35,7 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
 
   return (
     <div 
-      className="barcode-sticker-item w-[190px] h-[95px] bg-white text-black pt-[7px] px-[4.5px] pb-[3px] flex flex-col justify-between items-center text-center shadow-xs overflow-hidden select-none"
+      className="barcode-sticker-item w-[190px] h-[95px] bg-white text-black px-[5px] py-[3.5px] flex flex-col justify-between items-center text-center shadow-xs overflow-hidden select-none"
       style={{
         boxSizing: 'border-box',
         border: 'none',
@@ -43,30 +43,30 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
         fontWeight: 500
       }}
     >
-      {/* 1. Product Name Only (Whole 1st Line) */}
-      <div className="w-full text-[11px] font-medium text-black truncate leading-tight px-0.5">
+      {/* 1. Product Name Only (Whole 1st Line - 14px, Weight 600, No Top Margin) */}
+      <div className="w-full text-[14px] font-semibold text-black truncate leading-tight px-0.5 m-0">
         {parsed.baseName}
       </div>
 
-      {/* 2. Second Line: Size.Color | Short Code (F/S, FNY,H/S) | Rate (₹100) */}
-      <div className="w-full grid grid-cols-[1fr_auto_1fr] items-center px-0.5 mt-[2px] text-[10px] font-medium text-black leading-tight">
-        <div className="text-left truncate">
+      {/* 2. Second Line: Direct Size : Color (Bold) | Short Code (Normal) | Rate (Bigger, Bold) */}
+      <div className="w-full grid grid-cols-[1fr_auto_1fr] items-center px-0.5 my-[4.5px] text-[11px] text-black leading-tight">
+        <div className="text-left truncate font-bold text-[12.5px]">
           {sizeColorText}
         </div>
-        <div className="text-center px-1.5 whitespace-nowrap">
+        <div className="text-center px-1.5 whitespace-nowrap font-normal text-[11px]">
           {styleCodeText}
         </div>
-        <div className="text-right text-[10.5px] font-bold whitespace-nowrap">
+        <div className="text-right text-[15px] font-bold whitespace-nowrap">
           {rateText}
         </div>
       </div>
 
-      {/* 3. Crisp Vector SVG Barcode Bars & Barcode Number at Bottom */}
-      <div className="w-full flex-1 flex flex-col justify-end items-center overflow-hidden mt-[3px]">
+      {/* 3. Crisp Vector SVG Barcode Bars (6mm / 20px) Anchored at Bottom & Barcode Number */}
+      <div className="w-full flex flex-col justify-end items-center overflow-hidden mt-auto mb-0">
         {barData ? (
           <>
             <svg
-              className="w-[94%] h-[38px] block mx-auto"
+              className="w-[94%] h-[20px] block mx-auto"
               viewBox={`0 0 ${barData.totalWidth} 100`}
               preserveAspectRatio="none"
               shapeRendering="crispEdges"
@@ -83,7 +83,7 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
                 />
               ))}
             </svg>
-            <div className="text-[10px] font-medium text-black tracking-[1.2px] leading-none mt-[2px]">
+            <div className="text-[9.5px] font-medium text-black tracking-[1.2px] leading-none mt-[2px]">
               {barcode}
             </div>
           </>

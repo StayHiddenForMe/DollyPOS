@@ -14,9 +14,8 @@ All notable changes to the Dolly POS application will be documented in this file
   - Automatic title casing: capitalizes the first word of Product Name and Color automatically.
   - Right panel layout locked strictly to the modal height with an internal scrollbar appearing after 4–5 items and the bottom "Total & Print Barcodes" action pinned flush to the bottom.
 - **TSC TE244 & 2-UP Thermal Barcode Label Engine**:
-  - Barcode label 2nd-line layout updated to `Sz : <size>.<color>` (replacing legacy `Sz-`).
-  - High-contrast **bold pricing** (`₹...`) for maximum legibility on 50x25mm and 38x25mm thermal stickers.
-  - Vector Code128 SVG barcode rendering with crisp edges (`shape-rendering="crispEdges"`) for rapid iBall LS392 laser scanner decode.
+  - Refined label typography: 14px semi-bold product name, direct size and color (e.g. `0 : Red` or `XXXL`), bold size, normal short code, and prominent bold price.
+  - Proportional vertical rhythm with 6.0mm bottom-anchored vector Code128 SVG barcode bars (`shape-rendering="crispEdges"`).
   - Clean separation of garment short codes from product catalog names (`formData.fabric`).
 
 ## [v1.6.0] - 2026-10-06

@@ -80,8 +80,8 @@ export function parseProductStyleCode(
 export function formatSizeAndColor(size?: string, color?: string): string {
   const s = (size || '').trim();
   const c = (color || '').trim();
-  if (s && c) return `Sz : ${s}.${c}`;
-  if (s) return `Sz : ${s}`;
+  if (s && c) return `${s} : ${c}`;
+  if (s) return s;
   if (c) return c;
   return '';
 }
@@ -589,7 +589,7 @@ export function printBarcodeStickers(
         .sticker {
           border: none !important;
           border-radius: 0;
-          padding: 1.8mm 1.2mm 0.8mm 1.2mm;
+          padding: 1.2mm 1.5mm 0.8mm 1.5mm;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -609,8 +609,8 @@ export function printBarcodeStickers(
           visibility: hidden !important;
         }
         .product-name {
-          font-size: 8.5pt;
-          font-weight: 500 !important;
+          font-size: 10.5pt; /* 14px */
+          font-weight: 600 !important; /* added slight weight, not bold */
           line-height: 1.15;
           width: 100%;
           white-space: nowrap;
@@ -618,6 +618,8 @@ export function printBarcodeStickers(
           text-overflow: ellipsis;
           color: #000000 !important;
           text-align: center;
+          padding: 0 0.5mm;
+          margin: 0;
         }
         .sub-row {
           width: 100%;
@@ -625,18 +627,19 @@ export function printBarcodeStickers(
           grid-template-columns: 1fr auto 1fr;
           align-items: center;
           padding: 0 0.5mm;
-          margin-top: 0.5mm;
           line-height: 1.15;
-          font-size: 7.8pt;
-          font-weight: 500 !important;
+          font-size: 9.5pt;
           color: #000000 !important;
+          margin-top: 1.6mm; /* moved down so top & bottom gaps match */
+          margin-bottom: 1.6mm; /* equal gap below */
         }
         .variants {
           text-align: left;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          font-weight: 500 !important;
+          font-size: 9.6pt; /* +1.5px */
+          font-weight: 700 !important;
           color: #000000 !important;
         }
         .style-code {
@@ -644,11 +647,12 @@ export function printBarcodeStickers(
           padding: 0 1.5mm;
           white-space: nowrap;
           font-weight: 500 !important;
+          font-size: 9.0pt; /* +1.5px */
           color: #000000 !important;
         }
         .mrp {
           text-align: right;
-          font-size: 8.4pt;
+          font-size: 11.5pt; /* +1.5px */
           font-weight: 700 !important;
           color: #000000 !important;
           white-space: nowrap;
@@ -659,13 +663,13 @@ export function printBarcodeStickers(
           flex-direction: column;
           justify-content: flex-end;
           align-items: center;
-          margin-top: 1.0mm;
-          flex: 1;
+          margin-top: auto;
+          margin-bottom: 0;
         }
         .barcode-svg {
           width: 94% !important;
           max-width: 47mm !important;
-          height: 10.2mm !important;
+          height: 6.0mm !important;
           display: block !important;
           margin: 0 auto !important;
           shape-rendering: crispEdges !important;
@@ -677,7 +681,7 @@ export function printBarcodeStickers(
           line-height: 1.05;
           letter-spacing: 1.2px;
           color: #000000 !important;
-          margin-top: 0.5mm;
+          margin-top: 0.4mm;
           text-align: center;
           white-space: nowrap;
         }
@@ -685,7 +689,7 @@ export function printBarcodeStickers(
           width: 96% !important;
           max-width: 48mm !important;
           height: auto !important;
-          max-height: 14.5mm !important;
+          max-height: 9.0mm !important;
           object-fit: contain !important;
           display: block !important;
           margin: 0 auto !important;
@@ -714,7 +718,7 @@ export function printBarcodeStickers(
             visibility: hidden !important;
             display: block !important;
           }
-          .sticker, .product-name, .sub-row, .variants, .style-code, .barcode-number {
+          .sticker, .sub-row, .style-code, .barcode-number {
             font-family: Tahoma, Verdana, Arial, sans-serif !important;
             font-weight: 500 !important;
             -webkit-font-smoothing: none !important;
@@ -724,7 +728,17 @@ export function printBarcodeStickers(
             border: none !important;
             box-shadow: none !important;
           }
-          .mrp {
+          .product-name {
+            font-family: Tahoma, Verdana, Arial, sans-serif !important;
+            font-weight: 600 !important;
+            -webkit-font-smoothing: none !important;
+            font-smooth: never !important;
+            text-rendering: geometricPrecision !important;
+            color: #000000 !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+          .variants, .mrp {
             font-family: Tahoma, Verdana, Arial, sans-serif !important;
             font-weight: 700 !important;
             -webkit-font-smoothing: none !important;

@@ -20,8 +20,8 @@ export const VERSION_HISTORY: VersionRelease[] = [
       'Full support for 0 stock alert threshold and 1-click auto-select all text on Barcode and Low Stock Alert input fields',
       'Automatic title casing / capitalization on the first word of Product Name and Color inputs',
       'Automatic auto-focus on Product Name after saving each item for seamless non-stop keyboard entry',
-      'Barcode label 2nd-line layout updated to "Sz : <size>.<color>" with bold pricing (₹...) for maximum legibility on 2-UP thermal rolls',
-      'Native crisp vector Code128 SVG barcode rendering with 500 font-weight optimized for iBall LS392 laser scanners',
+      'Barcode label layout refined with 14px semi-bold product name, direct size and color (e.g. 0 : Red or XXXL), bold size, normal short code, and prominent bold price',
+      'Crisp 6.0mm vector Code128 SVG barcode rendering anchored at bottom with balanced vertical line spacing',
       'Compact fixed-height print queue list with scrollbar and flush bottom-pinned print action footer'
     ]
   },
