@@ -88,6 +88,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [lockedMinStockAlert, setLockedMinStockAlert] = useState<number>(3);
   const [isMinStockLocked, setIsMinStockLocked] = useState<boolean>(true);
 
+  // Short Code Lock (kept until modal is closed)
+  const [lockedStyleCode, setLockedStyleCode] = useState<string>('');
+  const [isStyleCodeLocked, setIsStyleCodeLocked] = useState<boolean>(true);
+
   const [formData, setFormData] = useState({
     name: '',
     barcode: '',
@@ -253,6 +257,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         setLockedCategoryId(product.category_id);
         setLockedSubcategoryId(product.subcategory_id);
         setLockedMinStockAlert(product.min_stock_alert);
+        setLockedStyleCode(parsedExisting.styleCode || '');
       } else {
         resetFormForNewItem();
       }
@@ -264,9 +269,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
   }, [product, isOpen]);
 
-  const resetFormForNewItem = (nextMinAlert?: number) => {
+  const resetFormForNewItem = (nextMinAlert?: number, nextStyleCode?: string) => {
     const timestamp = Date.now().toString();
     const effectiveMinAlert = nextMinAlert !== undefined ? nextMinAlert : lockedMinStockAlert;
+    const effectiveStyleCode = nextStyleCode !== undefined ? nextStyleCode : lockedStyleCode;
     setFormData({
       name: '',
       barcode: `890${timestamp.slice(-9)}`,
@@ -285,7 +291,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       vendor_code: isVendorLocked ? lockedVendorCode : '',
       season: 'All-Season',
       custom_season: '',
-      fabric: '',
+      fabric: isStyleCodeLocked ? effectiveStyleCode : '',
       brand: '',
       gender: 'Unisex',
       age_group: '',
@@ -379,6 +385,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
     const nextCodeStr = toggleStyleCodeValue(formData.fabric, clean);
     setFormData(prev => ({ ...prev, fabric: nextCodeStr }));
+    setLockedStyleCode(nextCodeStr);
     setCustomStyleInput('');
   };
 
@@ -393,6 +400,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (currentCodes.includes(codeToRemove)) {
       const nextCodeStr = toggleStyleCodeValue(formData.fabric, codeToRemove);
       setFormData(prev => ({ ...prev, fabric: nextCodeStr }));
+      setLockedStyleCode(nextCodeStr);
     }
   };
 
@@ -507,9 +515,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           setLockedSubcategoryId(formData.subcategory_id);
         }
         setLockedMinStockAlert(formData.min_stock_alert);
+        setLockedStyleCode(formData.fabric);
 
         onSaveSuccess();
-        resetFormForNewItem(formData.min_stock_alert);
+        resetFormForNewItem(formData.min_stock_alert, formData.fabric);
         requestAnimationFrame(() => {
           nameInputRef.current?.focus();
         });
@@ -552,7 +561,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 {product ? 'Edit Product' : 'Add Product (Fast Continuous Entry)'}
               </h2>
               <p className="text-[10.5px] text-slate-500">
-                Press <kbd className="px-1 py-0.2 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[9.5px]">Esc</kbd> to close • Category, Vendor &amp; Low Stock stay locked for rapid entry
+                Press <kbd className="px-1 py-0.2 bg-slate-200 dark:bg-slate-700 rounded font-mono font-bold text-[9.5px]">Esc</kbd> to close • Short Code, Category, Vendor &amp; Low Stock stay locked for rapid entry
               </p>
             </div>
           </div>
@@ -631,8 +640,23 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               {/* Short Codes Bar: F/S, H/S, C/S, R/N, FNY + Custom Code (Pick 1 or 2) */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] font-bold text-slate-500 mr-0.5">
-                    Short Code <span className="text-slate-400 font-normal">(Pick 1 or 2):</span>
+                  <span className="text-[10px] font-bold text-slate-500 mr-0.5 flex items-center gap-1">
+                    <span>Short Code <span className="text-slate-400 font-normal">(Pick 1 or 2):</span></span>
+                    {!product && (
+                      <button
+                        type="button"
+                        onClick={() => setIsStyleCodeLocked(!isStyleCodeLocked)}
+                        className={`flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9.5px] font-bold transition-colors ${
+                          isStyleCodeLocked
+                            ? 'bg-pink-50 text-pink-700 border border-pink-200'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}
+                        title="Keep Short Code locked for continuous product entry until modal is closed"
+                      >
+                        {isStyleCodeLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                        {isStyleCodeLocked ? 'Locked' : 'Unlock'}
+                      </button>
+                    )}
                   </span>
 
                   {/* Preset Short Codes */}
@@ -646,6 +670,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         onClick={() => {
                           const nextCodeStr = toggleStyleCodeValue(formData.fabric, opt.code);
                           setFormData({ ...formData, fabric: nextCodeStr });
+                          setLockedStyleCode(nextCodeStr);
                         }}
                         className={`px-2 py-0.5 rounded-md text-[11px] transition-all border flex items-center gap-1 ${
                           isActive
@@ -673,6 +698,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         onClick={() => {
                           const nextCodeStr = toggleStyleCodeValue(formData.fabric, code);
                           setFormData({ ...formData, fabric: nextCodeStr });
+                          setLockedStyleCode(nextCodeStr);
                         }}
                         className={`px-2 py-0.5 rounded-md text-[11px] transition-all border flex items-center gap-1 ${
                           isActive
@@ -698,6 +724,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       type="button"
                       onClick={() => {
                         setFormData({ ...formData, fabric: '' });
+                        setLockedStyleCode('');
                       }}
                       className="px-1.5 py-0.5 rounded text-[10px] font-bold text-rose-600 hover:bg-rose-50"
                     >
@@ -1167,199 +1194,201 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
           {/* Right Column: Live Barcode Print Queue Section (For Fast Continuous Entry) */}
           {!product && (
-            <div className="w-80 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col min-h-0">
-              {/* Right Panel Header + ON/OFF Toggle */}
-              <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Barcode className="w-4 h-4 text-pink-600" />
-                    <span className="font-bold text-xs text-slate-800 dark:text-white">
-                      Barcode Print Queue
-                    </span>
+            <div className="w-80 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 relative">
+              <div className="absolute inset-0 flex flex-col">
+                {/* Right Panel Header + ON/OFF Toggle */}
+                <div className="shrink-0 p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Barcode className="w-4 h-4 text-pink-600" />
+                      <span className="font-bold text-xs text-slate-800 dark:text-white">
+                        Barcode Print Queue
+                      </span>
+                    </div>
+
+                    {/* ON / OFF Switch */}
+                    <button
+                      type="button"
+                      onClick={toggleBarcodeQueueEnabled}
+                      className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-black transition-all flex items-center gap-1 border ${
+                        isBarcodeQueueEnabled
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600'
+                      }`}
+                      title="Turn ON to automatically queue barcodes whenever you save a product"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isBarcodeQueueEnabled ? 'bg-white' : 'bg-slate-400'}`} />
+                      <span>{isBarcodeQueueEnabled ? 'AUTO: ON' : 'AUTO: OFF'}</span>
+                    </button>
                   </div>
 
-                  {/* ON / OFF Switch */}
+                  {/* 2-UP Roll Status & Start Slot Selector */}
+                  <div className="flex items-center justify-between text-[10.5px] pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                    <div className="flex items-center gap-1 text-slate-500">
+                      <span>2-UP Start:</span>
+                      <button
+                        type="button"
+                        onClick={() => setStartSlot('left')}
+                        className={`px-1.5 py-0.2 rounded font-bold ${
+                          startSlot === 'left'
+                            ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        Left
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStartSlot('right')}
+                        className={`px-1.5 py-0.2 rounded font-bold ${
+                          startSlot === 'right'
+                            ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                        title="Use when left sticker on current row was already used"
+                      >
+                        Right 🔄
+                      </button>
+                    </div>
+
+                    {barcodeQueue.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBarcodeQueue([])}
+                        className="text-rose-600 hover:text-rose-700 font-bold text-[10.5px]"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Queue Items List (Scrolls after 4-5 items; locked to form height so modal never grows) */}
+                <div
+                  ref={queueListRef}
+                  className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2 scroll-smooth"
+                >
+                  {barcodeQueue.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-3 text-slate-400 space-y-1.5">
+                      <Printer className="w-7 h-7 opacity-35" />
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                        {isBarcodeQueueEnabled ? 'Queue is Ready (ON)' : 'Auto-Queue is OFF'}
+                      </p>
+                      <p className="text-[10.5px] leading-relaxed">
+                        {isBarcodeQueueEnabled
+                          ? 'Save products on the left (Enter) — they will appear here in exact order so you can adjust qty & print all at once.'
+                          : 'Switch AUTO: ON above if you want saved products to queue here for barcode printing.'}
+                      </p>
+                    </div>
+                  ) : (
+                    barcodeQueue.map((item, idx) => {
+                      const secondLinePreview = [
+                        formatSizeAndColor(item.size, item.color),
+                        item.styleCode || '',
+                        formatStickerRate(item.mrp)
+                      ]
+                        .filter(Boolean)
+                        .join(' | ');
+
+                      return (
+                        <div
+                          key={item.uid}
+                          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1">
+                                <span className="px-1.5 py-0.2 rounded bg-pink-50 dark:bg-pink-950 text-pink-600 font-mono font-black text-[10px]">
+                                  #{idx + 1}
+                                </span>
+                                <span className="font-bold text-xs text-slate-800 dark:text-white truncate">
+                                  {item.name}
+                                </span>
+                              </div>
+                              <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
+                                {secondLinePreview}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => removeQueueItem(item.uid)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              title="Remove from queue"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                            <span className="text-[10px] font-mono font-bold text-slate-500">
+                              {item.barcode}
+                            </span>
+
+                            {/* Quantity Decrease / Input / Increase */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateQueueItemCopies(item.uid, -1)}
+                                className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold"
+                                title="Decrease sticker quantity"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.copies}
+                                onFocus={(e) => e.currentTarget.select()}
+                                onClick={(e) => e.currentTarget.select()}
+                                onChange={(e) => updateQueueItemCopies(item.uid, parseInt(e.target.value) || 1, true)}
+                                className="w-11 h-6 text-center font-mono font-black text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateQueueItemCopies(item.uid, 1)}
+                                className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold"
+                                title="Increase sticker quantity"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Right Panel Bottom Print Action (Pinned flush at the bottom) */}
+                <div className="mt-auto shrink-0 p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-600 dark:text-slate-300">
+                      Total: <strong className="text-slate-900 dark:text-white">{totalQueuedStickers} Sticker{totalQueuedStickers === 1 ? '' : 's'}</strong>
+                    </span>
+                    {totalQueuedStickers > 0 && (
+                      <span
+                        className={`font-bold text-[10.5px] px-1.5 py-0.2 rounded ${
+                          (totalQueuedStickers + (startSlot === 'right' ? 1 : 0)) % 2 === 0
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        }`}
+                      >
+                        {total2UpRows} Row{total2UpRows === 1 ? '' : 's'} • {(totalQueuedStickers + (startSlot === 'right' ? 1 : 0)) % 2 === 0 ? 'Full Row' : '1 Slot Open'}
+                      </span>
+                    )}
+                  </div>
+
                   <button
                     type="button"
-                    onClick={toggleBarcodeQueueEnabled}
-                    className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-black transition-all flex items-center gap-1 border ${
-                      isBarcodeQueueEnabled
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600'
-                    }`}
-                    title="Turn ON to automatically queue barcodes whenever you save a product"
+                    disabled={barcodeQueue.length === 0}
+                    onClick={handlePrintQueuedBarcodes}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-pink-600 dark:hover:bg-pink-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-40 transition-all active:scale-95"
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${isBarcodeQueueEnabled ? 'bg-white' : 'bg-slate-400'}`} />
-                    <span>{isBarcodeQueueEnabled ? 'AUTO: ON' : 'AUTO: OFF'}</span>
+                    <Printer className="w-4 h-4" />
+                    <span>Print Barcodes ({totalQueuedStickers})</span>
                   </button>
                 </div>
-
-                {/* 2-UP Roll Status & Start Slot Selector */}
-                <div className="flex items-center justify-between text-[10.5px] pt-1 border-t border-slate-100 dark:border-slate-700/60">
-                  <div className="flex items-center gap-1 text-slate-500">
-                    <span>2-UP Start:</span>
-                    <button
-                      type="button"
-                      onClick={() => setStartSlot('left')}
-                      className={`px-1.5 py-0.2 rounded font-bold ${
-                        startSlot === 'left'
-                          ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      Left
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStartSlot('right')}
-                      className={`px-1.5 py-0.2 rounded font-bold ${
-                        startSlot === 'right'
-                          ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                      }`}
-                      title="Use when left sticker on current row was already used"
-                    >
-                      Right 🔄
-                    </button>
-                  </div>
-
-                  {barcodeQueue.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setBarcodeQueue([])}
-                      className="text-rose-600 hover:text-rose-700 font-bold text-[10.5px]"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Queue Items List (Fixed height for 4-5 items with scrollbar so modal never grows) */}
-              <div
-                ref={queueListRef}
-                className="h-[340px] max-h-[340px] overflow-y-auto p-2.5 space-y-2 scroll-smooth"
-              >
-                {barcodeQueue.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center px-3 text-slate-400 space-y-1.5">
-                    <Printer className="w-7 h-7 opacity-35" />
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      {isBarcodeQueueEnabled ? 'Queue is Ready (ON)' : 'Auto-Queue is OFF'}
-                    </p>
-                    <p className="text-[10.5px] leading-relaxed">
-                      {isBarcodeQueueEnabled
-                        ? 'Save products on the left (Enter) — they will appear here in exact order so you can adjust qty & print all at once.'
-                        : 'Switch AUTO: ON above if you want saved products to queue here for barcode printing.'}
-                    </p>
-                  </div>
-                ) : (
-                  barcodeQueue.map((item, idx) => {
-                    const secondLinePreview = [
-                      formatSizeAndColor(item.size, item.color),
-                      item.styleCode || '',
-                      formatStickerRate(item.mrp)
-                    ]
-                      .filter(Boolean)
-                      .join(' | ');
-
-                    return (
-                      <div
-                        key={item.uid}
-                        className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex flex-col gap-1.5"
-                      >
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1">
-                              <span className="px-1.5 py-0.2 rounded bg-pink-50 dark:bg-pink-950 text-pink-600 font-mono font-black text-[10px]">
-                                #{idx + 1}
-                              </span>
-                              <span className="font-bold text-xs text-slate-800 dark:text-white truncate">
-                                {item.name}
-                              </span>
-                            </div>
-                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
-                              {secondLinePreview}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => removeQueueItem(item.uid)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
-                            title="Remove from queue"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60">
-                          <span className="text-[10px] font-mono font-bold text-slate-500">
-                            {item.barcode}
-                          </span>
-
-                          {/* Quantity Decrease / Input / Increase */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => updateQueueItemCopies(item.uid, -1)}
-                              className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold"
-                              title="Decrease sticker quantity"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.copies}
-                              onFocus={(e) => e.currentTarget.select()}
-                              onClick={(e) => e.currentTarget.select()}
-                              onChange={(e) => updateQueueItemCopies(item.uid, parseInt(e.target.value) || 1, true)}
-                              className="w-11 h-6 text-center font-mono font-black text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updateQueueItemCopies(item.uid, 1)}
-                              className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold"
-                              title="Increase sticker quantity"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Right Panel Bottom Print Action */}
-              <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-slate-600 dark:text-slate-300">
-                    Total: <strong className="text-slate-900 dark:text-white">{totalQueuedStickers} Sticker{totalQueuedStickers === 1 ? '' : 's'}</strong>
-                  </span>
-                  {totalQueuedStickers > 0 && (
-                    <span
-                      className={`font-bold text-[10.5px] px-1.5 py-0.2 rounded ${
-                        (totalQueuedStickers + (startSlot === 'right' ? 1 : 0)) % 2 === 0
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                      }`}
-                    >
-                      {total2UpRows} Row{total2UpRows === 1 ? '' : 's'} • {(totalQueuedStickers + (startSlot === 'right' ? 1 : 0)) % 2 === 0 ? 'Full Row' : '1 Slot Open'}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={barcodeQueue.length === 0}
-                  onClick={handlePrintQueuedBarcodes}
-                  className="w-full py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-pink-600 dark:hover:bg-pink-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-40 transition-all active:scale-95"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Barcodes ({totalQueuedStickers})</span>
-                </button>
               </div>
             </div>
           )}
