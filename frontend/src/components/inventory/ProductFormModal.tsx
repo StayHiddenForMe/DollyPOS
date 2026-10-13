@@ -799,6 +799,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <input
                   type="number"
                   value={formData.purchase_price || ''}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onClick={(e) => e.currentTarget.select()}
                   onChange={(e) => handlePriceChange(parseFloat(e.target.value) || 0, formData.selling_price)}
                   placeholder="0"
                   className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
@@ -813,6 +815,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <input
                   type="number"
                   value={formData.selling_price || ''}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onClick={(e) => e.currentTarget.select()}
                   onChange={(e) => handlePriceChange(formData.purchase_price, parseFloat(e.target.value) || 0)}
                   placeholder="0"
                   className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-pink-300 dark:border-pink-800 focus:border-pink-600 rounded-lg focus:outline-none"
@@ -828,6 +832,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <input
                   type="number"
                   value={formData.mrp || ''}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onClick={(e) => e.currentTarget.select()}
                   onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
                   placeholder="0"
                   className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
@@ -842,6 +848,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <input
                   type="number"
                   value={formData.stock_quantity || ''}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onClick={(e) => e.currentTarget.select()}
                   onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 1 })}
                   placeholder="1"
                   className="w-full px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
@@ -1149,6 +1157,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       step="0.01"
                       min="0"
                       value={formData.gst_percent === 0 ? '' : formData.gst_percent}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onClick={(e) => e.currentTarget.select()}
                       onChange={(e) => handleTotalGstChange(parseFloat(e.target.value) || 0)}
                       placeholder="0"
                       className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
@@ -1163,6 +1173,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       step="0.01"
                       min="0"
                       value={formData.cgst_percent === 0 ? '' : formData.cgst_percent}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onClick={(e) => e.currentTarget.select()}
                       onChange={(e) => handleCgstChange(parseFloat(e.target.value) || 0)}
                       placeholder="0"
                       className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
@@ -1177,6 +1189,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       step="0.01"
                       min="0"
                       value={formData.sgst_percent === 0 ? '' : formData.sgst_percent}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onClick={(e) => e.currentTarget.select()}
                       onChange={(e) => handleSgstChange(parseFloat(e.target.value) || 0)}
                       placeholder="0"
                       className="w-full font-mono font-bold text-right text-[11px] bg-transparent focus:outline-none"
