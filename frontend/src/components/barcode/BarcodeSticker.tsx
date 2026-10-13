@@ -56,7 +56,7 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
         <div className="text-center px-1.5 whitespace-nowrap">
           {styleCodeText}
         </div>
-        <div className="text-right text-[10.5px] whitespace-nowrap">
+        <div className="text-right text-[10.5px] font-bold whitespace-nowrap">
           {rateText}
         </div>
       </div>

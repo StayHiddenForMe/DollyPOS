@@ -90,7 +90,7 @@ def register_windows_control_panel(target_dir, exe_path, uninstall_bat_path):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\DollyPOS"
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
             winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Dolly POS - Retail Management")
-            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.6.0")
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.7.0")
             winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Dolly Toys & Kids Wear")
             winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, target_dir)
             winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, exe_path)

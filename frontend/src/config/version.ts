@@ -5,10 +5,26 @@ export interface VersionRelease {
   highlights: string[];
 }
 
-export const APP_VERSION = 'v1.6.0';
-export const RELEASE_DATE = '2026-10-06';
+export const APP_VERSION = 'v1.7.0';
+export const RELEASE_DATE = '2026-10-13';
 
 export const VERSION_HISTORY: VersionRelease[] = [
+  {
+    version: 'v1.7.0',
+    date: '2026-10-13',
+    title: 'Fast Continuous Inventory, Live Barcode Print Queue, Short Code Memory & High-Contrast 2-UP Labels',
+    highlights: [
+      'Live Barcode Print Queue panel integrated directly in Add Product modal with AUTO: ON/OFF toggle and +/- quantity adjustments',
+      'Locking system for Short Code (F/S, H/S, C/S, R/N, FNY, custom codes) preserved until modal is closed with 1-click lock/unlock toggle',
+      'Category, Subcategory, Vendor Code, and Low Stock Alert Limit stay locked across continuous saves for high-speed stock entry',
+      'Full support for 0 stock alert threshold and 1-click auto-select all text on Barcode and Low Stock Alert input fields',
+      'Automatic title casing / capitalization on the first word of Product Name and Color inputs',
+      'Automatic auto-focus on Product Name after saving each item for seamless non-stop keyboard entry',
+      'Barcode label 2nd-line layout updated to "Sz : <size>.<color>" with bold pricing (₹...) for maximum legibility on 2-UP thermal rolls',
+      'Native crisp vector Code128 SVG barcode rendering with 500 font-weight optimized for iBall LS392 laser scanners',
+      'Compact fixed-height print queue list with scrollbar and flush bottom-pinned print action footer'
+    ]
+  },
   {
     version: 'v1.6.0',
     date: '2026-10-06',

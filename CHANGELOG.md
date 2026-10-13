@@ -2,6 +2,23 @@
 
 All notable changes to the Dolly POS application will be documented in this file.
 
+## [v1.7.0] - 2026-10-13
+### Added & Enhanced
+- **Fast Continuous Inventory & Live Barcode Print Queue**:
+  - Embedded right-side **Barcode Print Queue** directly into the Add Product modal with `AUTO: ON/OFF` toggle, individual copies increment/decrement (`-` and `+`), and instant bulk 2-UP thermal print.
+  - State memory locks **Short Code** (`F/S`, `H/S`, `C/S`, `R/N`, `FNY`, or custom codes) across saves until the modal is closed, with a 1-click `Locked / Unlock` toggle button.
+  - Category, Subcategory, Vendor Code, and Low Stock Alert limit stay persistently locked across continuous product additions.
+  - Seamless non-stop keyboard entry: automatic focus returns to Product Name upon save (`Enter`).
+  - Auto-select all text on 1-click in Barcode and Low Stock Alert input boxes, eliminating the need to repeatedly press backspace.
+  - Full support for `0` low stock alert threshold for unique single-quantity items.
+  - Automatic title casing: capitalizes the first word of Product Name and Color automatically.
+  - Right panel layout locked strictly to the modal height with an internal scrollbar appearing after 4–5 items and the bottom "Total & Print Barcodes" action pinned flush to the bottom.
+- **TSC TE244 & 2-UP Thermal Barcode Label Engine**:
+  - Barcode label 2nd-line layout updated to `Sz : <size>.<color>` (replacing legacy `Sz-`).
+  - High-contrast **bold pricing** (`₹...`) for maximum legibility on 50x25mm and 38x25mm thermal stickers.
+  - Vector Code128 SVG barcode rendering with crisp edges (`shape-rendering="crispEdges"`) for rapid iBall LS392 laser scanner decode.
+  - Clean separation of garment short codes from product catalog names (`formData.fabric`).
+
 ## [v1.6.0] - 2026-10-06
 ### Added & Enhanced
 - **Custom CGST & SGST Tax Engine**: Full manual and 50/50 split controls for GST rates (0%, 2%, 5%, 12%, 18%, 28%, or custom) when adding or editing products (single & multi-size variant generator).
