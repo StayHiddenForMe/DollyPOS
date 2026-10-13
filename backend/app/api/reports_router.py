@@ -20,7 +20,7 @@ from app.models.product import Product
 from app.models.category import Category
 from app.models.customer import Customer
 from app.models.vendor import Vendor
-from app.models.return_order import ReturnOrder
+from app.models.return_order import ReturnOrder, ReturnType
 from app.services.analytics_service import analytics_service
 from app.core.timezone import (
     get_ist_now,
@@ -88,12 +88,39 @@ def get_sales_report(
                 product_sales_map[itm.product_id]["quantity_sold"] += itm.quantity
                 product_sales_map[itm.product_id]["revenue"] += itm.total_price
 
-    gross_profit = max(0.0, total_sales - total_cogs)
-    gross_margin_percent = round((gross_profit / total_sales * 100), 2) if total_sales > 0 else 0.0
-
     cash_total = sum(i.paid_amount for i in invoices if i.payment_mode == PaymentMode.CASH)
     upi_total = sum(i.paid_amount for i in invoices if i.payment_mode == PaymentMode.UPI)
     credit_total = sum(i.due_amount for i in invoices if i.payment_mode == PaymentMode.CREDIT_KHATA or i.due_amount > 0)
+
+    # Refunds in same period
+    refunds = db.query(ReturnOrder).options(joinedload(ReturnOrder.items)).filter(
+        ReturnOrder.created_at >= start_dt,
+        ReturnOrder.created_at <= end_dt
+    ).all()
+    total_refunds = sum(r.total_refund_amount for r in refunds)
+    cash_refunds = sum(r.total_refund_amount for r in refunds if r.return_type in [ReturnType.REFUND_CASH, ReturnType.REFUND_UPI])
+    exchange_refunds = sum(r.total_refund_amount for r in refunds if r.return_type == ReturnType.EXCHANGE)
+    store_credit_refunds = sum(r.total_refund_amount for r in refunds if r.return_type == ReturnType.STORE_CREDIT)
+    refund_count = len(refunds)
+
+    # Calculate returned COGS (wholesale cost of items restocked into inventory)
+    returned_cogs = 0.0
+    for r in refunds:
+        for itm in r.items:
+            if itm.restocked and itm.product_id:
+                p_obj = db.query(Product).filter(Product.id == itm.product_id).first()
+                if p_obj and p_obj.purchase_price:
+                    returned_cogs += float(p_obj.purchase_price) * itm.quantity
+
+    net_cogs = max(0.0, total_cogs - returned_cogs)
+
+    # Net Sales: Real turnover kept by store.
+    # Deducts Cash/UPI refunds and store credit issued out of the till.
+    # Note: Exchange returns are item swaps where the replacement invoice grand_total was already adjusted.
+    net_sales = max(0.0, total_sales - (cash_refunds + store_credit_refunds))
+
+    gross_profit = round(net_sales - net_cogs, 2)
+    gross_margin_percent = round((gross_profit / net_sales * 100), 2) if net_sales > 0 else 0.0
 
     # Expenses in same period
     expenses = db.query(Expense).filter(
@@ -110,14 +137,6 @@ def get_sales_report(
 
     take_home_net_profit = round(gross_profit - expenses_total, 2)
     avg_bill_value = round(total_sales / bill_count, 2) if bill_count > 0 else 0.0
-
-    # Refunds in same period
-    refunds = db.query(ReturnOrder).filter(
-        ReturnOrder.created_at >= start_dt,
-        ReturnOrder.created_at <= end_dt
-    ).all()
-    total_refunds = sum(r.total_refund_amount for r in refunds)
-    refund_count = len(refunds)
 
     # Fast-moving products (Top 8 sorted by quantity)
     fast_moving = sorted(product_sales_map.values(), key=lambda x: x["quantity_sold"], reverse=True)[:8]
@@ -147,7 +166,9 @@ def get_sales_report(
         "end_date": end_dt.isoformat(),
         "bill_count": bill_count,
         "total_sales": round(total_sales, 2),
-        "total_cogs": round(total_cogs, 2),
+        "net_sales": round(net_sales, 2),
+        "total_cogs": round(net_cogs, 2),
+        "gross_cogs": round(total_cogs, 2),
         "gross_profit": round(gross_profit, 2),
         "gross_margin_percent": gross_margin_percent,
         "total_units_sold": total_units_sold,
@@ -155,6 +176,9 @@ def get_sales_report(
         "total_tax": round(total_tax, 2),
         "total_discount": round(total_discount, 2),
         "total_refunds": round(total_refunds, 2),
+        "cash_refunds": round(cash_refunds, 2),
+        "exchange_refunds": round(exchange_refunds, 2),
+        "store_credit_refunds": round(store_credit_refunds, 2),
         "refund_count": refund_count,
         "cash_total": round(cash_total, 2),
         "upi_total": round(upi_total, 2),

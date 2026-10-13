@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from app.models.invoice import Invoice, InvoiceItem, Payment, PaymentMode, PaymentStatus
 from app.models.product import Product
 from app.models.expense import Expense
-from app.models.return_order import ReturnOrder, ReturnItem
+from app.models.return_order import ReturnOrder, ReturnItem, ReturnType
 from app.models.category import Category
 from app.core.timezone import (
     get_ist_now,
@@ -63,7 +63,15 @@ class AnalyticsService:
             Invoice.is_held == False
         ).scalar() or 0.0
         
-        today_gross_profit = today_sales - float(today_cogs)
+        # Today's Cash/UPI Refunds
+        today_cash_refunds = db.query(func.coalesce(func.sum(ReturnOrder.total_refund_amount), 0.0)).filter(
+            ReturnOrder.created_at >= today_start,
+            ReturnOrder.created_at <= today_end,
+            ReturnOrder.return_type.in_([ReturnType.REFUND_CASH, ReturnType.REFUND_UPI, ReturnType.STORE_CREDIT])
+        ).scalar() or 0.0
+
+        today_net_sales = max(0.0, today_sales - float(today_cash_refunds))
+        today_gross_profit = today_net_sales - float(today_cogs)
         today_net_profit = today_gross_profit - float(today_expenses)
 
         # 4. Low stock count
@@ -79,6 +87,14 @@ class AnalyticsService:
             Invoice.is_cancelled == False,
             Invoice.is_held == False
         ).scalar() or 0.0
+
+        month_cash_refunds = db.query(func.coalesce(func.sum(ReturnOrder.total_refund_amount), 0.0)).filter(
+            ReturnOrder.created_at >= month_start,
+            ReturnOrder.created_at <= month_end,
+            ReturnOrder.return_type.in_([ReturnType.REFUND_CASH, ReturnType.REFUND_UPI, ReturnType.STORE_CREDIT])
+        ).scalar() or 0.0
+
+        month_net_sales = max(0.0, float(month_sales or 0.0) - float(month_cash_refunds or 0.0))
 
         month_expenses = db.query(func.sum(Expense.amount)).filter(
             Expense.expense_date >= month_start,

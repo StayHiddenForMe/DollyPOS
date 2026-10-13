@@ -391,6 +391,20 @@ export const ReportsPage: React.FC = () => {
               </span>
             </div>
 
+            <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/10 dark:bg-amber-950/10 shadow-xs space-y-0.5">
+              <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Returns & Refunds</span>
+              <div className="text-lg sm:text-xl font-black font-mono text-amber-600 dark:text-amber-400">
+                {formatINR(report?.total_refunds ?? 0)}
+              </div>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block truncate">
+                {(report?.cash_refunds ?? 0) > 0
+                  ? `${formatINR(report?.cash_refunds)} Cash Out • ${report?.refund_count ?? 0} Returns`
+                  : (report?.exchange_refunds ?? 0) > 0
+                    ? `${report?.refund_count ?? 0} Exchange (${formatINR(report?.exchange_refunds)})`
+                    : `${report?.refund_count ?? 0} Return Vouchers`}
+              </span>
+            </div>
+
             <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-blue-200/60 dark:border-blue-900/40 bg-blue-50/20 dark:bg-blue-950/10 shadow-xs space-y-0.5">
               <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">COGS (Wholesale Cost)</span>
               <div className="text-lg sm:text-xl font-black font-mono text-blue-600 dark:text-blue-400">
@@ -407,7 +421,7 @@ export const ReportsPage: React.FC = () => {
                 {formatINR(report?.gross_profit ?? 0)}
               </div>
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block truncate">
-                Margin: {report?.gross_margin_percent ?? 0}%
+                Margin: {report?.gross_margin_percent ?? 0}% (Net Sales − COGS)
               </span>
             </div>
 
@@ -421,25 +435,36 @@ export const ReportsPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-amber-200/60 dark:border-amber-900/40 shadow-xs space-y-0.5">
-              <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Returns & Refunds</span>
-              <div className="text-lg sm:text-xl font-black font-mono text-amber-600 dark:text-amber-400">
-                {formatINR(report?.total_refunds ?? 0)}
-              </div>
-              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block truncate">
-                {report?.refund_count ?? 0} Return Vouchers
-              </span>
-            </div>
-
             <div className="p-3.5 bg-gradient-to-tr from-pink-600 to-purple-600 text-white rounded-2xl shadow-md space-y-0.5">
               <span className="text-[11px] font-bold text-pink-200 uppercase tracking-wider block">Take-Home Net Profit</span>
               <div className="text-lg sm:text-xl font-black font-mono">
                 {formatINR(report?.take_home_net_profit ?? 0)}
               </div>
               <span className="text-[10px] text-pink-100 block truncate">
-                After COGS & Expenses
+                Turnover − Refunds − COGS − OPEX
               </span>
             </div>
+          </div>
+
+          {/* P&L Formula Helper Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-slate-100/70 dark:bg-slate-800/50 rounded-xl text-[11px] text-slate-500 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50 shrink-0">
+            <div className="flex items-center space-x-1.5 flex-wrap">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">📊 P&L Accounting Math:</span>
+              <span>Turnover ({formatINR(report?.total_sales ?? 0)})</span>
+              <span>−</span>
+              <span>Cash Refunds ({formatINR(report?.cash_refunds ?? 0)})</span>
+              <span>−</span>
+              <span>COGS ({formatINR(report?.total_cogs ?? 0)})</span>
+              <span>−</span>
+              <span>Expenses ({formatINR(report?.expenses_total ?? 0)})</span>
+              <span>=</span>
+              <span className="font-bold text-pink-600 dark:text-pink-400 font-mono">Net Profit {formatINR(report?.take_home_net_profit ?? 0)}</span>
+            </div>
+            {(report?.exchange_refunds ?? 0) > 0 && (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md font-medium">
+                ℹ️ {formatINR(report?.exchange_refunds)} was exchanged for goods (no cash deducted from drawer)
+              </span>
+            )}
           </div>
 
           {/* Fast Moving & Dead Stock Row */}
