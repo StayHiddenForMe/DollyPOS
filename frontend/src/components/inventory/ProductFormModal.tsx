@@ -142,6 +142,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   });
   const [barcodeQueue, setBarcodeQueue] = useState<FormBarcodeQueueItem[]>([]);
   const [startSlot, setStartSlot] = useState<StartSlot>('left');
+  const queueListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (queueListRef.current) {
+      queueListRef.current.scrollTop = queueListRef.current.scrollHeight;
+    }
+  }, [barcodeQueue.length]);
 
   const toggleBarcodeQueueEnabled = () => {
     const next = !isBarcodeQueueEnabled;
@@ -1228,8 +1235,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 </div>
               </div>
 
-              {/* Queue Items List */}
-              <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+              {/* Queue Items List (Fixed height for 4-5 items with scrollbar so modal never grows) */}
+              <div
+                ref={queueListRef}
+                className="h-[340px] max-h-[340px] overflow-y-auto p-2.5 space-y-2 scroll-smooth"
+              >
                 {barcodeQueue.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center px-3 text-slate-400 space-y-1.5">
                     <Printer className="w-7 h-7 opacity-35" />
