@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, Category, Vendor } from '../../types';
 import api from '../../utils/api';
-import { X, Tag, Check, Truck, Lock, Unlock, Percent, Plus, Minus, Printer, Trash2, Barcode } from 'lucide-react';
+import { X, Tag, Check, Truck, Lock, Unlock, Percent, Plus, Minus, Printer, Trash2, Barcode, RefreshCw } from 'lucide-react';
 import {
   GARMENT_STYLE_OPTIONS,
   parseProductStyleCode,
@@ -304,6 +304,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setSelectedSizes([]);
     setCustomSize('');
     setCustomStyleInput('');
+  };
+
+  const handleRegenerateBarcode = () => {
+    const timestamp = Date.now().toString();
+    const newBarcode = `890${timestamp.slice(-9)}`;
+    setFormData(prev => ({ ...prev, barcode: newBarcode }));
   };
 
   const handlePriceChange = (purchase: number, selling: number) => {
@@ -622,18 +628,40 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   </div>
 
                   <div className="col-span-4">
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Barcode <span className="text-[10px] font-normal text-slate-400">(Click to select all)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.barcode}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onClick={(e) => e.currentTarget.select()}
-                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg focus:outline-none"
-                      required
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700 dark:text-slate-300">
+                        Barcode <span className="text-[10px] font-normal text-slate-400">(Click to select)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRegenerateBarcode}
+                        className="text-[10.5px] text-pink-600 hover:text-pink-700 dark:text-pink-400 font-bold flex items-center gap-1 hover:underline"
+                        title="Generate a new unique 890 barcode"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Regenerate</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.barcode}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onClick={(e) => e.currentTarget.select()}
+                        onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-pink-600 rounded-lg focus:outline-none pr-8"
+                        placeholder="e.g. 890123456789"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRegenerateBarcode}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-pink-600 rounded transition-colors"
+                        title="Regenerate Barcode"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
