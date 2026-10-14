@@ -438,7 +438,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           ...formData,
           size: selectedSizes[0] || undefined,
           season: finalSeason,
-          speed_dial_code: formData.speed_dial_code.trim() || undefined,
+          speed_dial_code: formData.speed_dial_code.trim() || null,
+          is_speed_dial: !!formData.speed_dial_code.trim(),
           vendor_code: formData.vendor_code || undefined
         };
         await api.put(`/inventory/${product.id}`, payload);

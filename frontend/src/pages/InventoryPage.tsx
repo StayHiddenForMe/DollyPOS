@@ -438,19 +438,33 @@ export const InventoryPage: React.FC = () => {
                               type="text"
                               value={speedDialInput}
                               onChange={(e) => setSpeedDialInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleInlineSpeedDialSave(p);
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setEditingSpeedDialId(null);
+                                }
+                              }}
+                              onFocus={(e) => e.currentTarget.select()}
                               placeholder="Code..."
-                              className="w-16 px-1.5 py-0.5 font-mono uppercase text-[10px] bg-white border border-pink-500 rounded text-center"
+                              className="w-16 px-1.5 py-0.5 font-mono uppercase text-[10px] bg-white dark:bg-slate-800 border border-pink-500 rounded text-center text-slate-900 dark:text-white focus:outline-none"
                               autoFocus
                             />
                             <button
+                              type="button"
                               onClick={() => handleInlineSpeedDialSave(p)}
-                              className="px-1.5 py-0.5 bg-pink-600 text-white rounded text-[10px] font-bold"
+                              className="px-1.5 py-0.5 bg-pink-600 hover:bg-pink-500 text-white rounded text-[10px] font-bold"
+                              title="Save (Enter)"
                             >
                               ✓
                             </button>
                             <button
+                              type="button"
                               onClick={() => setEditingSpeedDialId(null)}
-                              className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px]"
+                              className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded text-[10px]"
+                              title="Cancel (Esc)"
                             >
                               ✕
                             </button>

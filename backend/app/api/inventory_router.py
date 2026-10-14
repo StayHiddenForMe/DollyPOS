@@ -390,13 +390,19 @@ def update_product(
         if existing:
             raise HTTPException(status_code=400, detail="Barcode already assigned to another product")
 
-    new_dial_code = update_data.get("speed_dial_code")
-    if new_dial_code and new_dial_code.strip() and new_dial_code.strip().upper() != (product.speed_dial_code or "").upper():
-        clean_code = new_dial_code.strip().upper()
-        dup = db.query(Product).filter(Product.is_active == True, Product.id != product.id, func.upper(Product.speed_dial_code) == clean_code).first()
-        if dup:
-            raise HTTPException(status_code=400, detail=f"Speed dial code '{clean_code}' is already assigned to '{dup.name}'")
-        update_data["speed_dial_code"] = clean_code
+    if "speed_dial_code" in update_data:
+        new_dial_code = update_data["speed_dial_code"]
+        if new_dial_code and str(new_dial_code).strip():
+            clean_code = str(new_dial_code).strip().upper()
+            if clean_code != (product.speed_dial_code or "").upper():
+                dup = db.query(Product).filter(Product.is_active == True, Product.id != product.id, func.upper(Product.speed_dial_code) == clean_code).first()
+                if dup:
+                    raise HTTPException(status_code=400, detail=f"Speed dial code '{clean_code}' is already assigned to '{dup.name}'")
+            update_data["speed_dial_code"] = clean_code
+            update_data["is_speed_dial"] = True
+        else:
+            update_data["speed_dial_code"] = None
+            update_data["is_speed_dial"] = False
 
     p_price_old = product.purchase_price
     s_price_old = product.selling_price
@@ -459,12 +465,16 @@ def toggle_product_speed_dial(
 
     if req.speed_dial_code and req.speed_dial_code.strip():
         clean_code = req.speed_dial_code.strip().upper()
-        dup = db.query(Product).filter(Product.is_active == True, Product.id != product.id, func.upper(Product.speed_dial_code) == clean_code).first()
-        if dup:
-            raise HTTPException(status_code=400, detail=f"Speed dial code '{clean_code}' is already assigned to '{dup.name}'")
+        if clean_code != (product.speed_dial_code or "").upper():
+            dup = db.query(Product).filter(Product.is_active == True, Product.id != product.id, func.upper(Product.speed_dial_code) == clean_code).first()
+            if dup:
+                raise HTTPException(status_code=400, detail=f"Speed dial code '{clean_code}' is already assigned to '{dup.name}'")
         product.speed_dial_code = clean_code
+        product.is_speed_dial = True
+    else:
+        product.speed_dial_code = None
+        product.is_speed_dial = False
 
-    product.is_speed_dial = req.is_speed_dial
     if req.speed_dial_color:
         product.speed_dial_color = req.speed_dial_color
 
