@@ -172,12 +172,23 @@ export const InventoryPage: React.FC = () => {
   const handleInlineSpeedDialSave = async (prod: Product) => {
     const code = speedDialInput.trim().toUpperCase();
     try {
-      await api.put(`/inventory/${prod.id}/speed-dial`, {
-        is_speed_dial: !!code,
-        speed_dial_code: code || null
-      });
+      if (code) {
+        await api.put(`/inventory/${prod.id}/speed-dial`, {
+          is_speed_dial: true,
+          speed_dial_code: code
+        });
+      } else {
+        await api.put(`/inventory/${prod.id}`, {
+          is_speed_dial: false,
+          speed_dial_code: null
+        });
+        await api.put(`/inventory/${prod.id}/speed-dial`, {
+          is_speed_dial: false,
+          speed_dial_code: null
+        }).catch(() => {});
+      }
       setEditingSpeedDialId(null);
-      fetchProducts();
+      await fetchProducts();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to update speed dial');
     }
@@ -476,13 +487,13 @@ export const InventoryPage: React.FC = () => {
                               setSpeedDialInput(p.speed_dial_code || '');
                             }}
                             className={`px-2 py-0.5 rounded text-[11px] font-mono font-black transition-all ${
-                              p.speed_dial_code 
+                              (p.is_speed_dial && p.speed_dial_code)
                                 ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs hover:bg-amber-200' 
                                 : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'
                             }`}
                             title="Click to assign speed shortcode (e.g. 1, M10)"
                           >
-                            {p.speed_dial_code ? `⚡ ${p.speed_dial_code}` : '+ Assign'}
+                            {(p.is_speed_dial && p.speed_dial_code) ? `⚡ ${p.speed_dial_code}` : '+ Assign'}
                           </button>
                         )}
                       </td>
