@@ -1,3 +1,5 @@
+import { formatDisplayName } from './formatters';
+
 export type GarmentStyleCode = string;
 
 export const GARMENT_STYLE_OPTIONS: { code: string; label: string }[] = [
@@ -50,7 +52,9 @@ export function parseProductStyleCode(
   styleCodes: string[];
   styleCode: string | null;
 } {
-  const cleanRaw = (rawName || '').trim();
+  // Strip curly braces so "Dress {FD175}" prints cleanly as "Dress FD175" on barcode stickers
+  const cleanDisplay = formatDisplayName(rawName);
+  const cleanRaw = cleanDisplay.trim();
   const match = cleanRaw.match(DOT_STYLE_SUFFIX_REGEX) || cleanRaw.match(PRESET_FALLBACK_REGEX);
 
   let baseName = cleanRaw;

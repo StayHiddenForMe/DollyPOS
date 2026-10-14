@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Printer, X, Share2 } from 'lucide-react';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatBillItemName } from '../../utils/formatters';
 import { useSettingStore } from '../../store/settingStore';
 import { renderWhatsAppBillMessage, buildWhatsAppUrl, DEFAULT_WHATSAPP_BILL_TEMPLATE } from '../../utils/whatsappFormatter';
 import { OWNER_SIGNATURE_FOOTER } from '../../config/branding';
@@ -208,7 +208,7 @@ export const ThermalReceiptView: React.FC<ThermalReceiptViewProps> = ({ receiptD
                 {receiptData.items.map((item: any, idx: number) => (
                   <div key={idx} className="py-1 flex justify-between items-start text-[10.5px] text-black">
                     <div className="flex-1 min-w-0 pr-1.5 flex flex-col text-left">
-                      <span className="font-bold text-black line-clamp-2 leading-tight break-words">{item.item_name}</span>
+                      <span className="font-bold text-black line-clamp-2 leading-tight break-words">{formatBillItemName(item.item_name)}</span>
                       {(item.size || item.color || Number(item.tax_percent || 0) > 0) && (
                         <span className="text-[10px] font-bold text-black">
                           {item.size ? `Sz:${item.size} ` : ''}{item.color ? `Col:${item.color} ` : ''}

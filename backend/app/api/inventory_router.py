@@ -79,6 +79,7 @@ def fast_search_products(
 
     search_term = f"%{clean_q}%"
     prefix_term = f"{clean_q}%"
+    bracket_term = f"%{{{clean_q}}}%"
 
     # Single-pass ultra-fast indexed search query with SQL ranking
     products = db.query(Product).options(
@@ -87,6 +88,7 @@ def fast_search_products(
     ).filter(
         Product.is_active == True,
         or_(
+            Product.name.ilike(bracket_term),
             Product.speed_dial_code.ilike(clean_q),
             Product.barcode.ilike(prefix_term),
             Product.barcode.ilike(search_term),
@@ -100,10 +102,11 @@ def fast_search_products(
         )
     ).order_by(
         case(
-            (func.upper(Product.speed_dial_code) == clean_q.upper(), 0),
-            (Product.barcode == clean_q, 1),
-            (Product.name.ilike(prefix_term), 2),
-            else_=3
+            (Product.name.ilike(bracket_term), 0),
+            (func.upper(Product.speed_dial_code) == clean_q.upper(), 1),
+            (Product.barcode == clean_q, 2),
+            (Product.name.ilike(prefix_term), 3),
+            else_=4
         ),
         Product.id.desc()
     ).limit(limit).all()
@@ -119,15 +122,24 @@ def fast_search_products(
 @router.get("/barcode/{barcode_val}", response_model=ProductOut)
 def get_product_by_barcode_or_code(barcode_val: str, db: Session = Depends(get_db)):
     clean_val = barcode_val.strip()
+    bracket_val = f"%{{{clean_val}}}%"
     p = db.query(Product).options(
         joinedload(Product.category),
         joinedload(Product.subcategory)
     ).filter(
         or_(
             Product.barcode == clean_val,
-            Product.speed_dial_code.ilike(clean_val)
+            Product.speed_dial_code.ilike(clean_val),
+            Product.name.ilike(bracket_val)
         ),
         Product.is_active == True
+    ).order_by(
+        case(
+            (Product.barcode == clean_val, 0),
+            (func.upper(Product.speed_dial_code) == clean_val.upper(), 1),
+            (Product.name.ilike(bracket_val), 2),
+            else_=3
+        )
     ).first()
     
     if not p:

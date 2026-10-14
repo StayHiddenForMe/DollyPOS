@@ -63,8 +63,10 @@ class ReceiptService:
 
         items = []
         for item in invoice.items:
+            clean_name = re.sub(r'\{[^}]*\}', '', item.item_name or '')
+            clean_name = re.sub(r'\s+', ' ', clean_name).strip() or item.item_name
             items.append({
-                "item_name": item.item_name,
+                "item_name": clean_name,
                 "barcode": item.barcode or "",
                 "size": item.size or "",
                 "color": item.color or "",

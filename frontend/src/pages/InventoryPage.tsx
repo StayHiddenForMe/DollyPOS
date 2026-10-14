@@ -25,7 +25,7 @@ import {
   Download,
   Loader2
 } from 'lucide-react';
-import { formatINR } from '../utils/formatters';
+import { formatINR, formatDisplayName } from '../utils/formatters';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { LabelPreviewModal } from '../components/barcode/LabelPreviewModal';
 import { PriceHistoryModal } from '../components/inventory/PriceHistoryModal';
@@ -401,7 +401,7 @@ export const InventoryPage: React.FC = () => {
 
                       {/* Product Name (Width controlled for clean fit) */}
                       <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white max-w-[200px] truncate" title={p.name}>
-                        {p.name}
+                        {formatDisplayName(p.name)}
                         {p.vendor_code && (
                           <span className="text-[10px] text-pink-500 font-mono block">Vendor: {p.vendor_code}</span>
                         )}

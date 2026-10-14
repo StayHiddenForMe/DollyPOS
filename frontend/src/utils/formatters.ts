@@ -38,6 +38,27 @@ export function formatISTDate(dateStr: string | Date | undefined | null): string
   }
 }
 
+/**
+ * Strips curly braces but preserves the speed dial / tag inside.
+ * Used everywhere in the UI and on barcode stickers.
+ * E.g. "Dress {FD175}" -> "Dress FD175"
+ */
+export function formatDisplayName(rawName?: string | null): string {
+  if (!rawName) return '';
+  return rawName.replace(/\{([^}]+)\}/g, '$1').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Completely removes the curly braces AND whatever is inside them.
+ * Used exclusively on customer bills, thermal receipts, WhatsApp bills, and invoices.
+ * E.g. "Dress {FD175}" -> "Dress"
+ */
+export function formatBillItemName(rawName?: string | null): string {
+  if (!rawName) return '';
+  const cleaned = rawName.replace(/\{[^}]*\}/g, '').replace(/\s+/g, ' ').trim();
+  return cleaned || rawName;
+}
+
 export function playBeepSuccess() {
   if (typeof window !== 'undefined' && localStorage.getItem('dolly_sound_enabled') === 'false') return;
   try {

@@ -15,7 +15,7 @@ import {
   Share2,
   Zap
 } from 'lucide-react';
-import { formatINR, playSuccessChime } from '../../utils/formatters';
+import { formatINR, playSuccessChime, formatBillItemName } from '../../utils/formatters';
 import { computeExtraCharges } from '../../utils/extraCharges';
 
 interface PaymentModalProps {
@@ -219,7 +219,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     try {
       const itemsPayload = activeItems().map(item => ({
         product_id: item.product_id,
-        item_name: item.item_name,
+        item_name: formatBillItemName(item.item_name),
         barcode: item.barcode,
         sku: item.sku,
         size: item.size,

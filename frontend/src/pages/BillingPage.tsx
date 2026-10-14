@@ -8,7 +8,7 @@ import { UnlistedItemModal } from '../components/billing/UnlistedItemModal';
 import { PaymentModal } from '../components/billing/PaymentModal';
 import { ThermalReceiptView } from '../components/billing/ThermalReceiptView';
 import { HeldBillsDrawer } from '../components/billing/HeldBillsDrawer';
-import { formatINR } from '../utils/formatters';
+import { formatINR, formatBillItemName } from '../utils/formatters';
 import { computeExtraCharges } from '../utils/extraCharges';
 import { PaymentMode } from '../types';
 import api from '../utils/api';
@@ -149,7 +149,7 @@ export const BillingPage: React.FC = () => {
         is_held: true,
         items: items.map(i => ({
           product_id: i.product_id,
-          item_name: i.item_name,
+          item_name: formatBillItemName(i.item_name),
           barcode: i.barcode,
           size: i.size,
           color: i.color,

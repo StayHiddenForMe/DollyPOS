@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { Product } from '../types';
 import { Barcode as BarcodeIcon, Printer, Plus, Trash2, Tag, Search, RotateCcw, FileSpreadsheet, Sparkles } from 'lucide-react';
-import { formatINR } from '../utils/formatters';
+import { formatINR, formatDisplayName } from '../utils/formatters';
 import { BarcodeSticker } from '../components/barcode/BarcodeSticker';
 import {
   printBarcodeStickers,
@@ -191,7 +191,7 @@ export const BarcodePage: React.FC = () => {
               <div key={p.id} className="py-2 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/40 p-2 rounded-xl transition-colors">
                 <div className="flex flex-col pr-2">
                   <span className="font-black text-xs text-slate-900 dark:text-white line-clamp-1">
-                    {p.name}
+                    {formatDisplayName(p.name)}
                   </span>
                   <div className="text-[10px] text-slate-500 font-mono flex items-center space-x-2 mt-0.5">
                     <span className="font-bold text-slate-700 dark:text-slate-300">{p.barcode}</span>

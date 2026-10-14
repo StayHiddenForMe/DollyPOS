@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import io
 import math
+import re
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -164,10 +165,13 @@ def create_invoice(
         sum_items_cgst += i_cgst_amt
         sum_items_sgst += i_sgst_amt
 
+        clean_item_name = re.sub(r'\{[^}]*\}', '', item.item_name or '')
+        clean_item_name = re.sub(r'\s+', ' ', clean_item_name).strip() or item.item_name
+
         inv_item = InvoiceItem(
             invoice_id=invoice.id,
             product_id=item.product_id,
-            item_name=item.item_name,
+            item_name=clean_item_name,
             barcode=item.barcode,
             sku=item.sku,
             size=item.size,

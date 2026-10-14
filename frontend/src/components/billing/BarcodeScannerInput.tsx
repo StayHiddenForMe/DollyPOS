@@ -3,7 +3,7 @@ import { useBillingStore } from '../../store/billingStore';
 import api from '../../utils/api';
 import { Product } from '../../types';
 import { Scan, Plus, Sparkles } from 'lucide-react';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatDisplayName } from '../../utils/formatters';
 
 interface BarcodeScannerInputProps {
   onOpenUnlistedModal: () => void;
@@ -61,15 +61,17 @@ export const BarcodeScannerInput: React.FC<BarcodeScannerInputProps> = ({
         const res = await api.get(`/inventory/search?q=${encodeURIComponent(trimmed)}&limit=15`);
         const items: Product[] = res.data;
 
-        // Custom Strict Sort: Exact Speed Dial or Exact Barcode strictly placed at index 0
+        // Custom Strict Sort: Exact Speed Dial, Bracketed Code, or Exact Barcode strictly placed at index 0
         items.sort((a, b) => {
           const aExactSpeed = (a.speed_dial_code || '').toUpperCase() === trimmed.toUpperCase();
           const bExactSpeed = (b.speed_dial_code || '').toUpperCase() === trimmed.toUpperCase();
+          const aExactBracket = (a.name || '').toUpperCase().includes(`{${trimmed.toUpperCase()}}`);
+          const bExactBracket = (b.name || '').toUpperCase().includes(`{${trimmed.toUpperCase()}}`);
           const aExactBarcode = a.barcode === trimmed;
           const bExactBarcode = b.barcode === trimmed;
 
-          if (aExactSpeed || aExactBarcode) return -1;
-          if (bExactSpeed || bExactBarcode) return 1;
+          if (aExactSpeed || aExactBracket || aExactBarcode) return -1;
+          if (bExactSpeed || bExactBracket || bExactBarcode) return 1;
           return 0;
         });
 
@@ -212,7 +214,7 @@ export const BarcodeScannerInput: React.FC<BarcodeScannerInputProps> = ({
                       </span>
                     )}
                     <span className="font-semibold text-sm text-slate-800 dark:text-white">
-                      {prod.name}
+                      {formatDisplayName(prod.name)}
                     </span>
                     {prod.size && (
                       <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-[10px] font-bold font-mono">

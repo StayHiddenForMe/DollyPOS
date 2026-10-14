@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { CartItem } from '../../types';
 import { useBillingStore } from '../../store/billingStore';
 import { Plus, Minus, Trash2 } from 'lucide-react';
-import { formatINR } from '../../utils/formatters';
+import { formatINR, formatDisplayName } from '../../utils/formatters';
 
 interface CartItemRowProps {
   item: CartItem;
@@ -40,7 +40,7 @@ export const CartItemRow: React.FC<CartItemRowProps> = ({ item, index, isSelecte
       <td className="py-2.5 px-3">
         <div className="flex flex-col">
           <span className="font-semibold text-sm text-slate-800 dark:text-white leading-snug">
-            {item.item_name}
+            {formatDisplayName(item.item_name)}
             {item.is_unlisted && (
               <span className="ml-2 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase">
                 Custom

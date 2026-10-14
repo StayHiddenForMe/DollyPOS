@@ -1,4 +1,5 @@
 import { OWNER_SIGNATURE_FOOTER } from '../config/branding';
+import { formatBillItemName } from './formatters';
 
 /**
  * Standard Default WhatsApp Bill / Receipt Template
@@ -75,7 +76,8 @@ export function renderWhatsAppBillMessage(template: string, receiptData: any): s
   if (Array.isArray(receiptData.items) && receiptData.items.length > 0) {
     itemsListText = receiptData.items.map((it: any) => {
       const sizeStr = it.size ? ` [${it.size}]` : '';
-      return `• ${it.item_name}${sizeStr} (${it.quantity}x) - ₹${Number(it.total_price || (it.unit_price * it.quantity)).toFixed(2)}`;
+      const cleanName = formatBillItemName(it.item_name);
+      return `• ${cleanName}${sizeStr} (${it.quantity}x) - ₹${Number(it.total_price || (it.unit_price * it.quantity)).toFixed(2)}`;
     }).join('\n');
   } else {
     itemsListText = '• Purchased Merchandise (1x) - ₹' + Number(receiptData.grand_total || 0).toFixed(2);
