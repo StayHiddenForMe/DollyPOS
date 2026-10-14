@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDisplayName } from '../../utils/formatters';
 import {
   parseProductStyleCode,
   formatSizeAndColor,
@@ -45,7 +46,7 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
     >
       {/* 1. Product Name Only (Whole 1st Line - 14px, Weight 600, No Top Margin) */}
       <div className="w-full text-[14px] font-semibold text-black truncate leading-tight px-0.5 m-0">
-        {parsed.baseName}
+        {formatDisplayName(parsed.baseName)}
       </div>
 
       {/* 2. Second Line: Direct Size : Color (Bold) | Short Code (Normal) | Rate (Bigger, Bold) */}

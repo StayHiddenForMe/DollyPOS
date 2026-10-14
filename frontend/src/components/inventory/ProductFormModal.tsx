@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, Category, Vendor } from '../../types';
 import api from '../../utils/api';
+import { formatDisplayName } from '../../utils/formatters';
 import { X, Tag, Check, Truck, Lock, Unlock, Percent, Plus, Minus, Printer, Trash2, Barcode, RefreshCw } from 'lucide-react';
 import {
   GARMENT_STYLE_OPTIONS,
@@ -1344,7 +1345,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                   #{idx + 1}
                                 </span>
                                 <span className="font-bold text-xs text-slate-800 dark:text-white truncate">
-                                  {item.name}
+                                  {formatDisplayName(item.name)}
                                 </span>
                               </div>
                               <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">

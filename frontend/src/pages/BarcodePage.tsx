@@ -312,7 +312,7 @@ export const BarcodePage: React.FC = () => {
                 {queue.map(q => (
                   <div key={q.product.id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
                     <div>
-                      <span className="font-bold text-slate-900 dark:text-white">{q.product.name}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{formatDisplayName(q.product.name)}</span>
                       <div className="text-[10px] text-slate-500 font-mono flex items-center gap-2 mt-0.5">
                         <span className="font-bold">{q.product.barcode}</span>
                         {q.product.size && <span>Sz: {q.product.size}</span>}

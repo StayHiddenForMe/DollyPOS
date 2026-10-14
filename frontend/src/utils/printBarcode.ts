@@ -52,9 +52,7 @@ export function parseProductStyleCode(
   styleCodes: string[];
   styleCode: string | null;
 } {
-  // Strip curly braces so "Dress {FD175}" prints cleanly as "Dress FD175" on barcode stickers
-  const cleanDisplay = formatDisplayName(rawName);
-  const cleanRaw = cleanDisplay.trim();
+  const cleanRaw = (rawName || '').trim();
   const match = cleanRaw.match(DOT_STYLE_SUFFIX_REGEX) || cleanRaw.match(PRESET_FALLBACK_REGEX);
 
   let baseName = cleanRaw;
@@ -204,7 +202,7 @@ export function exportBarTenderCsv(items: PrintStickerItem[], filename = 'DollyT
     ...items.map(i => {
       const parsed = parseProductStyleCode(i.productName, i.styleCode);
       return [
-        `"${(parsed.baseName || '').replace(/"/g, '""')}"`,
+        `"${(formatDisplayName(parsed.baseName) || '').replace(/"/g, '""')}"`,
         `"${formatSizeAndColor(i.size, i.color).replace(/"/g, '""')}"`,
         `"${(parsed.styleCode || '').replace(/"/g, '""')}"`,
         `"${i.barcode}"`,
@@ -244,7 +242,7 @@ export function printBarcodeStickers(
     ...items.map(i => {
       const parsed = parseProductStyleCode(i.productName, i.styleCode);
       return [
-        `"${(parsed.baseName || '').replace(/"/g, '""')}"`,
+        `"${(formatDisplayName(parsed.baseName) || '').replace(/"/g, '""')}"`,
         `"${formatSizeAndColor(i.size, i.color).replace(/"/g, '""')}"`,
         `"${(parsed.styleCode || '').replace(/"/g, '""')}"`,
         `"${i.barcode}"`,
@@ -266,7 +264,7 @@ export function printBarcodeStickers(
 
     return `
       <div class="sticker">
-        <div class="product-name">${parsed.baseName}</div>
+        <div class="product-name">${formatDisplayName(parsed.baseName)}</div>
         <div class="sub-row">
           <div class="variants">${sizeColorText}</div>
           <div class="style-code">${styleCodeText}</div>
