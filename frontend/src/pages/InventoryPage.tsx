@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../utils/api';
 import { Product, Category } from '../types';
 import { useAuthStore } from '../store/authStore';
@@ -23,12 +23,37 @@ import {
   Check,
   Upload,
   Download,
-  Loader2
+  Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  X
 } from 'lucide-react';
 import { formatINR, formatDisplayName } from '../utils/formatters';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { LabelPreviewModal } from '../components/barcode/LabelPreviewModal';
 import { PriceHistoryModal } from '../components/inventory/PriceHistoryModal';
+
+type SortField = 'id' | 'name' | 'size' | 'cost' | 'selling_price' | 'stock' | 'barcode';
+type SortOrder = 'asc' | 'desc';
+
+const SIZE_ORDER_MAP: Record<string, number> = {
+  '000': 1, '00': 2, '0': 3, '1': 4, '2': 5, '3': 6, '4': 7, '5': 8, '6': 9, '7': 10,
+  '8': 11, '9': 12, '10': 13, '12': 14, '14': 15, '16': 16, '18': 17, '20': 18,
+  '22': 19, '24': 20, '26': 21, '28': 22, '30': 23, '32': 24, '34': 25, '36': 26,
+  '38': 27, '40': 28, '42': 29,
+  'XS': 100, 'S': 101, 'M': 102, 'L': 103, 'XL': 104, 'XXL': 105, '2XL': 105,
+  '3XL': 106, 'XXXL': 106, '4XL': 107, '5XL': 108, 'FREE SIZE': 199, 'FS': 199
+};
+
+const parseSizeRank = (val?: string | null): number => {
+  if (!val) return 9999;
+  const clean = val.trim().toUpperCase();
+  if (SIZE_ORDER_MAP[clean] !== undefined) return SIZE_ORDER_MAP[clean];
+  const num = parseFloat(clean);
+  if (!isNaN(num)) return num * 10;
+  return 2000 + clean.charCodeAt(0);
+};
 
 export const InventoryPage: React.FC = () => {
   const { isOwner } = useAuthStore();
@@ -38,8 +63,13 @@ export const InventoryPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>();
   const [selectedColor, setSelectedColor] = useState<string>('');
+  const [allColors, setAllColors] = useState<string[]>([]);
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Sorting State
+  const [sortBy, setSortBy] = useState<SortField>('id');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   // Editable Page Catalog Heading (Click-to-edit directly without extra buttons)
   const [catalogTitle, setCatalogTitle] = useState<string>(() => {
@@ -105,6 +135,7 @@ export const InventoryPage: React.FC = () => {
       alert(res.data.message);
       fetchProducts();
       fetchCategories();
+      fetchAllColors();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to import products from Excel');
     } finally {
@@ -115,11 +146,12 @@ export const InventoryPage: React.FC = () => {
 
   useEffect(() => {
     fetchCategories();
+    fetchAllColors();
   }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, [page, pageSize, search, selectedCategory, selectedColor, lowStockOnly]);
+  }, [page, pageSize, search, selectedCategory, selectedColor, lowStockOnly, sortBy, sortOrder]);
 
   const fetchCategories = async () => {
     try {
@@ -127,6 +159,33 @@ export const InventoryPage: React.FC = () => {
       setCategories(res.data);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const fetchAllColors = async () => {
+    try {
+      const res = await api.get('/inventory/colors');
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setAllColors(res.data);
+        return;
+      }
+    } catch (e) {
+      // In case endpoint is not yet in running backend, fallback gracefully
+    }
+
+    try {
+      const fallbackRes = await api.get('/inventory?page=1&page_size=2000');
+      if (fallbackRes.data && Array.isArray(fallbackRes.data.items)) {
+        const set = new Set<string>();
+        fallbackRes.data.items.forEach((p: any) => {
+          if (p.color && typeof p.color === 'string' && p.color.trim()) {
+            set.add(p.color.trim());
+          }
+        });
+        setAllColors(Array.from(set).sort((a, b) => a.localeCompare(b)));
+      }
+    } catch (err) {
+      console.error('Failed to fetch catalog colors fallback:', err);
     }
   };
 
@@ -138,6 +197,7 @@ export const InventoryPage: React.FC = () => {
       if (selectedCategory) url += `&category_id=${selectedCategory}`;
       if (selectedColor) url += `&color=${encodeURIComponent(selectedColor)}`;
       if (lowStockOnly) url += `&low_stock_only=true`;
+      if (sortBy) url += `&sort_by=${sortBy}&sort_order=${sortOrder}`;
 
       const res = await api.get(url);
       setProducts(res.data.items);
@@ -164,6 +224,7 @@ export const InventoryPage: React.FC = () => {
     try {
       await api.delete(`/inventory/${id}`);
       fetchProducts();
+      fetchAllColors();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to delete product');
     }
@@ -194,7 +255,69 @@ export const InventoryPage: React.FC = () => {
     }
   };
 
-  const uniqueColors = Array.from(new Set(products.map(p => p.color).filter(Boolean))) as string[];
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else {
+        setSortBy('id');
+        setSortOrder('desc');
+      }
+    } else {
+      setSortBy(field);
+      setSortOrder(field === 'cost' || field === 'selling_price' || field === 'stock' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  };
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortBy !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover:text-pink-500 inline ml-1 transition-colors" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400 inline ml-1 shrink-0" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400 inline ml-1 shrink-0" />
+    );
+  };
+
+  const displayColors = useMemo(() => {
+    const set = new Set<string>();
+    allColors.forEach(c => { if (c && c.trim()) set.add(c.trim()); });
+    products.forEach(p => { if (p.color && p.color.trim()) set.add(p.color.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allColors, products]);
+
+  const sortedProducts = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    const sorted = [...products];
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+      } else if (sortBy === 'size') {
+        const rankA = parseSizeRank(a.size);
+        const rankB = parseSizeRank(b.size);
+        comparison = rankA - rankB;
+      } else if (sortBy === 'cost') {
+        comparison = (a.purchase_price || 0) - (b.purchase_price || 0);
+      } else if (sortBy === 'selling_price') {
+        comparison = (a.selling_price || 0) - (b.selling_price || 0);
+      } else if (sortBy === 'stock') {
+        comparison = (a.stock_quantity || 0) - (b.stock_quantity || 0);
+      } else if (sortBy === 'barcode') {
+        comparison = (a.barcode || '').localeCompare(b.barcode || '', undefined, { numeric: true });
+      } else {
+        return b.id - a.id;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [products, sortBy, sortOrder]);
+
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
@@ -331,8 +454,8 @@ export const InventoryPage: React.FC = () => {
             onChange={(e) => { setSelectedColor(e.target.value); setPage(1); }}
             className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none"
           >
-            <option value="">All Colors</option>
-            {uniqueColors.map((col) => (
+            <option value="">All Colors ({displayColors.length})</option>
+            {displayColors.map((col) => (
               <option key={col} value={col}>{col}</option>
             ))}
           </select>
@@ -350,23 +473,89 @@ export const InventoryPage: React.FC = () => {
           <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
           <span>Low Stock Alert</span>
         </button>
+
+        {/* Active Sort Reset Pill */}
+        {sortBy !== 'id' && (
+          <button
+            onClick={() => { setSortBy('id'); setSortOrder('desc'); }}
+            className="px-2.5 py-1.5 rounded-xl bg-pink-50 border border-pink-300 text-pink-700 dark:bg-pink-950/40 dark:border-pink-800 dark:text-pink-300 flex items-center space-x-1.5 font-bold transition-all hover:bg-pink-100"
+            title="Clear column sorting and restore default order"
+          >
+            <span>Sort: {sortBy === 'selling_price' ? 'Sell Price' : sortBy === 'cost' ? 'Cost Price' : sortBy.charAt(0).toUpperCase() + sortBy.slice(1)} ({sortOrder.toUpperCase()})</span>
+            <X className="w-3.5 h-3.5 text-pink-500" />
+          </button>
+        )}
       </div>
 
       {/* Main Table */}
       <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col">
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 uppercase sticky top-0 z-10">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 uppercase sticky top-0 z-10 select-none">
               <tr>
-                <th className="py-2.5 px-3">Barcode</th>
-                <th className="py-2.5 px-3 max-w-[220px]">Product Name</th>
+                <th
+                  onClick={() => handleSort('barcode')}
+                  className="py-2.5 px-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Barcode"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Barcode</span>
+                    {renderSortIcon('barcode')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('name')}
+                  className="py-2.5 px-3 max-w-[220px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Product Name"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Product Name</span>
+                    {renderSortIcon('name')}
+                  </div>
+                </th>
                 <th className="py-2.5 px-2">Category</th>
-                <th className="py-2.5 px-2 text-center">Size</th>
+                <th
+                  onClick={() => handleSort('size')}
+                  className="py-2.5 px-2 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Garment Size"
+                >
+                  <div className="flex items-center justify-center space-x-1">
+                    <span>Size</span>
+                    {renderSortIcon('size')}
+                  </div>
+                </th>
                 <th className="py-2.5 px-2 text-center">Color</th>
                 <th className="py-2.5 px-2 text-center">⚡ Speed Dial</th>
-                <th className="py-2.5 px-3 text-right">Cost (₹)</th>
-                <th className="py-2.5 px-3 text-right">Sell (₹)</th>
-                <th className="py-2.5 px-2 text-center">Stock</th>
+                <th
+                  onClick={() => handleSort('cost')}
+                  className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Cost Price (₹)"
+                >
+                  <div className="flex items-center justify-end space-x-1">
+                    <span>Cost (₹)</span>
+                    {renderSortIcon('cost')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('selling_price')}
+                  className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Selling Price (₹)"
+                >
+                  <div className="flex items-center justify-end space-x-1">
+                    <span>Sell (₹)</span>
+                    {renderSortIcon('selling_price')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('stock')}
+                  className="py-2.5 px-2 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors group"
+                  title="Click to sort by Stock Quantity"
+                >
+                  <div className="flex items-center justify-center space-x-1">
+                    <span>Stock</span>
+                    {renderSortIcon('stock')}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 text-center w-28">Actions</th>
               </tr>
             </thead>
@@ -375,12 +564,12 @@ export const InventoryPage: React.FC = () => {
                 <tr>
                   <td colSpan={10} className="text-center py-12 text-slate-400">Loading catalog...</td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : sortedProducts.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="text-center py-12 text-slate-400">No products found matching criteria</td>
                 </tr>
               ) : (
-                products.map((p) => {
+                sortedProducts.map((p) => {
                   const isLow = p.stock_quantity <= p.min_stock_alert;
                   return (
                     <tr key={p.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
@@ -622,7 +811,10 @@ export const InventoryPage: React.FC = () => {
           product={editingProduct}
           categories={categories}
           onClose={() => setIsFormOpen(false)}
-          onSaveSuccess={fetchProducts}
+          onSaveSuccess={() => {
+            fetchProducts();
+            fetchAllColors();
+          }}
         />
       )}
 

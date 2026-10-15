@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_, desc, func, case
+from sqlalchemy import or_, and_, desc, asc, func, case
 from typing import List, Optional
 from datetime import datetime
 import io
@@ -159,6 +159,17 @@ def get_speed_dial_products(db: Session = Depends(get_db)):
 
     return [ProductOut.model_validate(p) for p in products]
 
+@router.get("/colors", response_model=List[str])
+def get_inventory_colors(db: Session = Depends(get_db)):
+    """Returns a deduplicated, alphabetical list of all active product colors in inventory."""
+    raw_colors = db.query(Product.color).filter(
+        Product.is_active == True,
+        Product.color != None,
+        Product.color != ""
+    ).distinct().all()
+    cleaned = sorted(list(set(c[0].strip() for c in raw_colors if c[0] and c[0].strip())))
+    return cleaned
+
 @router.get("", response_model=ProductSearchResult)
 def list_products(
     page: int = 1,
@@ -168,6 +179,8 @@ def list_products(
     size: Optional[str] = None,
     color: Optional[str] = None,
     low_stock_only: bool = False,
+    sort_by: Optional[str] = "id",
+    sort_order: Optional[str] = "desc",
     db: Session = Depends(get_db)
 ):
     query = db.query(Product).options(
@@ -198,7 +211,26 @@ def list_products(
         query = query.filter(Product.stock_quantity <= Product.min_stock_alert)
 
     total = query.count()
-    products = query.order_by(desc(Product.id)).offset((page - 1) * page_size).limit(page_size).all()
+
+    order_func = asc if (sort_order or "").lower() == "asc" else desc
+    sort_field = (sort_by or "id").lower()
+
+    if sort_field == "name":
+        order_clause = order_func(func.lower(Product.name))
+    elif sort_field == "size":
+        order_clause = order_func(Product.size)
+    elif sort_field in ("cost", "purchase_price"):
+        order_clause = order_func(Product.purchase_price)
+    elif sort_field in ("price", "sell", "selling_price"):
+        order_clause = order_func(Product.selling_price)
+    elif sort_field in ("stock", "stock_quantity"):
+        order_clause = order_func(Product.stock_quantity)
+    elif sort_field == "barcode":
+        order_clause = order_func(Product.barcode)
+    else:
+        order_clause = order_func(Product.id)
+
+    products = query.order_by(order_clause, desc(Product.id)).offset((page - 1) * page_size).limit(page_size).all()
 
     items = []
     for p in products:
